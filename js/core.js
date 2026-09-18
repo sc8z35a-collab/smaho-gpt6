@@ -85,12 +85,13 @@
   A.open = (id, arg) => {
     if(!A.apps[id]?.render) return;
     A.haptic(); A.cleanup(); A.closeOverlay();A.locked=false; A.current=id;
+    A.recentApps=[id,...A.recentApps.filter(item=>item!==id)].slice(0,8);
     A.$('#lock-screen').hidden=true;A.$('#home-screen').hidden=true;A.$('#phone-screen').classList.remove('locked');A.$('#phone-screen').classList.add('in-app');
     const screen=A.$('#app-screen');screen.hidden=false;screen.className='app-screen';screen.style.animation='none';void screen.offsetWidth;screen.style.animation='';
     A.statusTheme(['music','camera','weather'].includes(id));
     A.apps[id].render(arg);
   };
-  A.home = () => { A.cleanup();A.closeOverlay();A.current=null;A.locked=false;A.$('#app-screen').hidden=true;A.$('#lock-screen').hidden=true;A.$('#home-screen').hidden=false;A.$('#phone-screen').classList.remove('in-app','app-dark','locked');A.$('#status-bar').classList.remove('dark');A.renderHome(); };
+  A.home = () => { A.cleanup();A.closeOverlay();A.current=null;A.locked=false;A.$('#app-screen').hidden=true;A.$('#lock-screen').hidden=true;A.$('#home-screen').hidden=false;A.$('#phone-screen').classList.remove('in-app','app-dark','locked');A.$('#status-bar').classList.remove('dark');A.renderHome();A.updateWidgets(); };
   A.lock = () => { A.home();A.locked=true;A.$('#home-screen').hidden=true;A.$('#lock-screen').hidden=false;A.$('#phone-screen').classList.add('locked');A.updateClock(); };
   A.nav = (title, right='', backApp='', backText='') => `<nav class="app-nav"><button class="nav-action" ${backApp?`data-action="${backApp}"`:'data-action="home"'} aria-label="${backText||'ホームに戻る'}"><span class="back-chevron">‹</span>${backText}</button><h2>${title}</h2><div class="nav-action">${right}</div></nav>`;
   A.tabs = (tabs,selected) => `<nav class="app-tabs">${tabs.map(t=>`<button class="tab-button ${t.id===selected?'active':''}" data-action="${t.action}" ${t.value?`data-value="${t.value}"`:''}>${A.icon(t.icon)}<span>${t.name}</span></button>`).join('')}</nav>`;
@@ -122,10 +123,79 @@
   A.notifications = () => { if(notificationsCleared){A.actions.clearNotifications();return;} A.overlay(`${A.overlayTitle('通知センター')}<p style="font-size:12px;opacity:.6;margin-bottom:30px">${new Date().toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'})}</p><div class="group-card" style="background:#ffffff15">${A.row('messages','美咲','週末は、どこか出かけよう ☀','notificationChat','','#60b47b')}${A.row('mail','aura studio','あなたの小さな世界へ、ようこそ。','notificationMail','','#478cdb')}</div><p class="control-footer">デモ通知です。ここからアプリを開けます。</p><button class="primary-button" data-action="clearNotifications" style="background:#ffffff15;margin-top:25px">通知をクリア</button>`); };
   A.actions.notificationChat=()=>A.open('messages','misaki');A.actions.notificationMail=()=>A.open('mail');
   A.actions.clearNotifications=()=>{notificationsCleared=true;A.overlay(`${A.overlayTitle('通知センター')}<div class="empty-state" style="color:#fffa">新しい通知はありません。</div>`);};
-  A.updateClock = () => {const d=new Date();const time=d.toLocaleTimeString('ja-JP',{hour:'numeric',minute:'2-digit',hour12:false});A.$('#status-time').textContent=time;A.$('#lock-time').textContent=time;const date=d.toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'});A.$('#home-date').textContent=date;A.$('#lock-date').textContent=date;A.$('#widget-day').textContent=d.getDate();A.$('#widget-weekday').textContent=['日','月','火','水','木','金','土'][d.getDay()]+'曜日';A.clockTick?.();A.music?.tick();};
+  A.updateClock = () => {const d=new Date();const time=d.toLocaleTimeString('ja-JP',{hour:'numeric',minute:'2-digit',hour12:false});A.$('#status-time').textContent=time;A.$('#lock-time').textContent=time;const date=d.toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'});A.$('#home-date').textContent=date;A.$('#lock-date').textContent=date;A.$('#widget-day').textContent=d.getDate();A.$('#widget-weekday').textContent=['日','月','火','水','木','金','土'][d.getDay()]+'曜日';A.clockTick?.();A.music?.tick();A.updateWidgets?.();};
   document.addEventListener('click',e=>{const button=e.target.closest('[data-app], [data-action]');if(!button || button.disabled)return;if(button.dataset.app)A.open(button.dataset.app);else{const fn=A.actions[button.dataset.action];if(fn)fn(button,e);}});
-  A.$('#home-indicator').onclick=A.home;A.$('#home-indicator').addEventListener('touchstart',e=>{A.homeGestureStart=e.touches[0].clientY;},{passive:true});A.$('#home-indicator').addEventListener('touchend',e=>{if(A.homeGestureStart-e.changedTouches[0].clientY>20)A.home();},{passive:true});A.$('#status-controls').onclick=A.controls;A.$('#status-time').onclick=A.notifications;A.$('#dynamic-island').onclick=()=>A.open('music','player');A.$('#home-search').onclick=A.spotlight;A.$('#desktop-lock').onclick=A.lock;A.$('#desktop-reset').onclick=A.home;A.$('#power-button').onclick=()=>A.locked?A.home():A.lock();A.$('#unlock-button').onclick=A.home;A.$('#lock-flashlight').onclick=A.actions.flashlight;A.$('#about-button').onclick=A.actions.about;
+  A.$('#status-controls').onclick=A.controls;A.$('#status-time').onclick=A.notifications;A.$('#dynamic-island').onclick=()=>A.open('music','player');A.$('#home-search').onclick=A.spotlight;A.$('#desktop-lock').onclick=A.lock;A.$('#desktop-reset').onclick=A.home;A.$('#power-button').onclick=()=>A.locked?A.home():A.lock();A.$('#unlock-button').onclick=A.home;A.$('#lock-flashlight').onclick=A.actions.flashlight;A.$('#about-button').onclick=A.actions.about;
   let touchStartY=0;A.$('#lock-screen').addEventListener('touchstart',e=>touchStartY=e.touches[0].clientY,{passive:true});A.$('#lock-screen').addEventListener('touchend',e=>{if(touchStartY-e.changedTouches[0].clientY>50)A.home();},{passive:true});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!A.$('#overlay').hidden)A.closeOverlay();else A.home();}if(e.key==='h' && !['INPUT','TEXTAREA'].includes(e.target.tagName))A.home();});
+  // Some mobile browsers force a 980px layout in "desktop site" mode.
+  // Compensate only when a touch device's layout is much wider than its screen;
+  // ordinary desktop windows and user pinch-zoom remain unchanged.
+  const fitViewport=()=>{
+    const width=window.innerWidth,physicalWidth=window.screen.width;
+    const desktopOnPhone=matchMedia('(pointer: coarse)').matches && physicalWidth>0 && physicalWidth<=600 && width<window.innerHeight && width>physicalWidth*1.4;
+    const zoom=desktopOnPhone?Math.min(4,width/physicalWidth):1;
+    document.documentElement.style.setProperty('--os-zoom',zoom);
+  };
+  fitViewport();window.addEventListener('resize',fitViewport);
+  // Recent apps are launch shortcuts, not suspended OS processes. No private previews are stored.
+  A.recentApps=[];
+  A.recents=()=>{
+    if(A.locked)return;
+    const cards=A.recentApps.map(id=>{
+      const app=A.apps[id];
+      return `<article class="recent-card"><button class="recent-open" data-action="recentOpen" data-id="${id}" aria-label="${app.name}に切り替える"><span class="app-icon ${id}-icon" style="background:${app.color}">${id==='photos'?A.photosIcon():A.icon(id)}</span><strong>${app.name}</strong><small>${A.current===id?'使用中のアプリに戻る':'アプリを開く'}</small></button><button class="recent-remove" data-action="recentRemove" data-id="${id}" aria-label="${app.name}を履歴から除く">×</button></article>`;
+    }).join('');
+    A.overlay(`${A.overlayTitle('最近使ったアプリ')}<p class="switcher-copy">いつもの場所へ、すぐに。<br>別のアプリは開始画面から開きます。録音は切替時に終了します。</p>${cards?`<div class="recent-list">${cards}</div><button class="switcher-clear" data-action="recentClear">履歴をクリア</button>`:`<div class="switcher-empty">${A.icon('grid')}まだ履歴がありません。<br>ホームからアプリを開いてみましょう。</div>`}`,'app-switcher');
+  };
+  A.actions.recents=A.recents;
+  A.actions.homeCalendar=()=>{A.open('calendar');A.actions.calendarToday();};
+  A.actions.recentOpen=el=>{if(el.dataset.id===A.current)A.closeOverlay();else A.open(el.dataset.id);};
+  A.actions.recentRemove=el=>{A.recentApps=A.recentApps.filter(id=>id!==el.dataset.id);A.recents();};
+  A.actions.recentClear=()=>{A.recentApps=[];A.recents();};
+  A.actions.fullscreen=async()=>{
+    try{
+      if(document.fullscreenElement){await document.exitFullscreen();return;}
+      if(document.fullscreenEnabled && document.documentElement.requestFullscreen){await document.documentElement.requestFullscreen();return;}
+    }catch{/* Embedded previews and some mobile browsers deny fullscreen. */}
+    A.overlay(`${A.overlayTitle('画面いっぱいで使う')}<div class="fullscreen-help"><p>スマホ画面は、すでにページの表示領域いっぱいに広がっています。</p><p>このブラウザでは全画面切替を利用できません。アドレスバーはWebサイトから強制的に消せません。</p><ol><li>iPhone / iPad：Safariの共有メニューから「ホーム画面に追加」を選びます。</li><li>Android：Chromeのメニューから「ホーム画面に追加」を選びます。表示方法はブラウザによって異なります。</li><li>埋め込みプレビューの場合は、このページを直接ブラウザで開いてください。</li></ol></div>`);
+  };
+  document.addEventListener('fullscreenchange',()=>{
+    const button=A.$('.home-tool[data-action=fullscreen]'),active=!!document.fullscreenElement;
+    button.setAttribute('aria-label',active?'全画面を終了':'全画面表示');button.querySelector('span').textContent=active?'全画面終了':'全画面';
+  });
+  // Update text nodes only: never replace the home grid while a finger is pressing an icon.
+  A.updateWidgets=()=>{
+    const now=new Date(),date=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const events=(A.todayEvents?.(date)||[]).slice().sort((a,b)=>a.time.localeCompare(b.time));
+    const time=now.toTimeString().slice(0,5),event=events.find(e=>e.time>=time);
+    const set=(selector,text)=>{const el=A.$(selector);if(el&&el.textContent!==String(text))el.textContent=text;};
+    set('.widget-event>span',event?.title||(events.length?'今日の予定は終了':'今日は自由な一日'));
+    set('.widget-event>small',event?`${event.time} · ${event.place||'予定'}`:'タップして予定を追加');
+    const c=A.weatherSnapshot?.();
+    if(c){set('.widget-top>span:first-child',c.name+' ↗');set('.weather-sun',c.condition);set('.weather-widget>strong',c.temp+'°');set('.weather-widget>span',c.desc+' · サンプル');set('.weather-widget>small',`最高 ${c.high}° 最低 ${c.low}°`);set('.lock-weather',`${c.name} ${c.temp}° · サンプル天気`);}
+    const name=A.load('profileName','');
+    set('.greeting-note',name?`${name}さん、おかえりなさい。`:'Make room for a little wonder.');
+    A.$$('.calendar-icon').forEach(el=>{const day=el.querySelector('b'),weekday=el.querySelector('small');if(day)day.textContent=now.getDate();if(weekday)weekday.textContent=['日','月','火','水','木','金','土'][now.getDay()]+'曜日';});
+  };
+  const bar=A.$('#home-indicator');
+  let gesture=null,holdTimer,suppressClick=false;
+  bar.addEventListener('pointerdown',e=>{
+    if(e.button!==0)return;
+    suppressClick=false;gesture={x:e.clientX,y:e.clientY};bar.setPointerCapture(e.pointerId);
+    holdTimer=setTimeout(()=>{gesture=null;suppressClick=true;A.recents();},500);
+  });
+  bar.addEventListener('pointermove',e=>{
+    if(!gesture)return;
+    if(Math.abs(e.clientX-gesture.x)>12||Math.abs(e.clientY-gesture.y)>12)clearTimeout(holdTimer);
+  });
+  bar.addEventListener('pointerup',e=>{
+    clearTimeout(holdTimer);
+    if(gesture&&gesture.y-e.clientY>25){suppressClick=true;A.locked?A.home():A.recents();}
+    gesture=null;
+  });
+  bar.addEventListener('pointercancel',()=>{clearTimeout(holdTimer);gesture=null;});
+  bar.onclick=e=>{if(suppressClick&&e.detail!==0){suppressClick=false;return;}A.home();};
+  document.addEventListener('keydown',e=>{if(e.key==='Tab'&&e.altKey){e.preventDefault();A.recents();}});
   A.renderHome();A.applySettings();A.updateClock();setInterval(A.updateClock,1000);
 })();
