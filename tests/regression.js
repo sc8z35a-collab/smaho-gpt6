@@ -51,6 +51,133 @@ frame.addEventListener('load',async()=>{
  await test('Profile greeting renders plain text',()=>{A.save('profileName','<b>QA</b>');A.home();assert(d.querySelector('.greeting-note').textContent.includes('<b>QA</b>'),'Name not synced');assert(!d.querySelector('.greeting-note b'),'Unsafe profile markup');});
  await test('Unsupported fullscreen has useful guidance',async()=>{const descriptor=Object.getOwnPropertyDescriptor(d,'fullscreenEnabled');try{Object.defineProperty(d,'fullscreenEnabled',{configurable:true,value:false});await A.actions.fullscreen();assert(d.querySelector('.fullscreen-help'),'No fullscreen guidance');}finally{if(descriptor)Object.defineProperty(d,'fullscreenEnabled',descriptor);else delete d.fullscreenEnabled;}});
  await test('Viewport coverage, dock reachability, and short-screen scrolling',async()=>{A.home();const originalStyle=frame.getAttribute('style');try{for(const [width,height] of [[320,568],[360,640],[390,844],[412,740],[430,932],[844,390],[980,1742],[1440,900]]){frame.style.width=width+'px';frame.style.height=height+'px';await delay(50);const screen=d.querySelector('#phone-screen').getBoundingClientRect(),dock=d.querySelector('#home-dock').getBoundingClientRect();assert(Math.abs(screen.width-w.innerWidth)<1&&Math.abs(screen.height-w.innerHeight)<1,'Not edge-to-edge '+width);assert(dock.bottom<=w.innerHeight&&dock.top>0,'Dock clipped '+width);assert(d.body.scrollWidth<=w.innerWidth,'Horizontal overflow '+width);assert(w.getComputedStyle(d.querySelector('.site-header')).display==='none','Landing page visible');const main=d.querySelector('.home-main');main.scrollTop=main.scrollHeight;const last=d.querySelector('#app-grid .app-launcher:last-child').getBoundingClientRect();assert(last.bottom<=main.getBoundingClientRect().bottom+1,'Last app unreachable '+width);}}finally{if(originalStyle===null)frame.removeAttribute('style');else frame.setAttribute('style',originalStyle);}});
+ await test('Library groups contain every app and filter by English ID',()=>{
+  A.home();A.library();
+  const ids=new Set([...d.querySelectorAll('.library-category [data-app]')].map(el=>el.dataset.app));
+  assert(ids.size===20,'Missing library apps');input('#library-query','CALCULATOR');
+  assert(d.querySelectorAll('#library-results .app-launcher').length===1,'Library filter');
+  click('#library-results [data-app="calculator"]');assert(A.current==='calculator','Library launch');
+ });
+ await test('Home edit swaps icons across dock and persists unique order',()=>{
+  A.home();A.actions.editHome();click('#app-grid [data-app="calendar"]');click('#home-dock [data-app="messages"]');
+  assert(A.current===null,'Editing launched app');assert(d.querySelector('#app-grid [data-app="messages"]'),'Swap failed');
+  const order=A.load('homeOrder',[]);assert(order[0]==='messages'&&order[18]==='calendar','Order not saved');
+  assert(new Set(order).size===20,'Duplicate app');A.actions.finishEditing();A.renderHome();
+  assert(d.querySelector('#app-grid .app-launcher').dataset.app==='messages','Render lost order');
+  A.actions.resetLayout();click('#confirm-yes');assert(A.load('homeOrder',[])[0]==='calendar','Reset failed');
+ });
+ await test('Home action leaves editing mode',()=>{
+  A.home();A.actions.editHome();A.home();assert(!d.querySelector('#home-screen').classList.contains('home-editing'),'Editing stuck');
+  click('#app-grid [data-app="notes"]');assert(A.current==='notes','Home launcher still intercepted');
+ });
+ await test('Long-press context quick action opens a new note',()=>{
+  A.home();A.actions.appContext({dataset:{id:'notes'}});click('[data-action="quickLaunch"]');
+  assert(A.current==='notes'&&d.querySelector('#note-title'),'Quick note missing');
+ });
+ await test('Six wallpapers and three icon styles persist',()=>{
+  A.home();A.actions.personalize();assert(d.querySelectorAll('.wallpaper-pick').length===6,'Wallpaper count');
+  click('[data-action="chooseWallpaper"][data-value="aurora"]');assert(A.load('settings',{}).wallpaper==='aurora','Wallpaper save');
+  assert(d.querySelector('#wallpaper').classList.contains('aurora'),'Wallpaper not applied');
+  click('[data-action="chooseIconStyle"][data-value="glass"]');assert(d.querySelector('#phone-screen').dataset.iconStyle==='glass','Style not applied');
+  assert(A.load('settings',{}).iconStyle==='glass','Style not saved');
+  A.settings.wallpaper='default';A.settings.iconStyle='standard';A.applySettings();
+ });
+ await test('Search finds seeded notes and safely opens saved content',()=>{
+  A.spotlight();input('#spotlight-query','買いもの');assert(d.querySelector('[data-action="searchNote"]'),'Seeded note not indexed');
+  input('#spotlight-query','QA <b>safe</b>');assert(d.querySelector('[data-action="searchNote"]'),'Saved note not indexed');
+  assert(!d.querySelector('#spotlight-content b'),'Search injected HTML');click('[data-action="searchNote"]');
+  assert(d.querySelector('#note-title').value==='QA <b>safe</b>','Search opened wrong note');
+ });
+ await test('Search finds reminders and displays an empty state',()=>{
+  A.spotlight();input('#spotlight-query','QA reminder');assert(d.querySelector('#spotlight-content [data-app="reminders"]'),'Reminder not indexed');
+  input('#spotlight-query','not-a-real-app-123');assert(d.querySelector('.search-empty'),'Missing search empty state');
+ });
+ await test('Notifications escape text, persist, and dismiss individually',()=>{
+  A.actions.clearNotifications();A.closeOverlay();A.settings.focus=false;
+  A.notify({app:'mail',title:'<b>QA notice</b>',body:'<img src=x onerror=alert(1)>'});
+  assert(A.load('notifications',[]).length===1,'Notice not stored');assert(d.querySelector('#notification-banner'),'Missing banner');
+  assert(!d.querySelector('#notification-banner img,#notification-banner b'),'Notification HTML injection');
+  A.notifications();click('#overlay [data-action="dismissNotice"]');assert(A.load('notifications',[]).length===0,'Dismiss not saved');
+  assert(d.querySelector('.notification-empty'),'No notification empty state');
+ });
+ await test('Focus silences banners without dropping notifications',()=>{
+  A.closeOverlay();A.settings.focus=true;A.applySettings();A.notify({app:'mail',title:'Focus test',body:'Quietly saved'});
+  assert(!d.querySelector('#notification-banner'),'Focus showed banner');assert(A.load('notifications',[]).length===1,'Focus lost notice');
+  assert(!d.querySelector('#status-focus').hidden,'Focus status missing');
+  A.settings.focus=false;A.applySettings();A.actions.clearNotifications();
+ });
+ await test('Message typing and background reply notify and deep-link',async()=>{
+  A.open('messages','haru');const form=d.querySelector('#chat-form');form.elements.message.value='QA background reply';
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  assert(d.querySelector('.typing-indicator'),'Typing feedback missing');assert(d.querySelector('.bubble-time'),'Message time missing');
+  A.home();await delay(1450);
+  const notice=A.load('notifications',[]).find(n=>n.app==='messages'&&n.arg==='haru');assert(notice,'Reply not connected to notifications');
+  A.notifications();click(`#overlay [data-action="openNotice"][data-id="${notice.id}"]`);
+  assert(A.current==='messages'&&d.querySelector('.app-nav').textContent.includes('陽'),'Notice opened wrong chat');
+  assert(!d.querySelector('.typing-indicator'),'Typing indicator stuck');assert(A.load('chatUnread',{}).haru===0,'Chat remains unread');
+ });
+ await test('Notifications are bounded and clear updates the lock screen',()=>{
+  A.settings.focus=true;for(let i=0;i<45;i++)A.notify({app:'mail',title:'Notice '+i,body:'QA'});
+  assert(A.load('notifications',[]).length===40,'Unbounded history');A.lock();
+  assert(d.querySelectorAll('.lock-notifications .system-notification').length===2,'Lock history count');
+  A.actions.clearNotifications();assert(A.load('notifications',[]).length===0,'Clear not persisted');
+  assert(!d.querySelector('.lock-notifications .system-notification'),'Lock notifications stale');A.settings.focus=false;A.applySettings();A.home();
+ });
+ await test('Analog icon hands and simulated connection status update',()=>{
+  A.home();A.updateSystem();assert(d.querySelector('.clock-second')?.getAttribute('transform').startsWith('rotate('),'Clock hands missing');
+  A.settings.airplane=true;A.settings.wifi=false;A.applySettings();
+  assert(!d.querySelector('#status-airplane').hidden,'Airplane indicator');assert(d.querySelector('#status-controls').getAttribute('aria-label').includes('オフ'),'Wi-Fi state label');
+  A.settings.airplane=false;A.settings.wifi=true;A.applySettings();
+ });
+ await test('Lock media controls reflect selected music without unlocking',()=>{
+  A.open('music','player');A.lock();A.updateSystem();assert(!d.querySelector('#lock-player').hidden,'Lock player missing');
+  const old=A.music.track.id;click('#lock-player [data-action="musicNext"]');A.updateSystem();
+  assert(A.music.track.id!==old,'Lock next track failed');assert(d.querySelector('#lock-track-title').textContent===A.music.track.title,'Lock title stale');
+  assert(A.locked,'Media action unlocked screen');A.home();
+ });
+ await test('Overlay traps keyboard focus and restores opener',()=>{
+  A.home();const opener=d.querySelector('#home-search');opener.focus();opener.click();
+  const overlay=d.querySelector('#overlay');assert(overlay.getAttribute('role')==='dialog','Dialog semantics');
+  const items=[...overlay.querySelectorAll('button:not(:disabled),input,textarea,select,a[href]')].filter(el=>el.getClientRects().length);
+  items.at(-1).focus();items.at(-1).dispatchEvent(new w.KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));
+  assert(d.activeElement===items[0],'Focus escaped dialog');A.closeOverlay();assert(d.activeElement===opener,'Focus not restored');
+ });
+ await test('Common phone heights fit every home icon without scrolling',async()=>{
+  A.home();const originalStyle=frame.getAttribute('style');
+  try{for(const [width,height] of [[390,844],[412,740],[430,932],[1440,900]]){
+   frame.style.width=width+'px';frame.style.height=height+'px';await delay(60);
+   const main=d.querySelector('.home-main');main.scrollTop=0;
+   assert(d.querySelector('#app-grid .app-launcher:last-child').getBoundingClientRect().bottom<=main.getBoundingClientRect().bottom+1,'Home icons clipped '+width+'x'+height);
+  }}finally{if(originalStyle===null)frame.removeAttribute('style');else frame.setAttribute('style',originalStyle);}
+ });
+ await test('Long press release does not activate retargeted menu buttons',async()=>{
+  A.home();const launcher=d.querySelector('#app-grid [data-app="notes"]');
+  launcher.dispatchEvent(new w.PointerEvent('pointerdown',{bubbles:true,button:0,clientX:50,clientY:300}));await delay(600);
+  assert(d.querySelector('.context-card'),'Long press missing');
+  const action=d.querySelector('#overlay [data-action="quickLaunch"]');
+  action.dispatchEvent(new w.MouseEvent('click',{bubbles:true,cancelable:true,detail:1}));
+  assert(A.current===null&&!d.querySelector('#overlay').hidden,'Release activated menu');
+  action.dispatchEvent(new w.PointerEvent('pointerdown',{bubbles:true,button:0}));action.click();
+  assert(A.current==='notes'&&d.querySelector('#note-title'),'Fresh tap was suppressed');
+ });
+ await test('Clock style selection and lock preview persist',()=>{
+  A.home();A.actions.personalize();click('[data-action="chooseClockStyle"][data-value="rounded"]');
+  assert(A.load('settings',{}).clockStyle==='rounded','Clock style not saved');
+  click('[data-action="previewLock"]');assert(A.locked&&d.querySelector('#phone-screen').dataset.clockStyle==='rounded','Lock style not applied');
+  A.settings.clockStyle='classic';A.applySettings();A.home();
+ });
+ await test('Lock notification preview hides content but restores it when open',()=>{
+  A.home();A.settings.focus=true;A.notify({app:'mail',title:'Private sender',body:'Private content'});
+  A.actions.personalize();click('[data-action="toggleLockPreview"]');assert(A.load('settings',{}).lockPreview===false,'Preview preference not saved');
+  A.lock();assert(!d.querySelector('.lock-notifications').textContent.includes('Private'),'Lock leaked content');
+  A.notifications();assert(!d.querySelector('#overlay').textContent.includes('Private'),'Locked center leaked content');
+  A.home();A.notifications();assert(d.querySelector('#overlay').textContent.includes('Private content'),'Unlocked center hid content');
+  A.settings.focus=false;A.settings.lockPreview=true;A.applySettings();A.actions.clearNotifications();A.home();
+ });
+ await test('Settings opens complete gesture guide',()=>{
+  A.open('settings');click('[data-action="gestureGuide"]');assert(d.querySelectorAll('.gesture-guide article').length===6,'Missing gesture instructions');
+  assert(d.querySelector('#overlay').textContent.includes('Alt+Tab'),'Keyboard help missing');
+ });
  await test('App lifecycle cleanup and no captured errors',()=>{A.home();assert(A.cleanups.length===0,'Cleanup callbacks not drained');assert(!errors.length,errors.join('; '));});
  A.music.pause();A.home();
  Object.keys(w.localStorage).filter(k=>k.startsWith('aura.')).forEach(k=>w.localStorage.removeItem(k));Object.entries(original).forEach(([k,v])=>w.localStorage.setItem(k,v));

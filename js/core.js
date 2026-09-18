@@ -75,7 +75,7 @@
     ['phone','電話','linear-gradient(145deg,#70db87,#32bd5b)'],['safari','ブラウザ','#fff'],['messages','メッセージ','linear-gradient(145deg,#76e58c,#36c967)'],['music','ミュージック','linear-gradient(145deg,#f7768e,#ec476b)']
   ];
   appData.forEach(([id,name,color]) => A.apps[id] = {id,name,color});
-  A.launcher = (app, dock=false) => { const now = new Date(); return `<button class="app-launcher" data-app="${app.id}" aria-label="${app.name}を開く"><span class="app-icon ${app.id}-icon" style="background:${app.color}">${app.id==='calendar'?`<small>${['日','月','火','水','木','金','土'][now.getDay()]}曜日</small><b>${now.getDate()}</b>`:app.id==='photos'?A.photosIcon():A.icon(app.id)}</span><span class="app-name">${app.name}</span>${app.id==='mail'&&(A.mailUnread?.()??3)>0?`<span class="app-badge">${Math.min(99,A.mailUnread?.()??3)}</span>`:app.id==='messages'&&dock&&(A.messageUnread?.()??2)>0?`<span class="app-badge">${Math.min(99,A.messageUnread?.()??2)}</span>`:''}</button>`; };
+  A.launcher = (app, dock=false) => { const now = new Date(); return `<button class="app-launcher" data-app="${app.id}" aria-label="${app.name}を開く"><span class="app-icon ${app.id}-icon" style="background:${app.color}">${app.id==='calendar'?`<small>${['日','月','火','水','木','金','土'][now.getDay()]}曜日</small><b>${now.getDate()}</b>`:app.id==='photos'?A.photosIcon():A.icon(app.id)}</span><span class="app-name">${app.name}</span>${app.id==='mail'&&(A.mailUnread?.()??3)>0?`<span class="app-badge">${Math.min(99,A.mailUnread?.()??3)}</span>`:app.id==='messages'&&(A.messageUnread?.()??2)>0?`<span class="app-badge">${Math.min(99,A.messageUnread?.()??2)}</span>`:''}</button>`; };
   A.renderHome = () => { A.$('#app-grid').innerHTML=appData.slice(0,16).map(([id])=>A.launcher(A.apps[id])).join('');A.$('#home-dock').innerHTML=appData.slice(16).map(([id])=>A.launcher(A.apps[id],true)).join(''); };
   A.haptic = () => { if(A.settings.sound && navigator.vibrate && navigator.userActivation?.hasBeenActive) navigator.vibrate(7); };
   let toastTimer;
@@ -91,8 +91,8 @@
     A.statusTheme(['music','camera','weather'].includes(id));
     A.apps[id].render(arg);
   };
-  A.home = () => { A.cleanup();A.closeOverlay();A.current=null;A.locked=false;A.$('#app-screen').hidden=true;A.$('#lock-screen').hidden=true;A.$('#home-screen').hidden=false;A.$('#phone-screen').classList.remove('in-app','app-dark','locked');A.$('#status-bar').classList.remove('dark');A.renderHome();A.updateWidgets(); };
-  A.lock = () => { A.home();A.locked=true;A.$('#home-screen').hidden=true;A.$('#lock-screen').hidden=false;A.$('#phone-screen').classList.add('locked');A.updateClock(); };
+  A.home = () => { A.finishHomeEditing?.();A.cleanup();A.closeOverlay();A.current=null;A.locked=false;A.$('#app-screen').hidden=true;A.$('#lock-screen').hidden=true;A.$('#home-screen').hidden=false;A.$('#phone-screen').classList.remove('in-app','app-dark','locked');A.$('#status-bar').classList.remove('dark');A.renderHome();A.updateWidgets(); };
+  A.lock = () => { A.home();A.locked=true;A.$('#home-screen').hidden=true;A.$('#lock-screen').hidden=false;A.$('#phone-screen').classList.add('locked');A.$('#notification-banner')?.remove();A.renderLockNotices?.();A.updateClock(); };
   A.nav = (title, right='', backApp='', backText='') => `<nav class="app-nav"><button class="nav-action" ${backApp?`data-action="${backApp}"`:'data-action="home"'} aria-label="${backText||'ホームに戻る'}"><span class="back-chevron">‹</span>${backText}</button><h2>${title}</h2><div class="nav-action">${right}</div></nav>`;
   A.tabs = (tabs,selected) => `<nav class="app-tabs">${tabs.map(t=>`<button class="tab-button ${t.id===selected?'active':''}" data-action="${t.action}" ${t.value?`data-value="${t.value}"`:''}>${A.icon(t.icon)}<span>${t.name}</span></button>`).join('')}</nav>`;
   A.search = (id,placeholder='検索') => `<label class="search-field">${A.icon('search')}<input id="${id}" placeholder="${placeholder}" autocomplete="off" aria-label="${placeholder}"></label>`;
@@ -197,5 +197,165 @@
   bar.addEventListener('pointercancel',()=>{clearTimeout(holdTimer);gesture=null;});
   bar.onclick=e=>{if(suppressClick&&e.detail!==0){suppressClick=false;return;}A.home();};
   document.addEventListener('keydown',e=>{if(e.key==='Tab'&&e.altKey){e.preventDefault();A.recents();}});
+  // Springboard preferences are local, version-independent, and restricted to known apps.
+  const defaultOrder=appData.map(([id])=>id);
+  let homeOrder=A.load('homeOrder',defaultOrder);
+  if(!Array.isArray(homeOrder))homeOrder=defaultOrder;
+  homeOrder=[...new Set(homeOrder.filter(id=>defaultOrder.includes(id))),...defaultOrder.filter(id=>!homeOrder.includes(id))];
+  let editing=false,selectedIcon=null;
+  const smallIcon=id=>`<span class="mini-app" style="background:${A.apps[id].color}">${id==='photos'?A.photosIcon():A.icon(id)}</span>`;
+  A.finishHomeEditing=()=>{editing=false;selectedIcon=null;};
+  A.renderHome=()=>{
+    A.$('#app-grid').innerHTML=homeOrder.slice(0,16).map(id=>A.launcher(A.apps[id])).join('');
+    A.$('#home-dock').innerHTML=homeOrder.slice(16).map(id=>A.launcher(A.apps[id],true)).join('');
+    A.$('#home-screen').classList.toggle('home-editing',editing);
+    A.$$('#home-screen .app-launcher').forEach(el=>{
+      el.draggable=editing;
+      el.classList.toggle('icon-selected',el.dataset.app===selectedIcon);
+      if(editing)el.setAttribute('aria-label',`${A.apps[el.dataset.app].name}を選択して移動`);
+    });
+    A.$('#home-edit-toolbar').hidden=!editing;
+    A.updateSystem?.();
+  };
+  A.$('.home-greeting').insertAdjacentHTML('beforebegin','<div class="home-edit-toolbar" id="home-edit-toolbar" hidden><span>アイコンを2つ選ぶと入れ替え</span><button data-action="finishEditing">完了</button></div>');
+  A.$('.home-tools').insertAdjacentHTML('beforebegin',`<nav class="home-pages" aria-label="ホームページ"><button class="page-dot active" aria-label="ホーム画面" aria-current="page" data-action="home"></button><button class="page-dot" aria-label="アプリライブラリ" data-action="library"></button></nav>`);
+  A.$('.home-tools').insertAdjacentHTML('afterend',`<nav class="springboard-tools" aria-label="ホームカスタマイズ"><button data-action="editHome">${A.icon('edit')}編集</button><button data-action="personalize">${A.icon('photos')}カスタマイズ</button><button data-action="library">${A.icon('grid')}ライブラリ</button></nav>`);
+  A.actions.editHome=()=>{A.closeOverlay();editing=true;selectedIcon=null;A.renderHome();A.haptic();};
+  A.actions.finishEditing=()=>{editing=false;selectedIcon=null;A.renderHome();};
+  const swapIcons=(first,second)=>{
+    const x=homeOrder.indexOf(first),y=homeOrder.indexOf(second);
+    if(x<0||y<0)return;
+    [homeOrder[x],homeOrder[y]]=[homeOrder[y],homeOrder[x]];
+    A.save('homeOrder',homeOrder);selectedIcon=null;A.renderHome();A.haptic();
+  };
+  let suppressLauncher=false;
+  // The release of a long press can be retargeted to the newly opened menu.
+  document.addEventListener('pointerdown',()=>{suppressLauncher=false;},true);
+  document.addEventListener('click',e=>{
+    if(suppressLauncher&&e.detail!==0){suppressLauncher=false;e.preventDefault();e.stopImmediatePropagation();return;}
+    const launcher=e.target.closest('#home-screen .app-launcher');
+    if(!launcher)return;
+    if(editing){e.preventDefault();e.stopImmediatePropagation();const id=launcher.dataset.app;if(selectedIcon&&selectedIcon!==id)swapIcons(selectedIcon,id);else{selectedIcon=selectedIcon===id?null:id;A.renderHome();}}
+  },true);
+  const homeScreen=A.$('#home-screen');
+  let draggedApp=null;
+  homeScreen.addEventListener('dragstart',e=>{const el=e.target.closest('.app-launcher');if(!editing||!el)return;draggedApp=el.dataset.app;e.dataTransfer.setData('text/plain',draggedApp);e.dataTransfer.effectAllowed='move';});
+  homeScreen.addEventListener('dragover',e=>{if(editing&&e.target.closest('.app-launcher'))e.preventDefault();});
+  homeScreen.addEventListener('drop',e=>{const el=e.target.closest('.app-launcher');if(!editing||!el)return;e.preventDefault();swapIcons(draggedApp,el.dataset.app);draggedApp=null;});
+  const shortcuts={notes:['新しいメモ','noteNew'],calendar:['予定を追加','calendarAdd'],mail:['メールを書く','mailCompose'],messages:['会話をはじめる','messageCompose'],clock:['時計を開く',null],camera:['カメラを開く',null]};
+  A.actions.appContext=el=>{
+    const id=el.dataset.app||el.dataset.id,app=A.apps[id];if(!app)return;
+    A.overlay(`<div class="context-card"><div class="context-app">${smallIcon(id)}<div><strong>${app.name}</strong><small>aura アプリ</small></div></div><button data-app="${id}">${A.icon('arrow')}アプリを開く</button>${shortcuts[id]?.[1]?`<button data-action="quickLaunch" data-id="${id}">${A.icon('plus')}${shortcuts[id][0]}</button>`:''}<button data-action="editHome">${A.icon('grid')}ホーム画面を編集</button><button data-action="personalize">${A.icon('photos')}壁紙とスタイル</button><button data-action="closeOverlay">キャンセル</button></div>`,'sheet-overlay context-overlay');
+  };
+  A.actions.quickLaunch=el=>{A.open(el.dataset.id);const action=shortcuts[el.dataset.id]?.[1];if(action)A.actions[action]();};
+  homeScreen.addEventListener('contextmenu',e=>{const el=e.target.closest('.app-launcher');if(el&&!editing){e.preventDefault();A.actions.appContext(el);}});
+  let pressTimer,pressPoint;
+  homeScreen.addEventListener('pointerdown',e=>{
+    if(e.button!==0||editing)return;const el=e.target.closest('.app-launcher');if(!el)return;
+    pressPoint={x:e.clientX,y:e.clientY};
+    pressTimer=setTimeout(()=>{suppressLauncher=true;A.haptic();A.actions.appContext(el);},550);
+  });
+  homeScreen.addEventListener('pointermove',e=>{if(pressPoint&&Math.hypot(e.clientX-pressPoint.x,e.clientY-pressPoint.y)>9)clearTimeout(pressTimer);});
+  ['pointerup','pointercancel','pointerleave'].forEach(type=>homeScreen.addEventListener(type,()=>clearTimeout(pressTimer)));
+  A.library=()=>{
+    const groups=[['よく使う',A.recentApps.length?A.recentApps.slice(0,4):['messages','photos','music','safari']],['つながる',['phone','messages','mail','safari']],['毎日のこと',['calendar','notes','reminders','files']],['クリエイティブ',['photos','camera','music','recorder']],['暮らしと発見',['weather','maps','health','wallet']],['ユーティリティ',['clock','calculator','settings','games']]];
+    A.overlay(`${A.overlayTitle('アプリライブラリ')}<label class="spotlight-input">${A.icon('search')}<input id="library-query" aria-label="ライブラリを検索" placeholder="アプリを検索" autocomplete="off"></label><div class="library-groups" id="library-groups">${groups.map(([name,ids])=>`<section class="library-category"><div>${ids.map(id=>A.launcher(A.apps[id])).join('')}</div><h3>${name}</h3></section>`).join('')}</div><div class="spotlight-results" id="library-results" hidden></div><p class="control-footer">すべてのアプリが、ここに。</p>`,'library-overlay');
+    A.$('#library-query').oninput=e=>{const q=e.target.value.trim().toLowerCase();A.$('#library-groups').hidden=!!q;const results=A.$('#library-results');results.hidden=!q;results.innerHTML=Object.values(A.apps).filter(app=>(app.name+app.id).toLowerCase().includes(q)).map(app=>A.launcher(app)).join('')||'<p class="search-empty">アプリが見つかりません。</p>';};
+  };
+  A.actions.library=A.library;
+  const wallpapers=[['default','Dusk','夕暮れの余韻'],['ocean','Ocean','静かな青'],['forest','Forest','深呼吸する緑'],['mono','Stone','モノクローム'],['aurora','Aurora','光のカーテン'],['sunrise','Sunrise','新しい朝']];
+  A.actions.personalize=()=>{
+    A.overlay(`${A.overlayTitle('あなたらしいホーム。')}<p class="customize-subtitle">壁紙も、アイコンも。気分に合わせて。</p><div class="wallpaper-gallery">${wallpapers.map(([id,name,desc])=>`<button class="wallpaper-pick ${id} ${A.settings.wallpaper===id?'selected':''}" data-action="chooseWallpaper" data-value="${id}" aria-label="壁紙 ${name}" aria-pressed="${A.settings.wallpaper===id}"><span class="wallpaper-mini-clock">9:41</span><span class="wallpaper-pick-label"><strong>${name}</strong><small>${desc}</small></span>${A.settings.wallpaper===id?`<i>${A.icon('check')}</i>`:''}</button>`).join('')}</div><h3 class="customize-label">アイコンのスタイル</h3><div class="style-picker">${[['standard','オリジナル'],['glass','ガラス'],['tinted','単色']].map(([value,label])=>`<button class="${(A.settings.iconStyle||'standard')===value?'selected':''}" data-action="chooseIconStyle" data-value="${value}" aria-pressed="${(A.settings.iconStyle||'standard')===value}">${label}</button>`).join('')}</div><h3 class="customize-label">ロック画面の時計</h3><div class="style-picker clock-style-picker">${[['classic','クラシック'],['light','ライト'],['rounded','ラウンド']].map(([value,label])=>`<button class="${(A.settings.clockStyle||'classic')===value?'selected':''}" data-action="chooseClockStyle" data-value="${value}" aria-pressed="${(A.settings.clockStyle||'classic')===value}"><span>9:41</span>${label}</button>`).join('')}</div><button class="preview-setting" data-action="toggleLockPreview" aria-pressed="${A.settings.lockPreview!==false}"><span>ロック画面に通知本文を表示<small>表示のみの設定です。パスコード保護ではありません。</small></span><span class="preview-switch ${A.settings.lockPreview!==false?'on':''}"></span></button><button class="reset-layout" data-action="previewLock">ロック画面をプレビュー</button><button class="reset-layout" data-action="resetLayout">ホームの並び順をリセット</button><p class="control-footer">このブラウザに自動保存されます。</p>`,'customize-overlay');
+  };
+  A.actions.chooseClockStyle=el=>{if(!['classic','light','rounded'].includes(el.dataset.value))return;A.settings.clockStyle=el.dataset.value;A.applySettings();A.actions.personalize();};
+  A.actions.toggleLockPreview=()=>{A.settings.lockPreview=A.settings.lockPreview===false;A.applySettings();A.renderLockNotices();A.actions.personalize();};
+  A.actions.previewLock=()=>A.lock();
+  A.actions.gestureGuide=()=>A.overlay(`${A.overlayTitle('小さな操作、大きな自由。')}<p class="customize-subtitle">いつものスマホのように、触れてみてください。</p><div class="gesture-guide">${[['grid','ホームを左へスワイプ','アプリライブラリで、すべてのアプリを。'],['search','ホームを下へスワイプ','アプリ・メモ・リマインダーを横断検索。'],['edit','アイコンを長押し','すぐに新規作成。編集では2つのアイコンを選んで入れ替え。PCはドラッグにも対応。'],['signal','画面右上をタップ・下へスワイプ','コントロールセンターで明るさや集中モードを変更。'],['messages','画面左上の時刻をタップ','通知センター。デモ返信もここに残ります。'],['arrow','下端のホームバー','タップでホーム。上スワイプ・長押しでアプリ切替。']].map(([icon,title,body])=>`<article>${A.icon(icon)}<div><strong>${title}</strong><p>${body}</p></div></article>`).join('')}</div><p class="control-footer">PC：Escで閉じる / Hでホーム / Alt+Tabでアプリ切替<br>データはこのブラウザ内に保存されます。</p>`,'guide-overlay');
+  A.actions.chooseWallpaper=el=>{A.settings.wallpaper=el.dataset.value;A.applySettings();A.actions.personalize();};
+  A.actions.chooseIconStyle=el=>{A.settings.iconStyle=el.dataset.value;A.applySettings();A.actions.personalize();};
+  A.actions.resetLayout=()=>A.confirm('ホームの配置をリセット','アイコンの並び順だけを元に戻します。アプリ内のデータは削除されません。',()=>{homeOrder=[...defaultOrder];A.save('homeOrder',homeOrder);A.actions.finishEditing();A.toast('ホームの配置をリセットしました');});
+  const baseApply=A.applySettings;
+  A.applySettings=()=>{baseApply();A.$('#phone-screen').dataset.iconStyle=A.settings.iconStyle||'standard';A.$('#phone-screen').dataset.clockStyle=A.settings.clockStyle||'classic';A.updateSystem?.();};
+  const baseOpen=A.open;
+  A.open=(id,arg)=>{if(!A.apps[id]?.render)return;editing=false;selectedIcon=null;baseOpen(id,arg);};
+  // Search uses local data only, and never injects user text as markup.
+  A.spotlight=()=>{
+    A.overlay(`${A.overlayTitle('検索')}<label class="spotlight-input">${A.icon('search')}<input id="spotlight-query" placeholder="アプリ、メモ、リマインダー" aria-label="アプリ、メモ、リマインダーを検索" autocomplete="off"></label><p class="spotlight-label" id="spotlight-heading">アプリを見つける</p><div class="spotlight-results" id="spotlight-results"></div><div id="spotlight-content"></div><p class="control-footer">このaura内だけを検索します。</p>`,'spotlight-overlay');
+    const render=value=>{
+      const q=value.trim().toLowerCase();
+      const apps=Object.values(A.apps).filter(app=>(app.name+app.id).toLowerCase().includes(q));
+      A.$('#spotlight-results').innerHTML=apps.map(app=>A.launcher(app)).join('');
+      const notes=q?(A.searchableNotes?.()||A.load('notes',[])).filter(n=>(n.title+n.body).toLowerCase().includes(q)).slice(0,5):[];
+      const reminders=q?(A.searchableReminders?.()||A.load('reminders',[])).filter(r=>r.text.toLowerCase().includes(q)).slice(0,5):[];
+      A.$('#spotlight-content').innerHTML=(notes.length?`<p class="spotlight-label">メモ</p><div class="search-content-group">${notes.map(n=>`<button data-action="searchNote" data-id="${A.escape(n.id)}">${smallIcon('notes')}<span><strong>${A.escape(n.title||'新しいメモ')}</strong><small>${A.escape(n.body.slice(0,65))}</small></span>${A.icon('arrow')}</button>`).join('')}</div>`:'')+(reminders.length?`<p class="spotlight-label">リマインダー</p><div class="search-content-group">${reminders.map(r=>`<button data-app="reminders">${smallIcon('reminders')}<span><strong>${A.escape(r.text)}</strong><small>${r.done?'完了済み':'未完了'}</small></span></button>`).join('')}</div>`:'')+(!apps.length&&!notes.length&&!reminders.length?'<div class="search-empty">見つかりませんでした。<br><small>別のキーワードで試してみてください。</small></div>':'');
+    };
+    render('');A.$('#spotlight-query').oninput=e=>render(e.target.value);setTimeout(()=>A.$('#spotlight-query')?.focus(),120);
+  };
+  A.actions.searchNote=el=>{A.open('notes');A.actions.noteOpen(el);};
+  // Persisted, bounded notification history; no browser notification permission required.
+  let noticeList=A.load('notifications',null);
+  if(!Array.isArray(noticeList))noticeList=[{id:'welcome',app:'messages',arg:'misaki',title:'美咲',body:'週末は、どこか出かけよう。',time:Date.now()-120000},{id:'studio',app:'mail',title:'aura studio',body:'あなたの小さな世界へ、ようこそ。',time:Date.now()-3600000}];
+  noticeList=noticeList.filter(n=>n&&A.apps[n.app]&&typeof n.title==='string'&&typeof n.body==='string').slice(0,40);
+  const relativeTime=t=>{const minutes=Math.max(0,Math.floor((Date.now()-t)/60000));return minutes<1?'今':minutes<60?`${minutes}分前`:minutes<1440?`${Math.floor(minutes/60)}時間前`:`${Math.floor(minutes/1440)}日前`;};
+  const noticeCard=n=>`<article class="system-notification"><button class="notification-open" data-action="openNotice" data-id="${A.escape(n.id)}">${smallIcon(n.app)}<span><span class="notification-meta">${A.apps[n.app].name} <time>${relativeTime(n.time)}</time></span><strong>${A.locked&&A.settings.lockPreview===false?'新しい通知':A.escape(n.title)}</strong><span class="notification-body">${A.locked&&A.settings.lockPreview===false?'開いて内容を確認':A.escape(n.body)}</span></span></button><button class="notification-dismiss" data-action="dismissNotice" data-id="${A.escape(n.id)}" aria-label="通知を削除">×</button></article>`;
+  let noticeTimer;
+  A.notify=({app,title,body,arg})=>{
+    if(!A.apps[app])return;
+    const notice={id:A.id(),app,title:String(title),body:String(body),arg,time:Date.now()};
+    noticeList.unshift(notice);noticeList=noticeList.slice(0,40);A.save('notifications',noticeList);A.renderLockNotices();
+    if(!A.$('#overlay').hidden&&A.$('#overlay').classList.contains('notifications-overlay'))A.notifications();
+    if(A.settings.focus)return;
+    A.$('#notification-banner')?.remove();clearTimeout(noticeTimer);
+    const banner=document.createElement('div');banner.id='notification-banner';banner.setAttribute('role','status');banner.innerHTML=noticeCard(notice);A.$('#phone-screen').appendChild(banner);noticeTimer=setTimeout(()=>banner.remove(),5500);
+  };
+  A.renderLockNotices=()=>{A.$('.lock-notifications').innerHTML=noticeList.slice(0,2).map(noticeCard).join('')||'<p class="lock-clear">新しい通知はありません</p>';};
+  A.notifications=()=>{A.overlay(`${A.overlayTitle('通知センター')}<div class="notification-date">${new Date().toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'})}<span>${A.settings.focus?'集中モード ON':'ローカル通知'}</span></div>${noticeList.length?`<div class="notification-stack">${noticeList.map(noticeCard).join('')}</div><button class="switcher-clear" data-action="clearNotifications">すべての通知をクリア</button>`:'<div class="notification-empty">'+A.icon('check')+'<h3>すべて確認しました</h3><p>新しい通知はありません。</p></div>'}<p class="control-footer">デモ返信など、aura内で届いたお知らせです。</p>`,'notifications-overlay');};
+  A.actions.openNotice=el=>{const n=noticeList.find(n=>n.id===el.dataset.id);if(!n)return;A.$('#notification-banner')?.remove();noticeList=noticeList.filter(item=>item.id!==n.id);A.save('notifications',noticeList);A.renderLockNotices();A.open(n.app,n.arg);};
+  A.actions.dismissNotice=el=>{noticeList=noticeList.filter(n=>n.id!==el.dataset.id);A.save('notifications',noticeList);A.renderLockNotices();A.$('#notification-banner')?.remove();if(A.$('#overlay').classList.contains('notifications-overlay')&&!A.$('#overlay').hidden)A.notifications();};
+  A.actions.clearNotifications=()=>{noticeList=[];A.save('notifications',noticeList);A.$('#notification-banner')?.remove();A.renderLockNotices();A.notifications();};
+  A.$('.lock-top .lock-icon').innerHTML=A.icon('lock');
+  A.$('#lock-flashlight').innerHTML=A.icon('flashlight');
+  A.$('.lock-shortcuts [data-app="camera"]').innerHTML=A.icon('camera');
+  A.$('.lock-notifications').insertAdjacentHTML('beforebegin',`<div class="lock-glance"><button data-app="weather">${A.icon('sun')}<span id="lock-glance-weather">26°</span></button><button data-app="calendar">${A.icon('calendar')}今日の予定</button><button data-app="clock">${A.icon('alarm')}時計</button></div><section class="lock-player" id="lock-player" hidden><div class="lock-track"><span class="lock-album">${A.icon('music')}</span><div><strong id="lock-track-title"></strong><small>aura originals</small></div><span class="audio-bars"><i></i><i></i><i></i></span></div><div class="lock-player-controls"><button data-action="musicPrevious" aria-label="前の曲">${A.icon('previous')}</button><button id="lock-play" data-action="lockPlay" aria-label="再生・一時停止">${A.icon('play')}</button><button data-action="musicNext" aria-label="次の曲">${A.icon('next')}</button></div></section>`);
+  A.actions.lockPlay=()=>{A.music?.toggle();A.updateSystem();};
+  A.$('#status-controls').insertAdjacentHTML('afterbegin','<span id="status-focus" hidden></span><span id="status-airplane" hidden></span>');
+  A.$('#status-focus').innerHTML=A.icon('moon');A.$('#status-airplane').innerHTML=A.icon('airplane');
+  A.updateSystem=()=>{
+    const s=A.settings,status=A.$('#status-controls');
+    status.querySelectorAll(':scope > svg').forEach((svg,i)=>{svg.style.opacity=(i===0?s.cellular&&!s.airplane:s.wifi)?'1':'.25';});
+    A.$('#status-focus').hidden=!s.focus;A.$('#status-airplane').hidden=!s.airplane;
+    if(s.focus)A.$('#notification-banner')?.remove();
+    status.setAttribute('aria-label',`コントロールセンターを開く。シミュレーション：Wi-Fi ${s.wifi?'オン':'オフ'}${s.airplane?'、機内モード':''}`);
+    A.$('.battery').setAttribute('title','シミュレーターのバッテリー表示');
+    const d=new Date(),second=d.getSeconds()*6,minute=d.getMinutes()*6+second/60,hour=(d.getHours()%12)*30+minute/12;
+    A.$$('.clock-icon').forEach(el=>{if(!el.querySelector('.clock-hands'))el.innerHTML=`<svg viewBox="0 0 60 60" class="live-clock" aria-hidden="true"><circle cx="30" cy="30" r="28" fill="#fafafa"/>${Array.from({length:12},(_,i)=>`<path d="M30 5v3" stroke="#202126" stroke-width="1.3" transform="rotate(${i*30} 30 30)"/>`).join('')}<g class="clock-hands"><path class="clock-hour" d="M30 30V17" stroke="#202126" stroke-width="2.6"/><path class="clock-minute" d="M30 30V9" stroke="#202126" stroke-width="1.8"/><path class="clock-second" d="M30 35V7" stroke="#f7833c" stroke-width=".8"/><circle cx="30" cy="30" r="2" fill="#f7833c"/></g></svg>`;[['hour',hour],['minute',minute],['second',second]].forEach(([hand,angle])=>el.querySelector('.clock-'+hand).setAttribute('transform',`rotate(${angle} 30 30)`));});
+    A.$('#lock-glance-weather').textContent=(A.weatherSnapshot?.()?.temp??26)+'°';
+    const music=A.music,player=A.$('#lock-player');player.hidden=!music?.track||(!music.playing&&!A.recentApps.includes('music'));
+    if(music?.track){A.$('#lock-track-title').textContent=music.track.title;const play=A.$('#lock-play');if(play.dataset.playing!==String(music.playing)){play.innerHTML=A.icon(music.playing?'pause':'play');play.dataset.playing=String(music.playing);}player.classList.toggle('is-playing',!!music.playing);}
+  };
+  const updateClock=A.updateClock;
+  A.updateClock=()=>{updateClock();A.updateSystem();};
+  // Directional gestures begin outside inputs and do not steal normal vertical scrolling.
+  let swipe=null;
+  const screen=A.$('#phone-screen');
+  screen.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];swipe={x:t.clientX,y:t.clientY,target:e.target,scroll:A.$('.home-main').scrollTop};},{passive:true});
+  screen.addEventListener('touchend',e=>{
+    if(!swipe)return;const start=swipe;swipe=null;const t=e.changedTouches[0],dx=t.clientX-start.x,dy=t.clientY-start.y;
+    if(start.target.closest('input,textarea,select,.home-indicator')||editing)return;
+    if(start.target.closest('.status-bar')&&dy>55){start.x>screen.getBoundingClientRect().left+screen.clientWidth/2?A.controls():A.notifications();return;}
+    if(!A.$('#overlay').hidden&&A.$('#overlay').classList.contains('library-overlay')&&dx>70&&Math.abs(dx)>Math.abs(dy)*1.5){A.closeOverlay();return;}
+    if(A.locked||A.current||!A.$('#overlay').hidden)return;
+    if(dx<-70&&Math.abs(dx)>Math.abs(dy)*1.5){clearTimeout(pressTimer);A.library();}
+    else if(dy>75&&Math.abs(dy)>Math.abs(dx)*1.5&&start.scroll===0&&!start.target.closest('.home-dock'))A.spotlight();
+  },{passive:true});
+  // Keep modal keyboard navigation within the active overlay and restore focus on close.
+  let overlayReturnFocus=null;
+  const baseOverlay=A.overlay,baseCloseOverlay=A.closeOverlay;
+  A.overlay=(html,extra='')=>{if(A.$('#overlay').hidden)overlayReturnFocus=document.activeElement;baseOverlay(html,extra);const overlay=A.$('#overlay');overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label',overlay.querySelector('h2,h3')?.textContent||'メニュー');(overlay.querySelector('input:not([type=range]),.close-button,button'))?.focus({preventScroll:true});};
+  A.closeOverlay=()=>{const wasOpen=!A.$('#overlay').hidden;baseCloseOverlay();if(wasOpen&&overlayReturnFocus?.isConnected)overlayReturnFocus.focus({preventScroll:true});};
+  A.actions.closeOverlay=A.closeOverlay;
+  A.$('#overlay').addEventListener('keydown',e=>{if(e.key!=='Tab')return;const items=A.$$('button:not(:disabled),input,textarea,select,a[href]',e.currentTarget).filter(el=>el.getClientRects().length);const first=items[0],last=items.at(-1);if(!first)return;if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}});
+  A.$('#home-search').onclick=A.spotlight;A.$('#status-time').onclick=A.notifications;
+  A.renderLockNotices();
   A.renderHome();A.applySettings();A.updateClock();setInterval(A.updateClock,1000);
 })();
