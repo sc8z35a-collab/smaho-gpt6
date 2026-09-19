@@ -10,6 +10,8 @@
   A.settings = A.load('settings', {wallpaper:'default', dark:false, wifi:true, bluetooth:true, cellular:true, airplane:false, focus:false, sound:true, brightness:100, volume:60});
   A.actions = {}; A.apps = {}; A.cleanups = []; A.current = null; A.locked = false;
   A.icons = {
+    pin:'<path d="m8 3 8 0-1 6 4 4v2h-6v7l-2-2v-5H5v-2l4-4Z"/>',
+    layers:'<path d="m12 3 10 5-10 5L2 8Zm-10 9 10 5 10-5M2 16l10 5 10-5"/>',
     phone:'<path d="M7 3l4 5-3 3c1.6 3.6 3.5 5.5 7 7l3-3 5 4c-1 4-3.6 5-7 3C9 18.8 5.2 15 2 8.5 1 5.8 3 3 7 3Z" fill="currentColor" stroke="none"/>',
     messages:'<path d="M23 11.5C23 17.3 18.1 21 12 21c-1.4 0-2.7-.2-4-.6L3 22l1.5-4C2.9 16.3 2 14.1 2 11.5 2 6.2 6.5 2 12.5 2S23 6.2 23 11.5Z" fill="currentColor" stroke="none"/>',
     safari:'<circle cx="12" cy="12" r="10" fill="#eaf8ff" stroke="none"/><circle cx="12" cy="12" r="8.4" stroke="#60b9ee" stroke-width=".65" stroke-dasharray=".8 1.3"/><path d="m16.8 5.2-2.5 8.4-4.6-3.2Z" fill="#f25b59" stroke="none"/><path d="m7.2 18.8 2.5-8.4 4.6 3.2Z" fill="#4c99dc" stroke="none"/>',
@@ -265,7 +267,21 @@
   A.actions.library=A.library;
   const wallpapers=[['default','Dusk','夕暮れの余韻'],['ocean','Ocean','静かな青'],['forest','Forest','深呼吸する緑'],['mono','Stone','モノクローム'],['aurora','Aurora','光のカーテン'],['sunrise','Sunrise','新しい朝']];
   A.actions.personalize=()=>{
-    A.overlay(`${A.overlayTitle('あなたらしいホーム。')}<p class="customize-subtitle">壁紙も、アイコンも。気分に合わせて。</p><div class="wallpaper-gallery">${wallpapers.map(([id,name,desc])=>`<button class="wallpaper-pick ${id} ${A.settings.wallpaper===id?'selected':''}" data-action="chooseWallpaper" data-value="${id}" aria-label="壁紙 ${name}" aria-pressed="${A.settings.wallpaper===id}"><span class="wallpaper-mini-clock">9:41</span><span class="wallpaper-pick-label"><strong>${name}</strong><small>${desc}</small></span>${A.settings.wallpaper===id?`<i>${A.icon('check')}</i>`:''}</button>`).join('')}</div><h3 class="customize-label">アイコンのスタイル</h3><div class="style-picker">${[['standard','オリジナル'],['glass','ガラス'],['tinted','単色']].map(([value,label])=>`<button class="${(A.settings.iconStyle||'standard')===value?'selected':''}" data-action="chooseIconStyle" data-value="${value}" aria-pressed="${(A.settings.iconStyle||'standard')===value}">${label}</button>`).join('')}</div><h3 class="customize-label">ロック画面の時計</h3><div class="style-picker clock-style-picker">${[['classic','クラシック'],['light','ライト'],['rounded','ラウンド']].map(([value,label])=>`<button class="${(A.settings.clockStyle||'classic')===value?'selected':''}" data-action="chooseClockStyle" data-value="${value}" aria-pressed="${(A.settings.clockStyle||'classic')===value}"><span>9:41</span>${label}</button>`).join('')}</div><button class="preview-setting" data-action="toggleLockPreview" aria-pressed="${A.settings.lockPreview!==false}"><span>ロック画面に通知本文を表示<small>表示のみの設定です。パスコード保護ではありません。</small></span><span class="preview-switch ${A.settings.lockPreview!==false?'on':''}"></span></button><button class="reset-layout" data-action="previewLock">ロック画面をプレビュー</button><button class="reset-layout" data-action="resetLayout">ホームの並び順をリセット</button><p class="control-footer">このブラウザに自動保存されます。</p>`,'customize-overlay');
+    A.overlay(`${A.overlayTitle('あなたらしいホーム。')}<p class="customize-subtitle">壁紙も、アイコンも。気分に合わせて。</p><div class="wallpaper-gallery">${wallpapers.map(([id,name,desc])=>`<button class="wallpaper-pick ${id} ${A.settings.wallpaper===id?'selected':''}" data-action="chooseWallpaper" data-value="${id}" aria-label="壁紙 ${name}" aria-pressed="${A.settings.wallpaper===id}"><span class="wallpaper-mini-clock">9:41</span><span class="wallpaper-pick-label"><strong>${name}</strong><small>${desc}</small></span>${A.settings.wallpaper===id?`<i>${A.icon('check')}</i>`:''}</button>`).join('')}</div><h3 class="customize-label">アイコンのスタイル</h3><div class="style-picker">${[['standard','オリジナル'],['glass','ガラス'],['tinted','単色']].map(([value,label])=>`<button class="${(A.settings.iconStyle||'standard')===value?'selected':''}" data-action="chooseIconStyle" data-value="${value}" aria-pressed="${(A.settings.iconStyle||'standard')===value}">${label}</button>`).join('')}</div><button class="appearance-link" data-action="appearance">${A.icon('layers')}<span><strong>光と奥行き</strong><small>影の深さと、動きの心地よさを調整</small></span><span class="chevron">›</span></button><h3 class="customize-label">ロック画面の時計</h3><div class="style-picker clock-style-picker">${[['classic','クラシック'],['light','ライト'],['rounded','ラウンド']].map(([value,label])=>`<button class="${(A.settings.clockStyle||'classic')===value?'selected':''}" data-action="chooseClockStyle" data-value="${value}" aria-pressed="${(A.settings.clockStyle||'classic')===value}"><span>9:41</span>${label}</button>`).join('')}</div><button class="preview-setting" data-action="toggleLockPreview" aria-pressed="${A.settings.lockPreview!==false}"><span>ロック画面に通知本文を表示<small>表示のみの設定です。パスコード保護ではありません。</small></span><span class="preview-switch ${A.settings.lockPreview!==false?'on':''}"></span></button><button class="reset-layout" data-action="previewLock">ロック画面をプレビュー</button><button class="reset-layout" data-action="resetLayout">ホームの並び順をリセット</button><p class="control-footer">このブラウザに自動保存されます。</p>`,'customize-overlay');
+  };
+  const depths=[['soft','やわらか','控えめな影'],['balanced','バランス','自然な立体感'],['deep','くっきり','深い落ち影']];
+  const depthDescriptions={soft:'そっと浮かぶ、やわらかな影。',balanced:'縁の光と、自然に重なる影。',deep:'光を受けて、奥行きが際立つ。'};
+  A.appearancePanel=()=>`<div class="depth-preview" aria-label="現在の影の深さのプレビュー"><div class="depth-preview-scene" aria-hidden="true"><span class="depth-preview-icon">${A.icon('layers')}</span><span class="depth-preview-card"><strong>A little depth.</strong><i></i><i></i></span></div><p id="depth-description" role="status">${depthDescriptions[A.settings.depth]||depthDescriptions.balanced}</p></div><h3 class="customize-label">影の深さ</h3><div class="appearance-options" role="group" aria-label="影の深さ">${depths.map(([value,label,detail])=>`<button data-action="chooseDepth" data-value="${value}" aria-pressed="${(A.settings.depth||'balanced')===value}"><strong>${label}</strong><small>${detail}</small></button>`).join('')}</div><button class="appearance-toggle" data-action="toggleMotion" aria-pressed="${!!A.settings.reduceMotion}"><span><strong>動きを抑える</strong><small>浮き上がりや画面切替のアニメーションを停止。影の立体感はそのままに。</small></span><span class="preview-switch ${A.settings.reduceMotion?'on':''}" aria-hidden="true"></span></button><p class="appearance-help">アイコン・ウィジェット・アプリ内のカードにすぐ反映されます。<br>端末側で「動きを減らす」が有効な場合は、端末の設定を優先します。</p>`;
+  A.actions.appearance=()=>A.overlay(`${A.overlayTitle('光と奥行き')}<p class="customize-subtitle">触れたくなる質感を、あなたの好みで。</p>${A.appearancePanel()}<button class="reset-layout" data-action="personalize">壁紙とホーム画面に戻る</button><p class="control-footer">このブラウザに自動保存されます。</p>`,'customize-overlay');
+  A.actions.chooseDepth=el=>{
+    const value=el.dataset.value;if(!depths.some(([id])=>id===value))return;
+    A.settings.depth=value;A.applySettings();
+    A.$$('[data-action="chooseDepth"]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.value===value)));
+    const description=A.$('#depth-description');if(description)description.textContent=depthDescriptions[value];
+  };
+  A.actions.toggleMotion=()=>{
+    A.settings.reduceMotion=!A.settings.reduceMotion;A.applySettings();
+    A.$$('[data-action="toggleMotion"]').forEach(button=>{button.setAttribute('aria-pressed',String(A.settings.reduceMotion));button.querySelector('.preview-switch').classList.toggle('on',A.settings.reduceMotion);});
   };
   A.actions.chooseClockStyle=el=>{if(!['classic','light','rounded'].includes(el.dataset.value))return;A.settings.clockStyle=el.dataset.value;A.applySettings();A.actions.personalize();};
   A.actions.toggleLockPreview=()=>{A.settings.lockPreview=A.settings.lockPreview===false;A.applySettings();A.renderLockNotices();A.actions.personalize();};
@@ -275,7 +291,14 @@
   A.actions.chooseIconStyle=el=>{A.settings.iconStyle=el.dataset.value;A.applySettings();A.actions.personalize();};
   A.actions.resetLayout=()=>A.confirm('ホームの配置をリセット','アイコンの並び順だけを元に戻します。アプリ内のデータは削除されません。',()=>{homeOrder=[...defaultOrder];A.save('homeOrder',homeOrder);A.actions.finishEditing();A.toast('ホームの配置をリセットしました');});
   const baseApply=A.applySettings;
-  A.applySettings=()=>{baseApply();A.$('#phone-screen').dataset.iconStyle=A.settings.iconStyle||'standard';A.$('#phone-screen').dataset.clockStyle=A.settings.clockStyle||'classic';A.updateSystem?.();};
+  A.applySettings=()=>{
+    if(!depths.some(([id])=>id===A.settings.depth))A.settings.depth='balanced';
+    A.settings.reduceMotion=A.settings.reduceMotion===true;
+    const screen=A.$('#phone-screen');
+    screen.dataset.depth=A.settings.depth;screen.dataset.reduceMotion=String(A.settings.reduceMotion);
+    screen.dataset.iconStyle=A.settings.iconStyle||'standard';screen.dataset.clockStyle=A.settings.clockStyle||'classic';
+    baseApply();A.updateSystem?.();
+  };
   const baseOpen=A.open;
   A.open=(id,arg)=>{if(!A.apps[id]?.render)return;editing=false;selectedIcon=null;baseOpen(id,arg);};
   // Search uses local data only, and never injects user text as markup.

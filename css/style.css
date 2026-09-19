@@ -262,4 +262,107 @@ html,body{width:100%;height:100%;overscroll-behavior:none}
 @media(min-height:781px) and (max-height:900px){.home-screen{padding-top:14px}.home-greeting{margin-bottom:12px;gap:4px}.home-greeting>span:first-child{font-size:12px}.home-widgets{height:130px;margin-bottom:17px}.home-widgets>button{padding:12px 14px}.weather-widget>strong,.calendar-widget>strong{font-size:40px}.app-grid{row-gap:15px}.app-icon{width:56px;height:56px}.home-main{padding-top:4px}.app-launcher>.app-name{font-size:9px}.app-launcher{gap:6px}.home-pages{padding:3px 0 0}.home-tools{min-height:34px}.springboard-tools{padding-bottom:6px}.home-dock{margin-bottom:0}}
 @media(min-height:676px) and (max-height:780px){.greeting-note{display:none}.home-greeting{margin-bottom:12px}.home-widgets{height:120px;margin-bottom:14px}.app-grid{row-gap:10px}.app-launcher{gap:5px}.home-pages{padding:0}.home-tools{min-height:34px}.springboard-tools{padding-bottom:3px}.springboard-tools button{min-height:25px}}
 @media(max-height:560px){.home-screen{padding-top:0}.home-tools{min-height:29px}.springboard-tools{display:none}.home-pages{padding:2px 0 0}.home-dock{padding:7px}.home-dock .app-icon{width:44px;height:44px}.lock-screen{overflow-y:auto;padding-bottom:28px}.lock-top h2{font-size:62px}.lock-top{margin-top:0}.lock-glance{margin:8px 0}.lock-notifications,.lock-player,.lock-glance{flex-shrink:0}.lock-shortcuts{padding-bottom:10px}.lock-player{max-width:360px}.lock-notifications{max-width:360px}.unlock-button{margin-top:0}}
-@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+/* A shared elevation scale: contact shadow, cast shadow, then a lit rim. */
+.phone-screen{
+  --depth-color:29 24 51;
+  --depth-contact:.18;
+  --depth-cast:.24;
+  --depth-near:5px;
+  --depth-far:16px;
+  --depth-blur:28px;
+  --surface-rim:#ffffffab;
+  --surface-edge:#30274210;
+  --elevation:0 var(--depth-near) 7px -3px rgb(var(--depth-color) / var(--depth-contact)),0 var(--depth-far) var(--depth-blur) -9px rgb(var(--depth-color) / var(--depth-cast)),inset 0 1px 0 var(--surface-rim),inset 0 -1px 0 #00000012;
+  --elevation-pressed:0 2px 4px rgb(var(--depth-color) / .14),inset 0 2px 4px #00000012;
+}
+.phone-screen[data-depth=soft]{--depth-contact:.1;--depth-cast:.12;--depth-near:2px;--depth-far:7px;--depth-blur:15px}
+.phone-screen[data-depth=deep]{--depth-contact:.27;--depth-cast:.36;--depth-near:7px;--depth-far:24px;--depth-blur:34px}
+.screen-dark-mode{--depth-color:0 0 0;--surface-rim:#ffffff18;--surface-edge:#ffffff0e}
+.app-icon{box-shadow:var(--elevation);isolation:isolate}
+.app-icon:after{background:linear-gradient(145deg,#ffffff42 0%,transparent 42%,#00000010 100%);border-color:#ffffff36;z-index:1}
+.app-icon>svg{filter:drop-shadow(0 1px 1px #00000020)}
+.app-launcher>.app-name{text-shadow:0 1px 2px #17122eaa,0 3px 9px #17122e55}
+.app-badge{z-index:2;box-shadow:0 2px 4px #241a4355,inset 0 1px 0 #ffffff60}
+.home-widgets>button,.home-dock{box-shadow:var(--elevation);border-top-color:#ffffff70;border-bottom-color:#00000018}
+.home-widgets>button{background-image:linear-gradient(145deg,#fff2,transparent)}
+.home-dock{background:linear-gradient(150deg,#f6edff55,#dad8ed24 60%,#bab1d52b)}
+.home-tools .home-search,.lock-glance button{box-shadow:0 3px 8px #16102722,inset 0 1px 0 #ffffff28}
+.app-screen{box-shadow:-18px 0 65px #18142724,18px 0 65px #18142724}
+.app-nav{z-index:2;box-shadow:0 5px 12px -10px #251e4940;background:var(--app-bg)}
+.music-app .app-nav,.weather-app .app-nav,.calc-app .app-nav{background:transparent}
+.app-tabs{box-shadow:0 -6px 22px -14px #241d4955}
+:where(.group-card,.profile-card,.note-card,.event-card,.health-card,.game-card,.file-tile,.storage-card,.browser-article){box-shadow:var(--elevation);border:1px solid var(--surface-edge)}
+.note-card{border-top:3px solid #e8cf8f;background:linear-gradient(150deg,#fffef9,#fff 60%);position:relative}
+.note-card h3{overflow-wrap:anywhere}
+.event-card,.health-card,.game-card,.profile-card{border-radius:18px}
+.wallet-card,.player-art,.photo-featured{box-shadow:var(--elevation),0 20px 35px -20px #2a254960}
+.wallet-card{border-color:#ffffff58;border-top-color:#ffffffbb}
+.control-connectivity,.control-music,.control-tile,.control-slider,.control-single,.recent-card,.library-category>div,.system-notification,.lock-player{box-shadow:var(--elevation);border-top-color:#ffffff45}
+.control-round,.calc-key,.dial-key{box-shadow:var(--elevation);background-image:linear-gradient(150deg,#ffffff12,transparent 55%,#0000000c);transition:transform .18s,box-shadow .18s}
+.modal-sheet,.context-card{box-shadow:0 8px 12px -8px #0006,0 30px 80px -15px #100d2d80,inset 0 1px 0 #ffffffa0;border:1px solid var(--surface-edge)}
+.screen-dark-mode .modal-sheet,.screen-dark-mode .context-card{background:#272831;color:#f0f0f3;box-shadow:0 30px 80px -15px #000b,inset 0 1px 0 #ffffff20}
+.screen-dark-mode .modal-sheet p{color:#b3b4c0}
+.search-field,.text-input,.spotlight-input{box-shadow:inset 0 2px 4px #241c3e09,inset 0 -1px 0 #ffffff30}
+.text-input:focus-visible,.search-field:focus-within,.spotlight-input:focus-within{outline:2px solid #7b9ecf;outline-offset:2px}
+.primary-button{box-shadow:0 4px 9px -3px #2466ac55,inset 0 1px 0 #ffffff30;transition:transform .18s,box-shadow .18s}
+.secondary-button{box-shadow:0 2px 5px #251e4210,inset 0 1px 0 #ffffff50}
+.toggle,.preview-switch{box-shadow:inset 0 2px 3px #0002}
+.toggle:after,.preview-switch:after{box-shadow:0 2px 4px #0003,inset 0 1px 0 #fff}
+.toast{box-shadow:0 5px 12px #0002,0 20px 40px #15102530;border:1px solid #ffffff28}
+:where(.note-card,.game-card,.profile-card,.file-tile,.browser-article){transition:transform .2s,box-shadow .2s}
+button:disabled{cursor:not-allowed;opacity:.45;filter:none}
+@media(hover:hover) and (pointer:fine){
+  .app-launcher:hover .app-icon{transform:translateY(-4px);box-shadow:var(--elevation),0 12px 18px -9px #17122d55}
+  :where(.note-card,.game-card,.profile-card,.file-tile,.browser-article):hover{transform:translateY(-3px);box-shadow:var(--elevation),0 12px 18px -12px #251e4935}
+  .list-row[data-action]:hover{background:#8080a008}
+}
+.app-launcher:active .app-icon{transform:translateY(2px) scale(.93);box-shadow:var(--elevation-pressed)}
+.home-widgets>button:active,:where(.note-card,.game-card,.profile-card,.calc-key,.dial-key,.control-round,.primary-button):active{transform:translateY(2px) scale(.98);box-shadow:var(--elevation-pressed)}
+/* Live appearance preview uses the same tokens as the real application. */
+.depth-preview{position:relative;isolation:isolate;overflow:hidden;border-radius:23px;padding:24px 20px;margin:18px 0;background:radial-gradient(ellipse at 0 0,#edd9d0,transparent 65%),linear-gradient(135deg,#ac9bb7,#827b9e);border:1px solid #ffffff38;min-height:176px;color:#fff}
+.depth-preview-scene{display:flex;align-items:center;justify-content:center;gap:22px;margin:5px 0 20px}
+.depth-preview-icon{width:62px;height:62px;display:grid;place-items:center;border-radius:18px;background:linear-gradient(145deg,#a3bfce,#61799d);box-shadow:var(--elevation);border:1px solid #ffffff40}
+.depth-preview-icon svg{width:34px;height:34px;filter:drop-shadow(0 2px 2px #26335640)}
+.depth-preview-card{display:flex;flex-direction:column;gap:10px;width:140px;min-height:86px;padding:18px;border-radius:17px;background:linear-gradient(145deg,#fffdf9,#efebf4);color:#52495f;box-shadow:var(--elevation)}
+.depth-preview-card strong{font-size:13px;font-weight:500}
+.depth-preview-card i{display:block;width:70%;height:4px;background:#d7d1df;border-radius:4px}
+.depth-preview-card i:last-child{width:45%}
+.depth-preview>p{font-size:10px;line-height:1.8;margin:0;text-align:center;color:#fff}
+.appearance-options{display:flex;gap:8px;margin:12px 0 22px}
+.appearance-options button{flex:1;min-width:0;border-radius:14px;border:1px solid #89819733;padding:12px 4px;background:#8981970b;color:inherit;min-height:64px}
+.appearance-options button strong,.appearance-options button small{display:block}
+.appearance-options button strong{font-size:12px;font-weight:500}
+.appearance-options button small{font-size:9px;opacity:.65;margin-top:6px}
+.appearance-options button[aria-pressed=true]{background:#7a699d20;border-color:#9682b6;box-shadow:inset 0 1px 0 #ffffff45,0 4px 10px #241f3c15}
+.appearance-options button[aria-pressed=true] strong:before{content:'✓ ';color:#8771ad}
+.appearance-toggle{padding:16px 14px;background:#ffffff0a;border:1px solid #89819726;border-radius:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;color:inherit}
+.appearance-toggle strong{font-size:12px;font-weight:500;display:block}
+.appearance-toggle small{font-size:10px;line-height:1.8;display:block;opacity:.65;margin-top:5px}
+.appearance-help{font-size:10px;line-height:1.9;color:var(--muted);margin:14px 0 25px}
+.customize-overlay .appearance-help{color:#ffffffa6}
+.appearance-link{display:flex;align-items:center;gap:12px;width:100%;margin-top:20px;border:1px solid #ffffff22;border-radius:17px;padding:16px;text-align:left;background:#ffffff10;box-shadow:0 4px 15px #15102515,inset 0 1px 0 #ffffff20}
+.appearance-link>svg{width:23px;height:23px;flex-shrink:0}
+.appearance-link strong,.appearance-link small{display:block}
+.appearance-link strong{font-size:12px;font-weight:500}
+.appearance-link small{font-size:10px;opacity:.6;margin-top:5px}
+/* Note tools stay compact and never nest interactive controls inside cards. */
+.notes-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 17px;font-size:11px;color:#92909b}
+.notes-toolbar select{max-width:165px;min-height:36px;border:1px solid var(--surface-edge);border-radius:10px;padding:6px 10px;background:var(--paper);color:var(--ink);font-size:12px}
+.note-pin-label{font-size:9px;color:#aa8148;display:flex;align-items:center;gap:4px;margin-bottom:8px}
+.note-pin-label svg{width:11px;height:11px}
+.note-card.is-pinned{border-top-color:#bf9254}
+.note-editor-tools{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:48px;font-size:10px;color:#96919c;border-bottom:1px solid var(--surface-edge);margin-bottom:10px}
+.note-editor-tools>span{font-variant-numeric:tabular-nums}
+.note-pin-button{display:flex;align-items:center;gap:5px;border-radius:10px;padding:8px;min-height:36px;color:#a38252}
+.note-pin-button svg{width:15px;height:15px}
+.note-pin-button[aria-pressed=true]{background:#ddc28d25}
+#note-save-status{font-size:10px;color:#958773;text-align:center;display:block;margin-top:12px;min-height:16px}
+.screen-dark-mode .note-pin-label,.screen-dark-mode .note-pin-button{color:#dec393}
+.screen-dark-mode #note-save-status{color:#bfb4a6}
+/* Explicit motion preference complements, never overrides, the OS preference. */
+[data-reduce-motion=true] *,[data-reduce-motion=true] *:before,[data-reduce-motion=true] *:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+[data-reduce-motion=true] .app-icon,[data-reduce-motion=true] .home-widgets>button,[data-reduce-motion=true] :where(.note-card,.game-card,.profile-card,.file-tile,.browser-article,.calc-key,.dial-key,.control-round,.primary-button){transform:none!important}
+@media(prefers-reduced-motion:reduce){
+  *,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  .app-icon,.home-widgets>button,:where(.note-card,.game-card,.profile-card,.file-tile,.browser-article,.calc-key,.dial-key,.control-round,.primary-button){transform:none!important}
+}
