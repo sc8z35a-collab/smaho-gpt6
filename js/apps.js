@@ -3,39 +3,73 @@
 const A=window.Aura, $=A.$, esc=A.escape, icon=A.icon;
 const now=new Date();
 const dayKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-// Calendar: real month arithmetic and locally persisted events.
-let calendarDate=new Date(now.getFullYear(),now.getMonth(),1),selectedDate=dayKey(now);
+// Shared compact controls keep app-specific tools keyboard and touch accessible.
+const UI=A.workbench={
+ button:(action,label,attrs='')=>`<button class="work-button" data-action="${action}" ${attrs}>${label}</button>`,
+ chips:(items,active,action)=>`<div class="work-chips" role="group">${items.map(([id,label])=>`<button data-action="${action}" data-value="${esc(id)}" aria-pressed="${id===active}" class="${id===active?'selected':''}">${esc(label)}</button>`).join('')}</div>`,
+ field:(label,name,value='',type='text',extra='')=>`<label class="form-label">${label}<input class="text-input" name="${name}" type="${type}" value="${esc(value)}" ${extra}></label>`,
+ select:(label,name,items,value)=>`<label class="form-label">${label}<select class="text-input" name="${name}">${items.map(([id,text])=>`<option value="${esc(id)}" ${id===value?'selected':''}>${esc(text)}</option>`).join('')}</select></label>`,
+ day:dayKey,
+ date:date=>new Date(date+'T12:00:00').toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'short'})
+};
+// Calendar: month, week and searchable agenda share the same persisted records.
+let calendarDate=new Date(now.getFullYear(),now.getMonth(),1),selectedDate=dayKey(now),calendarMode='month',eventQuery='';
 let events=A.load('events',[{id:'welcome-event',date:dayKey(now),time:'15:00',title:'ひと息つく時間',place:'お気に入りのカフェ'}]);
+const categories=[['personal','プライベート'],['work','仕事'],['life','暮らし']];
+const eventColor=e=>({personal:'#aa8ac2',work:'#6196d9',life:'#6ca68e'}[e.category]||'#aa8ac2');
+const eventCard=e=>`<article class="event-card" style="border-left-color:${eventColor(e)}"><div class="event-time">${esc(e.time)}<br>${esc(e.endTime||'1時間')}</div><button class="event-info" data-action="calendarEdit" data-id="${esc(e.id)}"><strong>${esc(e.title)}</strong><small>${esc(e.place||'場所の指定なし')}</small></button><button data-action="calendarDelete" data-id="${esc(e.id)}" aria-label="予定を削除">×</button></article>`;
 function calendar(){
- const y=calendarDate.getFullYear(),m=calendarDate.getMonth(),start=new Date(y,m,1).getDay(),count=new Date(y,m+1,0).getDate();
- let cells=['日','月','火','水','木','金','土'].map((d,i)=>`<span class="weekday" style="${i===0?'color:#e18484':i===6?'color:#7397bd':''}">${d}</span>`).join('');
- for(let i=0;i<start;i++)cells+='<span></span>';
- for(let d=1;d<=count;d++){const key=dayKey(new Date(y,m,d));cells+=`<button class="month-day ${key===dayKey(now)?'today':''} ${key===selectedDate?'selected':''} ${events.some(e=>e.date===key)?'has-event':''}" data-action="calendarSelect" data-date="${key}">${d}</button>`;}
- const daily=events.filter(e=>e.date===selectedDate).sort((a,b)=>a.time.localeCompare(b.time));
- A.view(A.nav('カレンダー',`<button data-action="calendarAdd" aria-label="予定を追加">${icon('plus')}</button>`)+`<div class="app-content"><div class="calendar-month-head"><h3>${y}<span style="font-weight:400;font-size:18px">年</span> ${m+1}<span style="font-weight:400;font-size:18px">月</span></h3><div><button data-action="calendarMove" data-value="-1" aria-label="前の月">‹</button><button data-action="calendarMove" data-value="1" aria-label="次の月">›</button></div></div><div class="month-grid">${cells}</div><div class="calendar-agenda"><h3>${new Date(selectedDate+'T12:00:00').toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'})}</h3>${daily.map(e=>`<article class="event-card"><div class="event-time">${esc(e.time)}<br>予定</div><div class="event-info"><strong>${esc(e.title)}</strong><small>${esc(e.place||'場所の指定なし')}</small></div><button data-action="calendarDelete" data-id="${e.id}" aria-label="予定を削除">×</button></article>`).join('')||A.empty('予定のない日。<br>自由な時間を楽しもう。','sun')}</div><button class="secondary-button" data-action="calendarToday" style="width:100%;margin-top:16px;color:#e96867;background:#f6e6e5">今日に戻る</button></div>`);
+ const today=dayKey(new Date()),y=calendarDate.getFullYear(),m=calendarDate.getMonth();
+ let cells=['日','月','火','水','木','金','土'].map(d=>`<span class="weekday">${d}</span>`).join('');
+ const dates=[];
+ if(calendarMode==='week'){
+  const start=new Date(selectedDate+'T12:00:00');start.setDate(start.getDate()-start.getDay());
+  for(let i=0;i<7;i++){const d=new Date(start);d.setDate(start.getDate()+i);dates.push(d);}
+ }else{
+  for(let i=0;i<new Date(y,m,1).getDay();i++)cells+='<span></span>';
+  for(let i=1;i<=new Date(y,m+1,0).getDate();i++)dates.push(new Date(y,m,i));
+ }
+ dates.forEach(d=>{const key=dayKey(d);cells+=`<button class="month-day ${key===today?'today':''} ${key===selectedDate?'selected':''} ${events.some(e=>e.date===key)?'has-event':''}" data-action="calendarSelect" data-date="${key}" aria-label="${key}" aria-pressed="${key===selectedDate}">${d.getDate()}</button>`;});
+ A.view(A.nav('カレンダー',`<button data-action="calendarAdd" aria-label="予定を追加">${icon('plus')}</button>`)+`<div class="app-content work-app calendar-work"><div class="work-heading"><div><span class="work-eyebrow">MAKE TIME FOR YOU</span><h1 class="app-title">予定に、余白を。</h1></div><span class="work-count">${events.filter(e=>e.date===today).length}<small>今日の予定</small></span></div>${UI.chips([['month','月'],['week','週'],['agenda','予定一覧']],calendarMode,'calendarMode')}<div class="calendar-month-head"><h3>${y}年 ${m+1}月</h3><div><button data-action="calendarMove" data-value="-1" aria-label="前へ">‹</button><button data-action="calendarToday" class="work-today">今日</button><button data-action="calendarMove" data-value="1" aria-label="次へ">›</button></div></div>${calendarMode==='agenda'?A.search('event-search','タイトル・場所を検索'):`<div class="month-grid">${cells}</div>`}<div class="calendar-agenda" id="calendar-agenda"></div><div class="work-note">予定をタップして編集 · このブラウザに保存</div></div>`);
+ const render=()=>{
+  const list=events.filter(e=>calendarMode==='agenda'?(e.title+' '+(e.place||'')).toLowerCase().includes(eventQuery.toLowerCase()):e.date===selectedDate).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  let last='';$('#calendar-agenda').innerHTML=(calendarMode!=='agenda'?`<h3>${UI.date(selectedDate)}</h3>`:'')+list.map(e=>{const head=calendarMode==='agenda'&&last!==e.date?`<h3>${UI.date(e.date)}</h3>`:'';last=e.date;return head+eventCard(e);}).join('')||A.empty('予定はありません。右上の＋から追加できます。','calendar');
+  if(!list.length&&calendarMode!=='agenda')$('#calendar-agenda').innerHTML+=A.empty('予定のない日。自由な時間を楽しもう。','sun');
+ };
+ render();if($('#event-search')){$('#event-search').value=eventQuery;$('#event-search').oninput=e=>{eventQuery=e.target.value;render();};}
 }
-A.apps.calendar.render=calendar;
-A.todayEvents=date=>events.filter(event=>event.date===date);
-A.allEvents=()=>events.map(event=>({...event}));
-A.actions.calendarMove=el=>{calendarDate.setMonth(calendarDate.getMonth()+ +el.dataset.value);calendar();};
+A.apps.calendar.render=calendar;A.todayEvents=date=>events.filter(e=>e.date===date);A.allEvents=()=>events.map(e=>({...e}));
+A.actions.calendarMode=el=>{calendarMode=el.dataset.value;calendar();};
+A.actions.calendarMove=el=>{if(calendarMode==='week'){const d=new Date(selectedDate+'T12:00:00');d.setDate(d.getDate()+7*Number(el.dataset.value));selectedDate=dayKey(d);calendarDate=new Date(d.getFullYear(),d.getMonth(),1);}else calendarDate.setMonth(calendarDate.getMonth()+Number(el.dataset.value));calendar();};
 A.actions.calendarSelect=el=>{selectedDate=el.dataset.date;calendar();};
-A.actions.calendarToday=()=>{calendarDate=new Date(now.getFullYear(),now.getMonth(),1);selectedDate=dayKey(new Date());calendar();};
-A.actions.calendarAdd=()=>A.form('新しい予定',`<label class="form-label">タイトル</label><input class="text-input" name="title" required maxlength="80" placeholder="何をしよう？"><label class="form-label">日付</label><input class="text-input" type="date" name="date" value="${selectedDate}" required><label class="form-label">時間</label><input class="text-input" type="time" name="time" value="15:00" required><label class="form-label">場所</label><input class="text-input" name="place" maxlength="80" placeholder="場所を追加">`,v=>{events.push({id:A.id(),...v});A.save('events',events);selectedDate=v.date;calendarDate=new Date(v.date+'T12:00:00');calendarDate.setDate(1);calendar();});
-A.actions.calendarDelete=el=>A.confirm('予定を削除','この予定を削除しますか？',()=>{events=events.filter(e=>e.id!==el.dataset.id);A.save('events',events);calendar();});
+A.actions.calendarToday=()=>{const d=new Date();calendarDate=new Date(d.getFullYear(),d.getMonth(),1);selectedDate=dayKey(d);calendarMode='month';calendar();};
+function eventEditor(id){
+ const e=events.find(e=>e.id===id);
+ A.form(e?'予定を編集':'新しい予定',UI.field('タイトル','title',e?.title||'','text','required maxlength="80"')+UI.field('日付','date',e?.date||selectedDate,'date','required')+`<div class="work-form-grid">${UI.field('開始','time',e?.time||'15:00','time','required')}${UI.field('終了（任意）','endTime',e?.endTime||'','time')}</div>`+UI.select('カレンダー','category',categories,e?.category||'personal')+UI.field('場所','place',e?.place||'','text','maxlength="80"')+`<label class="form-label">メモ<textarea class="text-input" name="description" maxlength="2000">${esc(e?.description||'')}</textarea></label>`,v=>{
+  if(!v.title.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(v.date))return false;
+  if(v.endTime&&v.endTime<=v.time){A.toast('終了時刻は開始より後にしてください');return false;}
+  const entry={...e,...v,title:v.title.trim(),id:e?.id||A.id()},next=e?events.map(x=>x.id===id?entry:x):[...events,entry];
+  if(!A.save('events',next))return false;events=next;selectedDate=v.date;calendarDate=new Date(v.date+'T12:00:00');calendarDate.setDate(1);calendar();
+ });
+}
+A.actions.calendarAdd=()=>eventEditor();A.actions.calendarEdit=el=>eventEditor(el.dataset.id);
+A.actions.calendarDelete=el=>A.confirm('予定を削除','この予定を削除しますか？',()=>{const next=events.filter(e=>e.id!==el.dataset.id);if(A.save('events',next)){events=next;calendar();}});
 // Notes — autosave each edit, no network or accounts.
 let notes=A.load('notes',[
 {id:'note-1',title:'週末にしたいこと',body:'朝、いつもより少し早く起きる。\n\n☐ 気になっていたパン屋さんへ\n☐ 本を一冊、読み終える\n☐ フィルムみたいな写真を撮る\n\n何もしない時間も、大切に。',updated:Date.now()},
 {id:'note-2',title:'ふと思いついたこと',body:'日常の小さな発見を、\nここに集めていこう。\n\n光の入り方。\nコーヒーの香り。\n帰り道で聴いた音楽。',updated:Date.now()-86400000},
 {id:'note-3',title:'買いものリスト',body:'オーツミルク\n季節のフルーツ\nコーヒー豆\n小さな花束',updated:Date.now()-172800000},
 {id:'note-4',title:'auraへようこそ',body:'ここは、あなたのもう一台。\n\nメモは自動的に、このブラウザに保存されます。\n\n右上のペンから、新しいメモを書いてみてください。',updated:Date.now()-259200000}]);
-A.searchableNotes=()=>notes;
+A.searchableNotes=()=>notes.filter(n=>!n.trashed);
+let noteFolder='all';
+const noteFolders=[['all','すべて'],['personal','自分用'],['work','仕事'],['ideas','アイデア'],['trash','ゴミ箱']];
 let currentNote=null,noteQuery='';
 let noteSort=A.load('noteSort','updated');
 if(!['updated','title'].includes(noteSort))noteSort='updated';
 function renderNoteList(q=noteQuery){
  const el=$('#notes-grid');if(!el)return;noteQuery=q;
  const query=q.trim().toLocaleLowerCase('ja');
- const list=notes.filter(n=>(n.title+'\n'+n.body).toLocaleLowerCase('ja').includes(query)).sort((a,b)=>{
+ const list=notes.filter(n=>noteFolder==='trash'?n.trashed:!n.trashed&&(noteFolder==='all'||(n.folder||'personal')===noteFolder)).filter(n=>(n.title+'\n'+n.body).toLocaleLowerCase('ja').includes(query)).sort((a,b)=>{
   const pinned=Number(!!b.pinned)-Number(!!a.pinned);
   return pinned||(noteSort==='title'?(a.title||'新しいメモ').localeCompare(b.title||'新しいメモ','ja'):b.updated-a.updated);
  });
@@ -44,7 +78,7 @@ function renderNoteList(q=noteQuery){
 }
 function noteList(){
  currentNote=null;
- A.view(A.nav('メモ',`<button data-action="noteNew" aria-label="新規メモ">${icon('edit')}</button>`)+`<div class="app-content"><h1 class="app-title">小さな、思いつき。</h1><p class="app-subtitle">忘れたくないことを、ここに。</p>${A.search('notes-search','メモを検索')}<div class="notes-toolbar"><span id="notes-count" role="status"></span><select id="notes-sort" aria-label="メモの並べ替え"><option value="updated">更新が新しい順</option><option value="title">タイトル順</option></select></div><div class="notes-grid" id="notes-grid"></div><p class="notes-footer">ピン留めしたメモは先頭に · このブラウザに保存</p></div>`);
+ A.view(A.nav('メモ',`<button data-action="noteNew" aria-label="新規メモ">${icon('edit')}</button>`)+`<div class="app-content work-app notes-work"><span class="work-eyebrow">YOUR THOUGHTS, A LITTLE CLEARER</span><h1 class="app-title">小さな、思いつき。</h1><p class="app-subtitle">忘れたくないことを、ここに。</p>${UI.chips(noteFolders,noteFolder,'noteFolder')}${A.search('notes-search','メモを検索')}<div class="work-toolbar">${UI.button('noteTemplates','テンプレートから作成')}</div><div class="notes-toolbar"><span id="notes-count" role="status"></span><select id="notes-sort" aria-label="メモの並べ替え"><option value="updated">更新が新しい順</option><option value="title">タイトル順</option></select></div><div class="notes-grid" id="notes-grid"></div><p class="notes-footer">ピン留めしたメモは先頭に · このブラウザに保存</p></div>`);
  $('#notes-search').value=noteQuery;$('#notes-sort').value=noteSort;renderNoteList();
  $('#notes-search').oninput=e=>renderNoteList(e.target.value);
  $('#notes-sort').onchange=e=>{noteSort=e.target.value;A.save('noteSort',noteSort);renderNoteList();};
@@ -52,12 +86,13 @@ function noteList(){
 const noteLength=body=>Array.from(body).length;
 function noteEdit(id){
  const n=notes.find(n=>n.id===id);if(!n)return;currentNote=id;
- A.view(A.nav('メモ',`<button data-action="noteDelete" aria-label="削除">${icon('trash')}</button>`,'noteList','メモ')+`<div class="app-content"><small id="note-save-status" role="status">自動保存されています</small><div class="note-editor-tools"><button class="note-pin-button" data-action="notePin" aria-pressed="${!!n.pinned}">${icon('pin')}<span>${n.pinned?'ピン留め済み':'ピン留め'}</span></button><span id="note-length">本文 ${noteLength(n.body)}文字</span></div><input class="note-title-input" id="note-title" aria-label="メモのタイトル" placeholder="タイトル" maxlength="120" value="${esc(n.title)}"><textarea class="note-body-input" id="note-body" aria-label="メモ本文" placeholder="自由に書いてみよう。">${esc(n.body)}</textarea></div>`);
+ if(n.trashed){A.view(A.nav('ゴミ箱','','noteList','メモ')+`<div class="app-content work-app"><h1 class="app-title">${esc(n.title||'無題')}</h1><pre class="file-preview">${esc(n.body)}</pre><div class="work-toolbar">${UI.button('noteRestore','復元する')}${UI.button('notePurge','完全に削除')}</div></div>`);return;}
+ A.view(A.nav('メモ',`<button data-action="noteDelete" aria-label="削除">${icon('trash')}</button>`,'noteList','メモ')+`<div class="app-content"><small id="note-save-status" role="status">自動保存されています</small><div class="note-editor-tools"><button class="note-pin-button" data-action="notePin" aria-pressed="${!!n.pinned}">${icon('pin')}<span>${n.pinned?'ピン留め済み':'ピン留め'}</span></button><span id="note-length">本文 ${noteLength(n.body)}文字</span></div>${UI.chips(noteFolders.slice(1,4),n.folder||'personal','noteMove')}<div class="work-toolbar">${UI.button('noteChecklist','チェック項目を挿入')}${UI.button('noteDuplicate','複製')}</div><input class="note-title-input" id="note-title" aria-label="メモのタイトル" placeholder="タイトル" maxlength="120" value="${esc(n.title)}"><textarea class="note-body-input" id="note-body" aria-label="メモ本文" placeholder="自由に書いてみよう。">${esc(n.body)}</textarea></div>`);
  const save=()=>{n.title=$('#note-title').value;n.body=$('#note-body').value;n.updated=Date.now();const ok=A.save('notes',notes);$('#note-save-status').textContent=ok?'保存しました':'保存できませんでした';$('#note-length').textContent=`本文 ${noteLength(n.body)}文字`;};
  $('#note-title').oninput=save;$('#note-body').oninput=save;
 }
 A.apps.notes.render=noteList;A.actions.noteList=noteList;A.actions.noteOpen=el=>noteEdit(el.dataset.id);
-A.actions.noteNew=()=>{const id=A.id();notes.unshift({id,title:'',body:'',updated:Date.now(),pinned:false});A.save('notes',notes);noteQuery='';noteEdit(id);$('#note-title').focus();};
+A.actions.noteNew=()=>{const id=A.id();notes.unshift({id,title:'',body:'',updated:Date.now(),pinned:false});A.save('notes',notes);noteQuery='';noteFolder='all';noteEdit(id);$('#note-title').focus();};
 A.actions.notePin=()=>{
  const n=notes.find(n=>n.id===currentNote);if(!n)return;
  n.pinned=!n.pinned;const ok=A.save('notes',notes);
@@ -65,12 +100,39 @@ A.actions.notePin=()=>{
  const button=$('[data-action="notePin"]');button.setAttribute('aria-pressed',String(!!n.pinned));button.querySelector('span').textContent=n.pinned?'ピン留め済み':'ピン留め';
  $('#note-save-status').textContent=ok?'保存しました':'保存できませんでした';
 };
-A.actions.noteDelete=()=>A.confirm('メモを削除','このメモは元に戻せません。',()=>{notes=notes.filter(n=>n.id!==currentNote);A.save('notes',notes);noteList();});
-// Reminders
+A.actions.noteFolder=el=>{noteFolder=el.dataset.value;noteList();};
+function updateNote(change){const next=notes.map(n=>n.id===currentNote?{...n,...change,updated:Date.now()}:n);if(!A.save('notes',next))return false;notes=next;return true;}
+A.actions.noteMove=el=>{if(updateNote({folder:el.dataset.value}))noteEdit(currentNote);};
+A.actions.noteChecklist=()=>{const input=$('#note-body'),start=input.selectionStart;input.setRangeText((start&&input.value[start-1]!=='\n'?'\n':'')+'☐ ',start,input.selectionEnd,'end');input.dispatchEvent(new Event('input'));input.focus();};
+A.actions.noteDuplicate=()=>{const n=notes.find(n=>n.id===currentNote);if(!n)return;const entry={...n,id:A.id(),title:(n.title||'メモ')+' のコピー',updated:Date.now()};const next=[entry,...notes];if(A.save('notes',next)){notes=next;noteEdit(entry.id);}};
+A.actions.noteDelete=()=>A.confirm('メモをゴミ箱へ','ゴミ箱からいつでも復元できます。',()=>{if(updateNote({trashed:true}))noteList();});
+A.actions.noteRestore=()=>{if(updateNote({trashed:false})){noteFolder='all';noteList();A.toast('メモを復元しました');}};
+A.actions.notePurge=()=>A.confirm('完全に削除','この操作は元に戻せません。',()=>{const next=notes.filter(n=>n.id!==currentNote);if(A.save('notes',next)){notes=next;noteList();}});
+const templates=[['一日のふり返り','今日よかったこと\n\n\n学んだこと\n\n\n明日の自分へ\n'],['ミーティング','日時：\n参加者：\n\n議題\n・\n\n決まったこと\n・\n\n次のアクション\n☐ '],['旅のしおり','行き先：\n日程：\n\n持ちもの\n☐ チケット\n☐ 充電器\n\n訪れたい場所\n・']];
+A.actions.noteTemplates=()=>A.overlay(`${A.overlayTitle('書きはじめのヒント')}<div class="template-list">${templates.map(([title,body],i)=>`<button class="template-card" data-action="noteTemplate" data-value="${i}">${icon('document')}<strong>${title}</strong><p>${esc(body.slice(0,50))}</p></button>`).join('')}</div>`);
+A.actions.noteTemplate=el=>{const t=templates[Number(el.dataset.value)];if(!t)return;const n={id:A.id(),title:t[0],body:t[1],updated:Date.now(),folder:'personal'},next=[n,...notes];if(A.save('notes',next)){notes=next;noteFolder='all';A.closeOverlay();noteEdit(n.id);}};
+// Reminders: due dates, priority and lists; no unsupported background alarms.
 let reminders=A.load('reminders',[{id:'r1',text:'朝のストレッチ',done:true},{id:'r2',text:'お気に入りの音楽を聴く',done:true},{id:'r3',text:'コーヒー豆を買う',done:false},{id:'r4',text:'本を20ページ読む',done:false},{id:'r5',text:'夕暮れの空を撮る',done:false}]);
+let reminderFilter='all',reminderList='all',reminderQuery='';
+const reminderLists=[['personal','自分のこと'],['work','仕事'],['shopping','買いもの']];
 A.searchableReminders=()=>reminders;
-function reminderApp(){const done=reminders.filter(r=>r.done).length;A.view(A.nav('リマインダー')+`<div class="app-content"><h1 class="app-title">今日を、ひとつずつ。</h1><div class="reminder-progress"><small>YOUR LITTLE ACHIEVEMENTS</small><strong>${done} <span style="font-size:16px;opacity:.6">/ ${reminders.length}</span></strong><small>できたことに、チェックを。</small><div class="progress-track"><span style="width:${reminders.length?done/reminders.length*100:0}%"></span></div></div>${reminders.map(r=>`<div class="reminder-row ${r.done?'done':''}"><button class="check-circle ${r.done?'checked':''}" data-action="reminderToggle" data-id="${r.id}" aria-label="${esc(r.text)}" aria-pressed="${r.done}">${r.done?'✓':''}</button><span>${esc(r.text)}</span><button class="delete-small" data-action="reminderDelete" data-id="${r.id}" aria-label="削除">×</button></div>`).join('')}<form class="add-inline" id="reminder-form"><input class="text-input" name="text" placeholder="新しいリマインダー" aria-label="新しいリマインダー" required maxlength="100"><button type="submit" aria-label="追加">+</button></form></div>`);$('#reminder-form').onsubmit=e=>{e.preventDefault();const input=e.currentTarget.elements.text;const text=input.value.trim();if(!text)return;reminders.push({id:A.id(),text,done:false});A.save('reminders',reminders);reminderApp();};}
-A.apps.reminders.render=reminderApp;A.actions.reminderToggle=el=>{const r=reminders.find(r=>r.id===el.dataset.id);r.done=!r.done;A.haptic();A.save('reminders',reminders);reminderApp();};A.actions.reminderDelete=el=>{reminders=reminders.filter(r=>r.id!==el.dataset.id);A.save('reminders',reminders);reminderApp();};
+function saveReminders(next){if(!A.save('reminders',next))return false;reminders=next;return true;}
+function reminderApp(){
+ const today=dayKey(new Date()),done=reminders.filter(r=>r.done).length;
+ const due=reminders.filter(r=>!r.done&&r.due&&r.due<=today).length;
+ A.view(A.nav('リマインダー',`<button data-action="reminderAdd" aria-label="詳細付きリマインダーを追加">${icon('plus')}</button>`)+`<div class="app-content work-app reminder-work"><span class="work-eyebrow">ONE SMALL STEP AT A TIME</span><h1 class="app-title">今日を、ひとつずつ。</h1><div class="task-summary"><div><span>できたこと</span><strong>${done}<small> / ${reminders.length}</small></strong><div class="progress-track"><span style="width:${reminders.length?done/reminders.length*100:0}%"></span></div></div><div><span>今日までの未完了</span><strong>${due}</strong><small>あなたのペースで。</small></div></div>${UI.chips([['all','すべて'],['today','今日まで'],['flagged','優先'],['done','完了']],reminderFilter,'reminderFilter')}${A.search('reminder-search','タスクを検索')}<select class="work-select" id="reminder-list-filter" aria-label="リストを絞り込み"><option value="all">すべてのリスト</option>${reminderLists.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select><div id="reminder-items"></div><form class="add-inline" id="reminder-form"><input class="text-input" name="text" placeholder="新しいリマインダー" aria-label="新しいリマインダー" required maxlength="100"><button type="submit" aria-label="追加">+</button></form><div class="work-toolbar">${UI.button('reminderAdd','期限・詳細をつけて追加')}${done?UI.button('reminderClearDone','完了済みを整理'):''}</div><p class="work-note">タスクをタップして編集 · 期限は表示用（自動通知なし）</p></div>`);
+ const render=()=>{
+ const list=reminders.filter(r=>(reminderFilter==='all'||reminderFilter==='today'&&!r.done&&r.due&&r.due<=today||reminderFilter==='flagged'&&!r.done&&r.priority==='high'||reminderFilter==='done'&&r.done)&&(reminderList==='all'||(r.list||'personal')===reminderList)&&r.text.toLowerCase().includes(reminderQuery.toLowerCase())).sort((a,b)=>Number(a.done)-Number(b.done)||Number(b.priority==='high')-Number(a.priority==='high')||(a.due||'9999').localeCompare(b.due||'9999'));
+ $('#reminder-items').innerHTML=list.map(r=>`<div class="reminder-row ${r.done?'done':''}"><button class="check-circle ${r.done?'checked':''}" data-action="reminderToggle" data-id="${esc(r.id)}" aria-label="${esc(r.text)}" aria-pressed="${r.done}">${r.done?'✓':''}</button><button class="task-detail" data-action="reminderEdit" data-id="${esc(r.id)}"><span>${esc(r.text)}</span><small class="${!r.done&&r.due<today?'overdue':''}">${r.priority==='high'?'! 優先 · ':''}${esc(reminderLists.find(([id])=>id===(r.list||'personal'))?.[1]||'自分のこと')}${r.due?' · '+UI.date(r.due):''}</small>${r.detail?`<small>${esc(r.detail)}</small>`:''}</button><button class="delete-small" data-action="reminderDelete" data-id="${esc(r.id)}" aria-label="削除">×</button></div>`).join('')||A.empty('ここにはタスクがありません。','check');
+ };
+ $('#reminder-search').value=reminderQuery;$('#reminder-search').oninput=e=>{reminderQuery=e.target.value;render();};$('#reminder-list-filter').value=reminderList;$('#reminder-list-filter').onchange=e=>{reminderList=e.target.value;render();};render();
+ $('#reminder-form').onsubmit=e=>{e.preventDefault();const text=e.currentTarget.elements.text.value.trim();if(text&&saveReminders([...reminders,{id:A.id(),text,done:false,list:reminderList==='all'?'personal':reminderList}])){reminderFilter='all';reminderQuery='';reminderApp();}};
+}
+function reminderEditor(id){const r=reminders.find(r=>r.id===id);A.form(r?'タスクを編集':'新しいタスク',UI.field('タスク','text',r?.text||'','text','required maxlength="100"')+UI.field('期限（任意）','due',r?.due||'','date')+UI.select('リスト','list',reminderLists,r?.list||'personal')+UI.select('優先度','priority',[['normal','通常'],['high','高い']],r?.priority||'normal')+UI.field('詳細','detail',r?.detail||'','text','maxlength="300"'),v=>{if(!v.text.trim())return false;const entry={...r,...v,text:v.text.trim(),id:r?.id||A.id(),done:r?.done||false};if(!saveReminders(r?reminders.map(x=>x.id===id?entry:x):[...reminders,entry]))return false;reminderApp();});}
+A.apps.reminders.render=reminderApp;A.actions.reminderFilter=el=>{reminderFilter=el.dataset.value;reminderApp();};A.actions.reminderAdd=()=>reminderEditor();A.actions.reminderEdit=el=>reminderEditor(el.dataset.id);
+A.actions.reminderToggle=el=>{if(saveReminders(reminders.map(r=>r.id===el.dataset.id?{...r,done:!r.done}:r))){A.haptic();reminderApp();}};
+A.actions.reminderDelete=el=>A.confirm('タスクを削除','このタスクを削除しますか？',()=>{if(saveReminders(reminders.filter(r=>r.id!==el.dataset.id)))reminderApp();});
+A.actions.reminderClearDone=()=>A.confirm('完了済みを整理','完了したタスクを削除します。未完了のタスクは残ります。',()=>{if(saveReminders(reminders.filter(r=>!r.done)))reminderApp();});
 // Settings
 function settingToggle(key,label,ic,color){return `<div class="list-row"><span class="row-icon" style="background:${color};color:white">${icon(ic)}</span><span class="row-main"><strong>${label}</strong></span><button class="toggle ${A.settings[key]?'on':''}" data-action="settingToggle" data-key="${key}" aria-label="${label}" aria-pressed="${A.settings[key]}"></button></div>`;}
 function settings(){A.statusTheme(false);A.view(A.nav('設定')+`<div class="app-content"><h1 class="app-title">設定</h1><button class="profile-card" data-action="settingsProfile" style="width:100%;text-align:left"><span class="avatar">a.</span><div><h3>${esc(A.load('profileName','あなたのaura'))}</h3><p>この小さな世界を、あなたらしく。</p></div><span class="chevron" style="margin-left:auto">›</span></button><div class="group-card">${settingToggle('airplane','機内モード','airplane','#efa557')}${settingToggle('wifi','Wi-Fi','wifi','#508af0')}${settingToggle('bluetooth','Bluetooth','bluetooth','#508af0')}</div><div class="group-card">${A.row('globe','接続とプライバシー','実連携・未接続機能を確認','connectionCenter','','#508af0')}${A.row('grid','全画面で使う','','fullscreen','','#697287')}${A.row('sun','画面表示と明るさ','','settingsDisplay','','#528be5')}${A.row('layers','光と奥行き','影の深さ・動きの設定','settingsAppearance','','#9981b4')}${A.row('photos','壁紙とホーム画面','','personalize','','#b094cf')}${A.row('messages','通知センター','','showNotifications','','#e88192')}${settingToggle('dark','ダークモード','moon','#697287')}${settingToggle('focus','集中モード','moon','#8b75c0')}${settingToggle('sound','触覚フィードバック','volume','#e88192')}</div><div class="group-card">${A.row('grid','操作ガイド','','gestureGuide','','#6d9aab')}${A.row('user','このデバイスについて','','settingsAbout','','#8d939c')}${A.row('trash','データをリセット','','settingsReset','','#db7777')}</div><p class="setting-description">接続設定はシミュレーションです。実際の端末の通信状態は変更しません。</p><p class="notes-footer">auraOS 3.0 · Crafted with care.</p></div>`);}
