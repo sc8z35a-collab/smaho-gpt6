@@ -252,6 +252,102 @@ frame.addEventListener('load',async()=>{
  await test('Connection center covers all apps and labels unconnected services',()=>{
   A.open('settings');A.actions.connectionCenter();assert(d.querySelectorAll('#overlay [data-app]').length===20,'Missing app capability');assert(d.querySelector('#overlay').textContent.includes('実決済未接続'),'Payments misrepresented');assert(A.mailUnread()===0&&A.messageUnread()===0,'Fake native unread badges');
  });
+ // Expanded daily-app workflows exercise the real UI and persisted data.
+ const action=(name,value)=>click(`[data-action="${name}"]${value===undefined?'':`[data-value="${value}"]`}`);
+ const modal=values=>{const f=d.querySelector('#modal-form');assert(f,'Missing modal');Object.entries(values).forEach(([key,value])=>{f.elements[key].value=value;});submit('#modal-form');};
+ let richEvent,richNote,richTask,richFile,richFolder,richAlbum,richContact;
+ await test('Calendar week view, editable duration, and validation',()=>{
+  A.open('calendar');A.actions.calendarToday();action('calendarMode','week');assert(d.querySelectorAll('.month-day').length===7,'Week count');
+  const first=d.querySelector('.month-day').dataset.date;action('calendarMove','1');assert(d.querySelector('.month-day').dataset.date!==first,'Week did not move');
+  action('calendarAdd');modal({title:'Deep calendar <b>safe</b>',time:'10:00',endTime:'09:00'});assert(d.querySelector('#modal-form'),'Invalid end accepted');
+  modal({endTime:'11:30',category:'work',description:'Agenda detail'});richEvent=A.load('events',[]).find(e=>e.title==='Deep calendar <b>safe</b>');assert(richEvent?.category==='work','Category missing');
+  click(`[data-action="calendarEdit"][data-id="${richEvent.id}"]`);modal({place:'A room',title:'Deep edited event'});assert(A.allEvents().find(e=>e.id===richEvent.id).place==='A room','Edit lost');
+  const info=A.network.calendarEvent(A.allEvents().find(e=>e.id===richEvent.id));assert(info.end-info.start===5400000,'Duration not exported');assert(new URL(info.google).searchParams.get('details')==='Agenda detail','Description lost');
+ });
+ await test('Calendar agenda search includes places and empty states',()=>{
+  action('calendarMode','agenda');input('#event-search','A room');assert(d.querySelectorAll('.event-card').length===1,'Place search');input('#event-search','no-such-place-298');assert(d.querySelector('.empty-state'),'Empty agenda');input('#event-search','');A.actions.calendarToday();
+ });
+ await test('Notes template, folders, checklist and duplication',()=>{
+  A.open('notes');action('noteTemplates');action('noteTemplate','1');input('#note-title','Deep note');action('noteMove','work');
+  input('#note-body','A task');d.querySelector('#note-body').setSelectionRange(6,6);action('noteChecklist');assert(d.querySelector('#note-body').value.includes('☐'),'Checklist absent');
+  richNote=A.load('notes',[]).find(n=>n.title==='Deep note');assert(richNote.folder==='work','Folder absent');action('noteDuplicate');assert(A.load('notes',[]).some(n=>n.title==='Deep note のコピー'),'Duplicate absent');
+  action('noteList');action('noteFolder','work');assert(d.querySelector(`[data-id="${richNote.id}"]`),'Moved note hidden');
+ });
+ await test('Notes trash excludes search and sharing, then restores',()=>{
+  click(`[data-action="noteOpen"][data-id="${richNote.id}"]`);action('noteDelete');click('#confirm-yes');assert(!A.searchableNotes().some(n=>n.id===richNote.id),'Trash leaked into search');
+  action('noteFolder','trash');click(`[data-action="noteOpen"][data-id="${richNote.id}"]`);action('noteRestore');assert(A.searchableNotes().some(n=>n.id===richNote.id),'Restore failed');
+ });
+ await test('Reminders detail editing, due filters and list search',()=>{
+  A.open('reminders');action('reminderAdd');modal({text:'Deep task',due:A.workbench.day(new w.Date()),list:'work',priority:'high',detail:'Do this carefully'});
+  richTask=A.load('reminders',[]).find(r=>r.text==='Deep task');assert(richTask?.priority==='high','Priority absent');action('reminderFilter','today');assert(d.querySelector(`[data-id="${richTask.id}"]`),'Today filter');
+  action('reminderFilter','flagged');input('#reminder-search','Deep task');assert(d.querySelectorAll('.task-detail').length===1,'Search failed');
+  click(`[data-action="reminderEdit"][data-id="${richTask.id}"]`);modal({text:'Deep edited task'});assert(A.searchableReminders().find(r=>r.id===richTask.id).text==='Deep edited task','Edit failed');
+  input('#reminder-search','');action('reminderFilter','all');
+ });
+ await test('Rich task exports preserve deadline and priority',async()=>{
+  const download=A.download;let blob;A.download=b=>blob=b;try{A.actions.exportReminders();const text=await blob.text();assert(text.includes('DUE;VALUE=DATE:')&&text.includes('PRIORITY:1')&&text.includes('Do this carefully'),'Rich fields lost');}finally{A.download=download;}
+ });
+ await test('Files folder creation, content search, star, move and duplicate',()=>{
+  A.open('files');action('fileFolderNew');modal({name:'Deep folder'});richFolder=A.load('fileFolders',[]).find(f=>f.name==='Deep folder');assert(richFolder,'Folder absent');
+  action('fileNew');modal({name:'Deep.txt',content:'Searchable detail',folder:richFolder.id});richFile=A.load('files',[]).find(f=>f.name==='Deep.txt');assert(richFile.folder===richFolder.id,'Folder not stored');
+  input('#file-search','Searchable detail');assert(d.querySelectorAll('.file-tile').length===1,'Content search failed');click(`[data-action="fileOpen"][data-id="${richFile.id}"]`);action('fileStar');action('fileDuplicate');assert(A.load('files',[]).some(f=>f.name==='Deep のコピー.txt'),'Duplicate absent');
+  action('fileMove');modal({folder:'projects'});assert(A.currentTextFile().folder==='projects','Move failed');action('filesHome');input('#file-search','');
+  action('fileFolder','starred');assert(d.querySelectorAll('.file-tile').length>=2,'Star filter');action('fileFolder','all');
+ });
+ await test('Files reject unsafe type and excessive UTF8 bytes',()=>{
+  action('fileNew');modal({name:'unsafe.html',content:'<script>bad</script>'});assert(d.querySelector('#modal-form'),'HTML accepted');
+  modal({name:'large.txt',content:'あ'.repeat(35000)});assert(d.querySelector('#modal-form'),'Byte limit bypassed');assert(!A.load('files',[]).some(f=>f.name==='large.txt'),'Oversize saved');
+ });
+ await test('Nonempty folder deletion never orphans files',()=>{
+  A.open('files');action('fileFolder',richFolder.id);action('fileFolderDelete');click('#confirm-yes');assert(A.load('fileFolders',[]).some(f=>f.id===richFolder.id),'Nonempty folder deleted');action('fileFolder','all');
+ });
+ await test('Photo albums select existing pictures without copying originals',()=>{
+  A.open('photos');action('photoFilter','albums');action('albumNew');modal({name:'Deep <b>album</b>'});richAlbum=A.load('photoAlbums',[]).at(-1);assert(richAlbum,'Album absent');
+  action('albumManage');const f=d.querySelector('#modal-form');f.elements['photo-sample-lake'].checked=true;f.elements['photo-sample-coffee'].checked=true;submit('#modal-form');
+  assert(d.querySelectorAll('.photo-tile').length===2,'Album selection');assert(!d.querySelector('.app-title b'),'Album markup injection');
+  click('[data-action="photoOpen"][data-id="sample-lake"]');action('photoNext');assert(d.querySelector('.photo-viewer img').alt==='午後のコーヒー','Navigation left album');
+ });
+ await test('Photo metadata is searchable and album deletion retains originals',()=>{
+  action('photoInfo');modal({title:'Deep photograph',caption:'A special memory'});action('photosHome');input('#photo-search','special memory');assert(d.querySelectorAll('.photo-tile').length===1,'Caption search');
+  action('albumDelete');click('#confirm-yes');assert(!A.load('photoAlbums',[]).some(a=>a.id===richAlbum.id),'Album deletion');action('photoFilter','all');assert(d.querySelector('[data-id="sample-coffee"]'),'Original deleted with album');
+ });
+ await test('Health history records selected day and never fabricates previous days',()=>{
+  A.open('health');const today=d.querySelector('#health-date').value,before=A.healthData().water;action('healthDay','-1');const previous=d.querySelector('#health-date').value;
+  assert(d.querySelector('.metric-card strong').textContent==='0','Invented prior steps');action('healthAdd');modal({steps:'4321',minutes:'18',water:'800'});
+  assert(A.healthData().days[previous].steps===4321,'Wrong day saved');assert(A.healthData().water===before,'Past edit changed today');
+  action('healthDay','1');assert(d.querySelector('#health-date').value===today,'Next day');assert(d.querySelector('.journal-chart').textContent.includes('4321'),'Chart ignored history');
+ });
+ await test('Health goals validate and persist',()=>{
+  action('healthGoals');modal({steps:'0',minutes:'40',water:'2500'});assert(d.querySelector('#modal-form'),'Zero goal accepted');modal({steps:'9000'});assert(A.healthData().goals.water===2500,'Goal missing');
+ });
+ await test('Wallet report totals and filters are actual stored demo transactions',()=>{
+  A.open('wallet');action('walletTab','insights');const month=A.workbench.day(new w.Date()).slice(0,7),total=-A.load('wallet',{}).transactions.filter(t=>t.amount<0&&A.workbench.day(new w.Date(t.date)).startsWith(month)).reduce((n,t)=>n+t.amount,0);
+  assert(d.querySelector('.spending-hero>strong').textContent==='¥'+total.toLocaleString(),'Wrong total');action('walletFilter','in');assert([...d.querySelectorAll('.transaction-button>span')].every(e=>e.textContent.includes('+')),'Wrong filter');
+  action('walletReceipt');assert(d.querySelector('.demo-receipt').textContent.includes('架空'),'Receipt unlabeled');A.closeOverlay();action('walletBudget');modal({budget:'5000'});assert(A.load('wallet',{}).budget===5000,'Budget absent');action('walletTab','card');
+ });
+ await test('Private contacts validate, escape text, edit and favorite',()=>{
+  A.open('phone');action('contactsHome');assert(!d.querySelector('[data-action="contactCall"]'),'Demo contacts leaked');action('contactNew');modal({name:'Deep <b>person</b>',number:'javascript:bad',email:'qa@example.com'});assert(d.querySelector('#modal-form'),'Bad number accepted');
+  modal({number:'+81 3 1234 5678',company:'Test group'});richContact=A.load('addressBook',[]).at(-1);assert(richContact.number==='+81312345678','Normalization');assert(!d.querySelector('#address-list b'),'HTML injection');
+  input('#address-search','Test group');click(`[data-action="contactDetail"][data-id="${richContact.id}"]`);action('contactFavorite');assert(A.load('addressBook',[]).at(-1).favorite,'Favorite lost');
+  action('contactEdit');modal({name:'Deep contact'});assert(A.load('addressBook',[]).at(-1).name==='Deep contact','Edit lost');
+ });
+ await test('Contact handoffs only prefill and preserve existing message body',()=>{
+  click(`[data-action="contactDetail"][data-id="${richContact.id}"]`);action('contactUse','messages');assert(d.querySelector('#external-message [name=number]').value===richContact.number,'SMS prefill');assert(!d.querySelector('#message-handoff a'),'Auto prepared message');
+  A.open('mail');input('#external-mail [name=body]','Preserve my draft');action('contactPicker');click(`[data-action="contactPick"][data-id="${richContact.id}"]`);assert(d.querySelector('#external-mail [name=to]').value==='qa@example.com','Email prefill');assert(d.querySelector('#external-mail [name=body]').value==='Preserve my draft','Lost body');assert(!d.querySelector('#mail-handoff a'),'Auto prepared mail');
+ });
+ await test('Storage failure does not add phantom folders, events, or contacts',()=>{
+  const save=A.save;try{
+   A.save=()=>false;A.open('files');action('fileFolderNew');modal({name:'Not saved'});assert(d.querySelector('#modal-form'),'Failure closed editor');A.closeOverlay();assert(!d.querySelector('.work-chips').textContent.includes('Not saved'),'Phantom folder');
+   A.open('calendar');action('calendarAdd');modal({title:'Not saved'});assert(!A.allEvents().some(e=>e.title==='Not saved'),'Phantom event');A.closeOverlay();
+   A.open('phone');action('contactsHome');action('contactNew');modal({name:'Not saved'});assert(d.querySelector('#modal-form'),'Contact failure closed editor');
+  }finally{A.save=save;}
+ });
+ await test('Expanded apps fit narrow phones, desktop and dark mode',async()=>{
+  const style=frame.getAttribute('style'),dark=A.settings.dark;
+  try{for(const width of [320,390,768,1440]){frame.style.width=width+'px';frame.style.height='844px';await delay(40);
+   for(const isDark of [false,true]){A.settings.dark=isDark;A.applySettings();for(const id of ['calendar','notes','reminders','files','photos','health','wallet']){A.open(id);const root=d.querySelector('.app-content');assert(root.scrollWidth<=root.clientWidth+1,'Overflow '+id+' '+width+' dark='+isDark);assert(![...d.querySelectorAll('#app-screen [data-action]')].some(e=>!A.actions[e.dataset.action]),'Unbound action '+id);}}
+  }}finally{if(style===null)frame.removeAttribute('style');else frame.setAttribute('style',style);A.settings.dark=dark;A.applySettings();}
+ });
  await test('App lifecycle cleanup and no captured errors',()=>{A.home();assert(A.cleanups.length===0,'Cleanup callbacks not drained');assert(!errors.length,errors.join('; '));});
  A.music.pause();A.home();w.fetch=nativeFetch;
  Object.keys(w.localStorage).filter(k=>k.startsWith('aura.')).forEach(k=>w.localStorage.removeItem(k));Object.entries(original).forEach(([k,v])=>w.localStorage.setItem(k,v));
