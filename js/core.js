@@ -68,7 +68,182 @@
     coffee:'<path d="M3 7h14v8a6 6 0 0 1-12 0V7ZM17 8h2a3 3 0 0 1 0 6h-2M3 22h16M7 1v3m6-3v3"/>'
   };
   A.icon = (name, extra='') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${A.icons[name] || A.icons.grid}</svg>`;
-  A.photosIcon = () => `<svg viewBox="0 0 60 60" aria-hidden="true">${['#f7bf50','#f4a24b','#f17777','#cc7eb6','#8694d2','#73c2e4','#72c7a9','#bbd567'].map((c,i)=>`<ellipse cx="30" cy="18" rx="8.2" ry="14.5" fill="${c}" fill-opacity=".83" transform="rotate(${i*45} 30 30)"/>`).join('')}</svg>`;
+  // App artwork is separate from the small, monochrome UI action glyphs above.
+  // Every instance owns its SVG definitions: home, search and overlays can coexist.
+  const appArtwork = (() => {
+    const rect = (x,y,w,h,r,fill,extra='') => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${fill}" ${extra}/>`;
+    const circle = (x,y,r,fill,extra='') => `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" ${extra}/>`;
+    const path = (d,fill,extra='') => `<path d="${d}" fill="${fill}" ${extra}/>`;
+    const line = (d,color='#fff',width=1,extra='') => path(d,'none',`stroke="${color}" stroke-width="${width}" ${extra}`);
+    const text = (x,y,label,size,color,extra='') => `<text x="${x}" y="${y}" fill="${color}" font-size="${size}" font-family="Arial, sans-serif" text-anchor="middle" ${extra}>${label}</text>`;
+    const paint = name => `url(#ai-${name})`;
+    const paper = paint('paper'), white = paint('white'), metal = paint('metal'), ink = paint('ink'), gold = paint('gold'), blue = paint('blue'), green = paint('green'), rose = paint('rose'), violet = paint('violet');
+    const shadow = content => `<g filter="url(#ai-shadow)">${content}</g>`;
+    const ticks = (cx,cy,r,count,color,width=1) => Array.from({length:count},(_,i)=>line(`M${cx} ${cy-r}v${i%5===0?3.7:1.6}`,color,i%5===0?width*1.4:width,`transform="rotate(${i*360/count} ${cx} ${cy})"`)).join('');
+    const rule = (x,y,length,color='#bcc6d1') => line(`M${x} ${y}h${length}`,color,1.2);
+    const screw = (x,y) => circle(x,y,1.6,metal)+line(`M${x-.7} ${y+.7}l1.4-1.4`,'#5b697b',.7);
+    const bookLines = (x,y,count,length,color='#aebac9') => Array.from({length:count},(_,i)=>rule(x,y+i*5,length-(i===count-1?6:0),color)).join('');
+    const art = {};
+
+    art.calendar = now => shadow(rect(10,14,60,57,8,'#b7c0ce')+rect(10,11,60,57,8,paper)+rect(10,11,60,18,8,rose)+rect(10,21,60,8,0,rose))+
+      line('M15 65h50M15 68h50','#fff',.8)+[24,56].map(x=>circle(x,16,3.4,'#b94c64')+rect(x-1.5,7,3,12,1.5,metal)).join('')+
+      text(40,24,['日','月','火','水','木','金','土'][now.getDay()]+'曜日',8.4,'#fff','class="app-calendar-weekday" font-weight="700"')+
+      text(40,57,now.getDate(),30,'#26344a','class="app-calendar-date" font-weight="600" letter-spacing="-1.5"')+
+      [27,34,41,48,55].map((x,i)=>circle(x,62,1.1,i===2?'#ee7589':'#ccd3de')).join('');
+    art.photos = () => shadow(Array.from({length:8},(_,i)=>{
+      const colors=['#ffc84e','#ff9948','#f27282','#c477c1','#8b89e1','#67b5ef','#62c8b2','#b4d768'];
+      return `<g transform="rotate(${i*45} 40 40)"><ellipse cx="40" cy="25" rx="11" ry="19" fill="${colors[i]}" fill-opacity=".82"/><ellipse cx="38" cy="22" rx="7" ry="13" fill="url(#ai-glow)"/>${line('M40 9c-6 6-8 15-4 22','#fff',.7,'opacity=".55"')}</g>`;
+    }).join(''))+circle(40,40,6,'#fff','opacity=".65"')+circle(38,38,2,'#fff','opacity=".65"');
+    art.camera = () => shadow(path('M12 24h12l5-8h22l5 8h12a6 6 0 0 1 6 6v30a6 6 0 0 1-6 6H12a6 6 0 0 1-6-6V30a6 6 0 0 1 6-6Z',metal)+rect(7,34,66,25,3,ink)+rect(10,19,11,5,2,ink)+rect(58,27,10,5,1.5,paper))+
+      Array.from({length:7},(_,i)=>line(`M${11+i*2} 38v16`,'#75808e',.55)).join('')+
+      circle(42,44,23,ink)+circle(42,44,20.5,metal)+ticks(42,44,19,48,'#4a5668',.5)+circle(42,44,16.5,ink)+circle(42,44,13.6,paint('lens'))+
+      Array.from({length:6},(_,i)=>path('M42 32l10 7-3 10-10 5-9-9 3-9Z','none',`stroke="#91b9dc" stroke-width=".65" opacity=".4" transform="rotate(${i*60} 42 44)"`)).join('')+
+      circle(42,44,7.5,'#112337')+circle(39,40,4,'#a7e5f2','opacity=".55"')+circle(46,49,2.5,'#8789e7','opacity=".65"')+line('M28 36a17 17 0 0 1 21-6','#fff',1.2,'opacity=".75"')+circle(17,29,2,'#ed6f71')+screw(11,61)+screw(68,61);
+    art.weather = () => circle(51,26,22,'#fff','opacity=".06"')+Array.from({length:12},(_,i)=>line('M51 5v4','#ffdf87',1.5,`transform="rotate(${i*30} 51 26)"`)).join('')+
+      shadow(circle(51,26,15,gold))+circle(47,22,9,paint('glow'))+
+      shadow(path('M19 62a12 12 0 0 1-1-24 16 16 0 0 1 30-2 13 13 0 1 1 10 26Z',white))+
+      line('M17 44a8 8 0 0 1 7-1 12 12 0 0 1 22-4','#fff',1.5)+line('M23 66h27M28 70h14','#def3ff',1.4,'opacity=".55"');
+    art.mail = () => shadow(rect(12,22,56,42,6,'#1868bb')+rect(19,14,42,40,4,paper))+
+      rect(25,20,13,3,1,'#88bbdf')+bookLines(25,28,3,28,'#c3d3e2')+
+      shadow(rect(10,29,60,36,5,white))+path('M11 31l29 23 29-23v30H11Z','#d2e6f9')+
+      path('M11 63l22-20c4-3 10-3 14 0l22 20Z',paper)+line('M12 62l21-18m14 0 21 18','#9bbddd',.9)+
+      path('M11 30l27 22a3 3 0 0 0 4 0l27-22',white,'stroke="#aacbea" stroke-width="1"')+line('M14 31l25 19h2l25-19','#fff',1.2);
+    art.clock = now => shadow(circle(40,40,34,metal))+circle(40,40,31,ink)+circle(40,40,28.5,paper)+ticks(40,40,26,60,'#5f6a7a',.6)+
+      [[40,22,'12'],[59,43,'3'],[40,63,'6'],[21,43,'9']].map(([x,y,n])=>text(x,y,n,7,'#354158','font-weight="600"')).join('')+
+      line('M40 42V25','#27344b',3.4,`class="app-clock-hour" transform="rotate(${(now.getHours()%12)*30+now.getMinutes()/2} 40 40)"`)+
+      line('M40 43V19','#27344b',2.1,`class="app-clock-minute" transform="rotate(${now.getMinutes()*6} 40 40)"`)+
+      line('M40 46V16','#ed7966',.9,`class="app-clock-second" transform="rotate(${now.getSeconds()*6} 40 40)"`)+circle(40,40,2.8,'#e57c69')+circle(40,40,1,paper)+line('M15 22a31 31 0 0 1 35-11','#fff',.9,'opacity=".8"');
+    art.maps = () => rect(0,0,80,80,0,'#d9e7d2')+path('M48-5c-19 27 9 33-2 53S31 69 39 85h13c-8-19 7-18 8-38S43 27 61-5Z','#86cce5')+
+      [[5,8,16,13],[6,29,18,16],[59,8,16,19],[62,46,14,16],[7,62,17,13]].map(([x,y,w,h])=>rect(x,y,w,h,3,'#b9d5ac')).join('')+
+      line('M-5 55 85 24M27-5 27 85','#bec8bd',9)+line('M-5 55 85 24M27-5 27 85','#fffdf4',6)+line('M0 58 80 69','#fffdf4',5)+
+      line('M-5 55 85 24','#f0c16f',2.4)+line('M27 80V47l29-10','#fff',5)+line('M27 80V47l29-10','#478ae4',3)+
+      shadow(path('M55 14c-10 0-17 7-17 16 0 12 17 27 17 27s17-15 17-27c0-9-7-16-17-16Z',rose))+circle(55,30,8,paper)+circle(55,30,4,'#cc596d')+line('M43 27a12 12 0 0 1 11-8','#fff',1.1,'opacity=".65"');
+    art.notes = () => shadow(rect(11,12,58,60,5,'#c9bfaa')+rect(10,8,58,60,5,paper))+rect(10,8,58,16,5,gold)+rect(10,19,58,6,0,gold)+
+      Array.from({length:8},(_,i)=>circle(17+i*6,13,1.2,'#ad8747')+line(`M${17+i*6} 7v6`,'#fff3d3',1.8)).join('')+
+      line('M21 28v34','#efb1ad',.8)+bookLines(16,32,6,44,'#cbd6dc')+path('M54 68V55h14Z','#f1e5bd','stroke="#d8c899" stroke-width=".6"')+
+      `<g transform="rotate(32 57 44)">${shadow(rect(54,25,7,33,1,gold))}${rect(54,25,7,6,1,rose)}${rect(54,31,7,3,0,metal)}${line('M56 35v22','#fff3bb',1)}${path('M54 58l3.5 8 3.5-8Z','#dcc6a2')}${path('M56.2 63l1.3 3 1.3-3Z',ink)}</g>`;
+    art.reminders = () => shadow(rect(13,10,55,62,6,'#d1d7df')+rect(11,7,55,62,6,paper))+
+      rect(28,5,22,9,3,metal)+rect(32,7,14,3,1,'#f5f7fa')+
+      ['#60a0e6','#ecaa61','#b48ed1'].map((color,i)=>{
+        const y=27+i*15;
+        return circle(23,y,5.5,color)+circle(23,y,4.2,i===0?color:'#fff')+(i===0?line(`M20 ${y}l2 2 4-4`,'#fff',1.5):'')+rule(35,y-2,22,'#929ead')+rule(35,y+3,15,'#d5dce4');
+      }).join('')+line('M15 66h47','#fff',1);
+    art.files = () => shadow(path('M9 23a5 5 0 0 1 5-5h18l7 7h27a5 5 0 0 1 5 5v33H9Z',blue))+
+      `<g transform="rotate(-8 38 35)">${rect(18,17,35,42,3,'#cedeea')}${rect(19,14,35,42,3,paper)}${rect(24,20,13,4,1,'#9fc4e4')}${bookLines(24,30,4,23)}</g>`+
+      rect(32,24,30,33,3,white)+rect(38,29,9,9,2,'#9cc7ed')+bookLines(38,44,2,18)+
+      shadow(path('M7 39a5 5 0 0 1 5-5h20l5 5h31a5 5 0 0 1 5 6l-4 20a5 5 0 0 1-5 4H15a5 5 0 0 1-5-4Z',blue))+
+      line('M12 40h18l5 5h33','#bfecff',1.3)+line('M17 64h44','#276ea9',.9,'opacity=".5"')+rect(31,53,20,4,2,'#d4f1ff','opacity=".75"');
+    art.calculator = () => shadow(rect(13,7,54,68,8,'#19222d')+rect(13,5,54,67,8,metal)+rect(16,8,48,61,6,ink))+
+      rect(21,13,38,17,3,'#718f8b')+rect(23,15,34,13,2,'#c4dbca')+text(52,25,'128',12,'#385c50','style="text-anchor:end;font-family:monospace" letter-spacing="1"')+line('M26 18h8','#9bbfa9',1)+
+      Array.from({length:12},(_,i)=>{const x=21+(i%3)*13,y=35+Math.floor(i/3)*8;return rect(x,y+1,11,6,2,'#121b27')+rect(x,y,11,6,2,i%3===2?gold:metal)+text(x+5.5,y+4.8,['7','8','÷','4','5','×','1','2','−','0','·','='][i],5.3,i%3===2?'#754c29':'#334154','font-weight="700"');}).join('');
+    art.settings = () => {
+      const teeth=Array.from({length:12},(_,i)=>rect(35,6,10,17,2,metal,`transform="rotate(${i*30} 40 40)"`)).join('');
+      return shadow(teeth+circle(40,40,28,metal))+circle(40,40,24,ink)+circle(40,40,21,metal)+ticks(40,40,19,48,'#5a6777',.65)+circle(40,40,15,ink)+circle(40,40,11.7,metal)+circle(40,40,7.4,'#748296')+circle(40,40,5,ink)+
+        [0,120,240].map(a=>`<g transform="rotate(${a} 40 40)">${screw(40,15)}</g>`).join('')+line('M20 26a25 25 0 0 1 27-10M33 32a11 11 0 0 1 13 0','#fff',1.3,'opacity=".85"');
+    };
+    art.games = () => line('M40 22v-6c0-5 8-2 8-8','#e6cfff',2)+
+      shadow(path('M24 22h32c9 0 14 14 17 32 3 14-6 17-14 6l-6-7H27l-6 7C13 71 4 68 7 54c3-18 8-32 17-32Z',white))+
+      path('M12 50c-2 14 3 13 10 4l5-5h26l5 5c7 9 12 10 10-4l3 10c-1 10-8 8-15-2l-3-4H27l-6 7c-8 10-15 6-12-6Z','#b9b9dc')+
+      circle(24,37,11,'#d0cde5')+path('M21 29h6v5h5v6h-5v5h-6v-5h-5v-6h5Z',ink)+line('M23 31h2v5h5','#657188',.7)+
+      [[57,30,'#f29cad'],[64,37,'#91cfe3'],[57,44,'#e6c779'],[50,37,'#a9cfaa']].map(([x,y,c])=>circle(x,y,3.5,'#b0a6cc')+circle(x,y-1,3,c)+circle(x-1,y-2,1,'#fff','opacity=".5"')).join('')+
+      circle(33,49,5.5,ink)+circle(47,49,5.5,ink)+circle(33,48,3.5,'#70758e')+circle(47,48,3.5,'#70758e')+rect(36,32,8,2,1,'#b8afd6')+circle(40,39,1.3,'#ad96d3');
+    art.health = () => circle(40,40,29,'#fdeaf0')+circle(40,40,25,'none','stroke="#f4c3cd" stroke-width=".7"')+
+      shadow(path('M40 65C32 59 12 45 12 29c0-15 20-20 28-5 8-15 28-10 28 5 0 16-20 30-28 36Z',rose))+
+      line('M18 36h11l5-10 9 25 6-15h13','#fff',2.3)+line('M19 26c2-7 9-8 13-5','#fff',2,'opacity=".65"')+circle(59,58,9,paper)+line('M59 53v10m-5-5h10','#e77e96',2.2)+circle(18,36,1.5,'#fff')+circle(62,36,1.5,'#fff')+line('M17 52a28 28 0 0 0 15 13','#ecaaba',1.1);
+    art.wallet = () => shadow(rect(11,14,57,53,7,'#121c2b'))+
+      `<g transform="rotate(-8 40 30)">${rect(15,13,47,29,4,gold)}${rect(19,18,8,6,1,'#fff0b6')}${rule(33,21,20,'#b99157')}</g>`+
+      rect(16,24,48,29,4,green)+rect(16,30,48,3,0,'#376f68')+rect(19,36,9,6,1,'#d9eeb9')+
+      shadow(rect(11,39,58,29,5,ink))+rect(15,43,49,21,3,'none','stroke="#a7a7b5" stroke-width=".7" stroke-dasharray="1.5 2"')+
+      rect(52,45,20,15,4,'#566178')+rect(54,47,16,11,3,'#65738b')+circle(61,52.5,3,gold)+circle(61,52.5,1.6,'#c49154')+line('M17 40h45','#8290a2',.8);
+    art.recorder = () => rect(9,12,62,56,8,ink)+
+      Array.from({length:5},(_,i)=>line(`M14 ${23+i*8}h52`,'#60728a',.5,'opacity=".4"')).join('')+
+      Array.from({length:9},(_,i)=>line(`M${16+i*6} 19v39`,'#60728a',.5,'opacity=".25"')).join('')+
+      line('M11 40h58','#9aabbc',.6)+[8,17,11,29,43,24,12,32,19,8,14].map((h,i)=>rect(13+i*5,40-h/2,2.6,h,1.3,rose)).join('')+
+      line('M40 16v43','#ffd1cf',.7,'opacity=".7"')+circle(24,64,2.2,'#f47486')+text(46,66,'REC',5,'#e9c7ce','letter-spacing="2"');
+    art.today = () => shadow(rect(12,12,56,59,7,paper))+rect(12,12,56,17,7,'#dcebe7')+rect(12,22,56,7,0,'#dcebe7')+
+      circle(29,24,8,gold)+line('M17 25h24','#fff',2)+line('M29 12v3m-10 2 2 2m16-2-2 2','#d9aa57',1.2)+
+      rect(45,19,15,3,1.5,'#6f9698')+rect(45,24,10,2,1,'#aac2bf')+
+      [38,49,60].map((y,i)=>circle(23,y,3.5,i===0?'#6ba99c':'#dde9e8')+(i===0?line(`M21 ${y}l1.5 1.5 3-3`,'#fff',1):'')+rule(32,y-1,24,'#98acad')+rule(32,y+3,16,'#d1dedd')).join('')+
+      shadow(circle(62,60,11,green))+line('M57 60l3.5 3.5 6-7','#fff',2);
+    art.focus = () => rect(32,7,16,7,3,metal)+rect(37,12,6,6,1,'#c2badb')+
+      `<g transform="rotate(40 40 42)">${rect(35,12,10,6,2,metal)}</g>`+
+      shadow(circle(40,43,29,metal))+circle(40,43,26,ink)+circle(40,43,23,violet)+
+      path('M40 43V20a23 23 0 0 1 20 35Z','#e2d8ff','opacity=".6"')+ticks(40,43,21,30,'#ece8ff',.65)+
+      line('M40 43V28','#fff',2)+line('M40 43l10 6','#fff',1.6)+circle(40,43,2.6,gold)+text(40,59,'FOCUS',4.7,'#f4ecff','letter-spacing="1.3"')+line('M19 27a28 28 0 0 1 25-12','#fff',1,'opacity=".7"');
+    art.habits = () => circle(40,37,28,'#deedc5','opacity=".16"')+line('M40 58V27','#e6f5c3',2.5)+
+      shadow(path('M39 43C19 44 13 30 15 18c18-1 29 9 24 25Z',green)+path('M40 34c-1-18 11-24 25-23 1 15-8 27-25 23Z',green))+
+      line('M39 42 21 24m19 9 19-16','#d9efad',1.3)+line('m28 31 1-7m4 14-9-1m25-13 8 1m-4-6v-4','#b8d79c',.7)+
+      shadow(path('M25 52h30l-4 16H29Z',paper))+rect(23,49,34,7,3,white)+line('M31 58l2 7m13-7-2 7','#cad7c7',1)+
+      circle(62,59,9,'#e6f1d8')+line('m58 59 3 3 5-6','#629070',1.8);
+    art.expenses = () => shadow(rect(12,11,47,60,5,ink)+rect(15,9,44,58,4,paper))+
+      rect(15,9,7,58,2,green)+bookLines(28,20,2,24)+
+      [12,20,28].map((h,i)=>rect(29+i*9,53-h,6,h,1,i===2?green:'#b6d5cb')).join('')+line('M27 55h28','#a4b6b2',.8)+
+      shadow(circle(59,57,14,gold))+circle(59,57,11,'none','stroke="#fff1ba" stroke-width="1"')+text(59,63,'¥',17,'#9b713d','font-weight="700"')+
+      line('M25 13h29','#fff',1)+line('M18 18v40','#c2e1d4',.7);
+    art.shopping = () => `<g transform="rotate(18 51 27)">${shadow(rect(47,8,11,34,5,gold))}${[15,22,29].map(y=>line(`M49 ${y}l6-2`,'#b98a4d',1.2)).join('')}</g>`+
+      path('M25 31C10 20 17 9 26 22c-1-19 16-13 9 1 13-8 18 6 2 14Z',green)+circle(30,30,10,rose)+line('M30 24v-5','#785944',1.7)+
+      shadow(path('M14 31h52l-4 37H18Z',gold))+path('M57 32h9l-4 36-7-5Z','#bc8957')+
+      path('M20 33h36l-2 29H22Z','#f4d8af','opacity=".4"')+line('M28 34v-8a12 12 0 0 1 24 0v8','#8c6647',3)+line('M28 33v-7a12 12 0 0 1 24 0v7','#ffedcb',1.5)+
+      circle(28,35,2,'#b88d5d')+circle(52,35,2,'#b88d5d')+rect(28,44,23,14,3,paper)+path('M35 51c0-5 9-5 9 0 0 4-4 6-4 6s-5-2-5-6Z',green)+line('M22 64h31','#ffe5bd',1);
+    art.journal = () => shadow(rect(13,10,53,62,6,'#694b6c')+rect(16,13,48,57,4,paper)+rect(12,7,51,61,5,rose))+
+      rect(12,7,9,61,4,'#9c667f')+line('M23 12v51','#ffe2e5',.65,'opacity=".55"')+
+      rect(28,22,26,25,3,'none','stroke="#ffe1d7" stroke-width=".8"')+text(41,31,'DIARY',5.2,'#fff3dc','letter-spacing="1"')+
+      path('M41 35l1.5 3 3.5.5-2.5 2.5.5 3.5-3-1.5-3 1.5.5-3.5-2.5-2.5 3.5-.5Z',gold)+
+      rect(53,8,3,59,1,'#734f72')+line('M56 9v56','#edb5c5',.7)+path('M38 67v8l4-3 4 3v-8Z',gold)+line('M18 70h18m11 0h14','#d0bca8',.8);
+    art.contacts = () => shadow(rect(13,8,52,63,6,ink))+[18,31,44].map((y,i)=>rect(62,y,7,12,2,[gold,rose,green][i])).join('')+
+      rect(13,7,50,62,6,blue)+rect(17,11,42,54,3,'none','stroke="#c4e6ff" stroke-width=".6" stroke-dasharray="1.5 2"')+
+      shadow(circle(38,32,10,paper)+path('M22 55c0-20 32-20 32 0v2H22Z',paper))+
+      line('M25 54c0-7 4-11 7-12','#fff',1.1)+rect(28,60,20,2,1,'#c3e1f5')+
+      [19,32,45,58].map(y=>rect(9,y,9,3,1.5,metal)).join('');
+    art.converter = () => shadow(rect(10,14,52,24,5,paper))+rect(15,18,42,15,2,'#dce9ee')+
+      text(35,29,'cm',11,'#486d87','font-weight="700"')+line('M17 33v-3m6 3v-2m6 2v-3m6 3v-2m6 2v-3m6 3v-2m6 2v-3','#83a4b6',.8)+
+      shadow(rect(19,47,51,24,5,ink))+text(45,63,'in',11,'#e5f2f6','font-weight="700"')+
+      line('M17 45v-4h38l-5-5m5 5-5 5', '#eaf7fa',2)+line('M63 37v7H25l5 5m-5-5 5-5','#ffddb1',2)+
+      line('M24 66v-3m7 3v-2m7 2v-3m7 3v-2m7 2v-3m7 3v-2m6 2v-3','#a9c3d3',.8)+rect(18,22,4,5,1,blue)+rect(25,55,4,5,1,gold);
+    art.reading = () => shadow(path('M7 19c11-5 22-4 33 2 11-6 22-7 33-2v47c-13-4-23-3-33 3-10-6-20-7-33-3Z','#755f49'))+
+      path('M10 15c10-3 21-2 30 4 9-6 20-7 30-4v47c-11-3-21-1-30 4-9-5-19-7-30-4Z',paper)+
+      path('M40 19c9-6 20-7 30-4v47c-11-3-21-1-30 4Z','#eee5d4')+line('M40 21v42','#bcae98',1.4)+
+      [27,33,39,45,51].map(y=>line(`M15 ${y}q10-1 19 4m12-4q9-4 18-4`,'#b3a48d',.9)).join('')+
+      path('M54 14v24l4-3 4 1V13Z',rose)+line('M12 64q15-3 26 4m4 0q13-7 26-4','#e2d8c3',.8)+line('M13 18q13-3 24 4','#fff',1);
+    art.sketch = () => `<g transform="rotate(-8 38 40)">${shadow(rect(12,12,50,58,5,'#d1c0c1')+rect(12,9,50,58,5,paper))}${rect(17,14,40,46,1,'none','stroke="#d7dce2" stroke-width=".7"')}${line('M21 51c3-14 13-27 24-26-12 2-23 14-20 20s11-9 23-6-1 13-16 13','#ddb4c5',5)}${line('M21 51c6-9 12-15 24-19','#8eb7c2',1.4)}${[0,1,2,3].map(i=>circle(23+i*9,59,2.3,['#e8b365','#e1a0b1','#95babd','#a799cb'][i])).join('')}</g>`+
+      `<g transform="rotate(36 57 39)">${shadow(rect(52,10,9,47,2,gold))}${rect(52,10,9,8,2,rose)}${rect(52,18,9,5,0,metal)}${rect(54,24,2,31,0,'#ffebb5')}${path('M52 57l4.5 12L61 57Z','#e3c6a2')}${path('m55 65 1.5 4 1.5-4Z',ink)}</g>`;
+    art.phone = () => circle(40,40,29,'#e0ffd8','opacity=".12"')+circle(40,40,23,'none','stroke="#ddffd4" stroke-width=".6" opacity=".3"')+
+      shadow(path('M24 14c-5-2-13 5-12 12 3 19 22 38 41 42 7 1 15-8 12-13l-10-9c-2-2-4-1-6 1l-5 6c-9-4-14-9-18-18l6-5c2-2 2-4 0-6Z',white))+
+      line('M17 21c-4 6 2 18 7 24M50 61c5 3 10-1 11-4','#fff',1.6)+line('M24 18l7 10M52 49l9 8','#badfc6',1.1)+
+      line('M46 16a19 19 0 0 1 17 17M46 23a12 12 0 0 1 10 10','#e9ffdf',1.8,'opacity=".8"')+
+      [[20,21],[23,24],[26,27],[53,54],[56,57],[59,60]].map(([x,y])=>circle(x,y,.85,'#8cbea5','opacity=".75"')).join('');
+    art.safari = () => shadow(circle(40,40,34,metal))+circle(40,40,31,blue)+circle(40,40,28,'none','stroke="#c9efff" stroke-width=".65"')+ticks(40,40,26,60,'#e5f9ff',.7)+
+      [[40,21,'N'],[60,42,'E'],[40,63,'S'],[20,42,'W']].map(([x,y,n])=>text(x,y,n,5,'#ecf8ff','font-weight="700"')).join('')+
+      `<g transform="rotate(35 40 40)">${shadow(path('M40 13l8 27-8 27-8-27Z',paper))}${path('M40 13v27h8Z','#ef8c83')}${path('M40 13l-8 27h8Z','#d95c64')}${path('M40 40v27l-8-27Z','#b9d7e6')}${circle(40,40,2.5,metal)}</g>`+
+      line('M15 23a30 30 0 0 1 33-12','#fff',1,'opacity=".8"');
+    art.messages = () => shadow(path('M55 28c13 0 21 8 21 18 0 6-3 11-8 14l3 9-12-5c-15 2-28-5-28-17 0-11 11-19 24-19Z','#b7e8c3'))+
+      shadow(path('M38 12C20 12 7 23 7 37c0 8 4 15 11 20l-4 12 17-8c24 3 40-8 40-24 0-14-14-25-33-25Z',white))+
+      line('M15 29c4-7 11-11 20-11','#fff',1.6)+[26,39,52].map(x=>circle(x,38,3.5,'#7ac496')+circle(x-1,37,1,'#b8e4c7')).join('')+line('M32 55c10 2 20-1 26-6','#d5e9dc',1);
+    art.music = () => [21,27,33].map(r=>circle(40,40,r,'none','stroke="#fff" stroke-width=".6" opacity=".13"')).join('')+
+      shadow(path('M32 52V23l29-7v32c0 6-6 10-12 9-7-1-8-7-2-11 3-2 6-2 9-2V29l-19 5v24c0 6-6 10-12 9-7-1-8-7-2-11 3-2 6-2 9-2Z',white))+
+      path('M37 27v7l19-5v-7Z','#fff')+line('M34 25l24-6M24 60c2-2 5-3 8-2M48 50c2-2 5-3 8-2','#fff',1.3)+line('M38 35v21','#f1bac6',.9)+[7,13,10,5].map((h,i)=>rect(16+i*4,38-h/2,1.6,h,.8,'#fff','opacity=".35"')).join('');
+    return art;
+  })();
+  const appIconGradients = {
+    white:['#ffffff','#dce7f3'], paper:['#fffefa','#eaeef3'], metal:['#f5f8fc','#9caabc'], ink:['#536379','#1c273b'],
+    gold:['#ffe4a1','#d9a25b'], blue:['#aadfff','#448dcf'], green:['#c0df9e','#4c977e'], rose:['#ffa9b8','#d35f80'], violet:['#c9bbed','#7d67af']
+  };
+  let appIconInstance=0;
+  A.appIcon = (id, now=new Date()) => {
+    if(!Object.prototype.hasOwnProperty.call(appArtwork,id))return A.icon(id);
+    const artwork=appArtwork[id](now);
+    const gradients=Object.entries(appIconGradients).filter(([name])=>artwork.includes(`ai-${name})`)).map(([name,colors])=>`<linearGradient id="ai-${name}" x1="0" y1="0" x2=".85" y2="1"><stop stop-color="${colors[0]}"/><stop offset="1" stop-color="${colors[1]}"/></linearGradient>`).join('');
+    const defs=`${gradients}<radialGradient id="ai-glow" cx=".3" cy=".15" r=".8"><stop stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient><radialGradient id="ai-lens" cx=".35" cy=".25" r=".8"><stop stop-color="#75c6d8"/><stop offset=".45" stop-color="#34557f"/><stop offset="1" stop-color="#101d32"/></radialGradient><filter id="ai-shadow" x="-30%" y="-30%" width="160%" height="170%" color-interpolation-filters="sRGB"><feDropShadow dx="0" dy="1.8" stdDeviation="1.25" flood-color="#15243c" flood-opacity=".23"/></filter>`;
+    const prefix=`aura-art-${++appIconInstance}-`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" class="app-artwork" data-app-art="${id}" viewBox="0 0 80 80" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><defs>${defs}</defs>${artwork}</svg>`.replace(/ai-/g,prefix);
+  };
+  A.photosIcon = () => A.appIcon('photos');
+  A.updateAppClock = now => {
+    // Preserve the SVG and launcher nodes while updating all visible clock instances.
+    [['hour',(now.getHours()%12)*30+now.getMinutes()/2],['minute',now.getMinutes()*6],['second',now.getSeconds()*6]].forEach(([hand,angle])=>{
+      A.$$('.app-clock-'+hand).forEach(el=>el.setAttribute('transform',`rotate(${angle} 40 40)`));
+    });
+  };
   const appData = [
     ['calendar','カレンダー','#fff'],['photos','写真','#fff'],['camera','カメラ','linear-gradient(145deg,#e1e5e8,#a9b1b9)'],['weather','天気','linear-gradient(145deg,#2975c6,#61b4e7)'],
     ['mail','メール','linear-gradient(145deg,#287bef,#55adf8)'],['clock','時計','#15171b'],['maps','マップ','#ecf1e1'],['notes','メモ','linear-gradient(#f3d470 29%,#fff 29%)'],
@@ -82,7 +257,7 @@
     ['phone','電話','linear-gradient(145deg,#70db87,#32bd5b)'],['safari','ブラウザ','#fff'],['messages','メッセージ','linear-gradient(145deg,#76e58c,#36c967)'],['music','ミュージック','linear-gradient(145deg,#f7768e,#ec476b)']
   ];
   appData.forEach(([id,name,color]) => A.apps[id] = {id,name,color});
-  A.launcher = (app, dock=false) => { const now = new Date(); return `<button class="app-launcher" data-app="${app.id}" aria-label="${app.name}を開く"><span class="app-icon ${app.id}-icon" style="background:${app.color}">${app.id==='calendar'?`<small>${['日','月','火','水','木','金','土'][now.getDay()]}曜日</small><b>${now.getDate()}</b>`:app.id==='photos'?A.photosIcon():A.icon(app.id)}</span><span class="app-name">${app.name}</span>${app.id==='mail'&&(A.mailUnread?.()??3)>0?`<span class="app-badge">${Math.min(99,A.mailUnread?.()??3)}</span>`:app.id==='messages'&&(A.messageUnread?.()??2)>0?`<span class="app-badge">${Math.min(99,A.messageUnread?.()??2)}</span>`:''}</button>`; };
+  A.launcher = (app, dock=false) => { return `<button class="app-launcher" data-app="${app.id}" aria-label="${app.name}を開く"><span class="app-icon ${app.id}-icon" style="background:${app.color}">${A.appIcon(app.id)}</span><span class="app-name">${app.name}</span>${app.id==='mail'&&(A.mailUnread?.()??3)>0?`<span class="app-badge">${Math.min(99,A.mailUnread?.()??3)}</span>`:app.id==='messages'&&(A.messageUnread?.()??2)>0?`<span class="app-badge">${Math.min(99,A.messageUnread?.()??2)}</span>`:''}</button>`; };
   A.renderHome = () => { A.$('#app-grid').innerHTML=appData.slice(0,-4).map(([id])=>A.launcher(A.apps[id])).join('');A.$('#home-dock').innerHTML=appData.slice(-4).map(([id])=>A.launcher(A.apps[id],true)).join(''); };
   A.haptic = () => { if(A.settings.sound && navigator.vibrate && navigator.userActivation?.hasBeenActive) navigator.vibrate(7); };
   let toastTimer;
@@ -151,7 +326,7 @@
     if(A.locked)return;
     const cards=A.recentApps.map(id=>{
       const app=A.apps[id];
-      return `<article class="recent-card"><button class="recent-open" data-action="recentOpen" data-id="${id}" aria-label="${app.name}に切り替える"><span class="app-icon ${id}-icon" style="background:${app.color}">${id==='photos'?A.photosIcon():A.icon(id)}</span><strong>${app.name}</strong><small>${A.current===id?'使用中のアプリに戻る':'アプリを開く'}</small></button><button class="recent-remove" data-action="recentRemove" data-id="${id}" aria-label="${app.name}を履歴から除く">×</button></article>`;
+      return `<article class="recent-card"><button class="recent-open" data-action="recentOpen" data-id="${id}" aria-label="${app.name}に切り替える"><span class="app-icon ${id}-icon" style="background:${app.color}">${A.appIcon(id)}</span><strong>${app.name}</strong><small>${A.current===id?'使用中のアプリに戻る':'アプリを開く'}</small></button><button class="recent-remove" data-action="recentRemove" data-id="${id}" aria-label="${app.name}を履歴から除く">×</button></article>`;
     }).join('');
     A.overlay(`${A.overlayTitle('最近使ったアプリ')}<p class="switcher-copy">いつもの場所へ、すぐに。<br>別のアプリは開始画面から開きます。録音は切替時に終了します。</p>${cards?`<div class="recent-list">${cards}</div><button class="switcher-clear" data-action="recentClear">履歴をクリア</button>`:`<div class="switcher-empty">${A.icon('grid')}まだ履歴がありません。<br>ホームからアプリを開いてみましょう。</div>`}`,'app-switcher');
   };
@@ -183,7 +358,10 @@
     if(c){set('.widget-top>span:first-child',c.name+' ↗');set('.weather-sun',c.condition);set('.weather-widget>strong',c.temp+'°');set('.weather-widget>span',c.desc+' · '+c.source);set('.weather-widget>small',`最高 ${c.high}° 最低 ${c.low}°`);set('.lock-weather',`${c.name} ${c.temp}° · ${c.source}`);}
     const name=A.load('profileName','');
     set('.greeting-note',name?`${name}さん、おかえりなさい。`:'Make room for a little wonder.');
-    A.$$('.calendar-icon').forEach(el=>{const day=el.querySelector('b'),weekday=el.querySelector('small');if(day)day.textContent=now.getDate();if(weekday)weekday.textContent=['日','月','火','水','木','金','土'][now.getDay()]+'曜日';});
+    A.$$('.app-calendar-date').forEach(el=>{if(el.textContent!==String(now.getDate()))el.textContent=now.getDate();});
+    const weekday=['日','月','火','水','木','金','土'][now.getDay()]+'曜日';
+    A.$$('.app-calendar-weekday').forEach(el=>{if(el.textContent!==weekday)el.textContent=weekday;});
+    A.updateAppClock(now);
   };
   const bar=A.$('#home-indicator');
   let gesture=null,holdTimer,suppressClick=false;
@@ -212,7 +390,7 @@
   const missingApps=defaultOrder.filter(id=>!homeOrder.includes(id));
   homeOrder.splice(Math.max(0,homeOrder.length-4),0,...missingApps);
   let editing=false,selectedIcon=null;
-  const smallIcon=id=>`<span class="mini-app" style="background:${A.apps[id].color}">${id==='photos'?A.photosIcon():A.icon(id)}</span>`;
+  const smallIcon=id=>`<span class="mini-app" style="background:${A.apps[id].color}">${A.appIcon(id)}</span>`;
   A.finishHomeEditing=()=>{editing=false;selectedIcon=null;};
   A.renderHome=()=>{
     A.$('#app-grid').innerHTML=homeOrder.slice(0,-4).map(id=>A.launcher(A.apps[id])).join('');
@@ -358,8 +536,7 @@
     if(s.focus)A.$('#notification-banner')?.remove();
     status.setAttribute('aria-label',`コントロールセンターを開く。シミュレーション：Wi-Fi ${s.wifi?'オン':'オフ'}${s.airplane?'、機内モード':''}`);
     A.$('.battery').setAttribute('title','シミュレーターのバッテリー表示');
-    const d=new Date(),second=d.getSeconds()*6,minute=d.getMinutes()*6+second/60,hour=(d.getHours()%12)*30+minute/12;
-    A.$$('.clock-icon').forEach(el=>{if(!el.querySelector('.clock-hands'))el.innerHTML=`<svg viewBox="0 0 60 60" class="live-clock" aria-hidden="true"><circle cx="30" cy="30" r="28" fill="#fafafa"/>${Array.from({length:12},(_,i)=>`<path d="M30 5v3" stroke="#202126" stroke-width="1.3" transform="rotate(${i*30} 30 30)"/>`).join('')}<g class="clock-hands"><path class="clock-hour" d="M30 30V17" stroke="#202126" stroke-width="2.6"/><path class="clock-minute" d="M30 30V9" stroke="#202126" stroke-width="1.8"/><path class="clock-second" d="M30 35V7" stroke="#f7833c" stroke-width=".8"/><circle cx="30" cy="30" r="2" fill="#f7833c"/></g></svg>`;[['hour',hour],['minute',minute],['second',second]].forEach(([hand,angle])=>el.querySelector('.clock-'+hand).setAttribute('transform',`rotate(${angle} 30 30)`));});
+    A.updateAppClock(new Date());
     A.$('#lock-glance-weather').textContent=(A.weatherSnapshot?.()?.temp??26)+'°';
     const music=A.music,player=A.$('#lock-player');player.hidden=!music?.track||(!music.playing&&!A.recentApps.includes('music'));
     if(music?.track){A.$('#lock-track-title').textContent=music.track.title;const play=A.$('#lock-play');if(play.dataset.playing!==String(music.playing)){play.innerHTML=A.icon(music.playing?'pause':'play');play.dataset.playing=String(music.playing);}player.classList.toggle('is-playing',!!music.playing);}

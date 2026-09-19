@@ -391,3 +391,32 @@ a.primary-button{text-decoration:none;text-align:center;display:inline-flex;just
 .app-nav .connection-link{min-height:34px;font-size:11px;padding:5px 9px;border-radius:10px}.app-nav .nav-action:last-child{gap:5px;flex-shrink:0}.weather-app .hourly-forecast{overflow-x:auto;justify-content:flex-start;gap:6px;padding-bottom:8px;scrollbar-width:thin}.connected-overlay>.list-row{color:inherit}.connected-overlay .row-main small{color:inherit;opacity:.7}.screen-dark-mode .text-input,.app-dark .text-input{background:#282930;color:#f4f4f7;border-color:#ffffff30}.connected-overlay .text-input{background:#fff;color:#273244}.connected-track audio{min-width:0;max-width:100%}#external-phone .dial-keypad{max-width:360px;margin-left:auto;margin-right:auto;padding-left:5px;padding-right:5px;gap:12px}.connection-card{background:var(--paper,#fff)}.connected-overlay .connection-card{background:#ffffff10}.connected-overlay .connection-divider{opacity:.9}.screen-dark-mode .connection-card{background:#282930}.connected-map-results{background:var(--app-bg,#f7f7fa)}.screen-dark-mode .web-result h3{color:#94b5df}
 
 @media(max-width:600px){.connected-search input,#external-mail .text-input,#external-message .text-input,#external-phone .text-input,#currency-form .text-input,#remote-file .text-input,.connected-overlay .text-input{font-size:16px}}
+
+/* Detailed app identities fill their tile at every size; action glyphs stay compact. */
+.app-icon > svg.app-artwork,
+.mini-app > svg.app-artwork {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  flex-shrink: 0;
+  filter: none;
+  pointer-events: none;
+}
+.mini-app { overflow: hidden; isolation: isolate; }
+.app-artwork text { font-style: normal; }
+.app-icon:after { background: linear-gradient(145deg,#ffffff18,transparent 45%,#00000008); }
+[data-icon-style=glass] :is(.app-icon,.mini-app) {
+  background: linear-gradient(135deg,#fff6,#ffffff16)!important;
+  backdrop-filter: blur(14px);
+  border: 1px solid #ffffff5e;
+}
+[data-icon-style=glass] .app-artwork { filter: saturate(.8); }
+[data-icon-style=tinted] :is(.app-icon,.mini-app) {
+  filter: grayscale(1);
+  background: #e8e1ee!important;
+}
+@media (prefers-contrast: more) {
+  .app-icon:after { border: 1px solid #ffffffb3; background: none; }
+  .app-launcher > .app-name { text-shadow: 0 1px 2px #000,0 0 4px #000; }
+}

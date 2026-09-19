@@ -31,6 +31,62 @@ frame.addEventListener('load',async()=>{
  const until=async(predicate)=>{for(let i=0;i<100;i++){if(predicate())return;await delay(30);}throw Error('Timed out waiting for application state');};
 
  await test('30 app registrations and home icons',()=>{assert(Object.keys(A.apps).length===30,'App count');assert(d.querySelectorAll('#app-grid .app-launcher').length===26,'Home icon count');assert(d.querySelectorAll('#home-dock .app-launcher').length===4,'Dock count');Object.values(A.apps).forEach(a=>assert(typeof a.render==='function','Missing renderer '+a.id));});
+ await test('All 30 app identities have dedicated, self-contained SVG artwork',()=>{
+  A.home();assert(d.querySelectorAll('#home-screen .app-artwork').length===30,'All home identities must use detailed art');
+  const parser=new w.DOMParser();
+  Object.keys(A.apps).forEach(id=>{
+   const markup=A.appIcon(id),svg=parser.parseFromString(markup,'image/svg+xml');
+   assert(!svg.querySelector('parsererror'),'Invalid SVG '+id);
+   assert(svg.documentElement.dataset.appArt===id,'Missing dedicated art '+id);
+   assert(svg.documentElement.getAttribute('viewBox')==='0 0 80 80','Wrong art canvas '+id);
+   assert(svg.querySelectorAll('path,rect,circle,ellipse,line,text').length>=10,'Insufficient detail '+id);
+   assert(!svg.querySelector('image,script,foreignObject'),'External or unsafe artwork '+id);
+  });
+ });
+ await test('App art IDs remain unique across home, library, recents and notifications',()=>{
+  const check=()=>{
+   const ids=[...d.querySelectorAll('.app-artwork [id]')].map(el=>el.id);
+   assert(new Set(ids).size===ids.length,'Duplicate SVG definitions');
+   d.querySelectorAll('.app-artwork').forEach(svg=>{
+    const localIds=new Set([...svg.querySelectorAll('[id]')].map(el=>el.id));
+    for(const match of svg.outerHTML.matchAll(/url\(#([^)]+)\)/g))assert(localIds.has(match[1]),'Unresolved local paint '+match[1]);
+   });
+  };
+  A.home();A.library();check();assert(d.querySelectorAll('#overlay .app-artwork').length>=30,'Library art missing');
+  A.closeOverlay();A.recentApps=['calendar','photos','clock'];A.recents();check();assert(d.querySelectorAll('#overlay .app-artwork').length===3,'Recents art missing');
+  A.closeOverlay();A.actions.appContext({dataset:{id:'calendar'}});check();assert(d.querySelector('.context-app [data-app-art="calendar"]'),'Mini art missing');
+  A.closeOverlay();A.notify({app:'clock',title:'Icon check',body:'Local artwork validation'});A.notifications();check();
+  assert(d.querySelector('.notification-stack [data-app-art="clock"]'),'Notification artwork missing');
+  A.actions.dismissNotice(d.querySelector('.notification-stack .notification-dismiss'));
+ });
+ await test('Calendar date and clock hands update without replacing launchers',()=>{
+  A.home();const launcher=d.querySelector('[data-app="calendar"]'),day=launcher.querySelector('.app-calendar-date');
+  day.textContent='0';A.updateWidgets();assert(day.textContent===String(new w.Date().getDate()),'Date did not refresh');
+  assert(d.querySelector('[data-app="calendar"]')===launcher,'Launcher replaced');
+  const svg=new w.DOMParser().parseFromString(A.appIcon('clock',new w.Date(2026,8,19,15,24,30)),'image/svg+xml');
+  assert(svg.querySelector('.app-clock-hour').getAttribute('transform')==='rotate(102 40 40)','Hour hand');
+  assert(svg.querySelector('.app-clock-minute').getAttribute('transform')==='rotate(144 40 40)','Minute hand');
+  assert(svg.querySelector('.app-clock-second').getAttribute('transform')==='rotate(180 40 40)','Second hand');
+  const live=d.querySelector('#home-screen [data-app-art="clock"]');assert(live,'Detailed clock missing');
+  A.updateSystem();A.updateClock();
+  assert(d.querySelector('#home-screen [data-app-art="clock"]')===live,'System tick replaced detailed clock');
+  assert(!A.icon('search').includes('app-artwork'),'Action icons must remain separate');
+ });
+ await test('Detailed icons fit original, glass and tinted tiles in both themes',()=>{
+  const saved={style:A.settings.iconStyle,dark:A.settings.dark};
+  try {
+   for(const style of ['standard','glass','tinted'])for(const dark of [false,true]){
+    A.settings.iconStyle=style;A.settings.dark=dark;A.applySettings();A.home();
+    d.querySelectorAll('#home-screen .app-icon').forEach(tile=>{
+     const svg=tile.querySelector('.app-artwork');assert(svg,'Artwork missing');
+     const art=svg.getBoundingClientRect(),box=tile.getBoundingClientRect();
+     assert(art.width>40&&art.height>40,'Artwork too small');
+     assert(art.width<=box.width+.1&&art.height<=box.height+.1,'Artwork overflow');
+     assert(svg.getAttribute('aria-hidden')==='true','Decorative artwork must not duplicate accessible label');
+    });
+   }
+  } finally {A.settings.iconStyle=saved.style;A.settings.dark=saved.dark;A.applySettings();A.home();}
+ });
  for(const id of Object.keys(A.apps))await test('App opens: '+id,()=>{A.open(id);assert(!d.querySelector('#app-screen').hidden,'App hidden');assert(d.querySelector('#app-screen').textContent.trim().length>0,'Empty application');assert(A.current===id,'Wrong current app');const missing=[...d.querySelectorAll('#app-screen [data-action]')].filter(el=>!A.actions[el.dataset.action]);assert(!missing.length,'Missing handlers: '+missing.map(e=>e.dataset.action));});
  await test('Home / lock / unlock',()=>{A.home();A.lock();assert(!d.querySelector('#lock-screen').hidden,'Lock invisible');click('#unlock-button');assert(!d.querySelector('#home-screen').hidden,'Home invisible');});
  await test('Control center brightness and dark mode',()=>{A.controls();input('#control-brightness','75');assert(A.settings.brightness===75,'Brightness');click('[data-action="controlToggle"][data-key="dark"]');assert(d.querySelector('#phone-screen').classList.contains('screen-dark-mode')===A.settings.dark,'Dark mode');A.settings.dark=false;A.settings.brightness=100;A.applySettings();});
@@ -54,7 +110,7 @@ frame.addEventListener('load',async()=>{
  await test('Timer completes and notifies',async()=>{click('[data-action="clockTab"][data-value="timer"]');input('#timer-minutes','0');input('#timer-seconds','1');click('[data-action="timerToggle"]');await delay(2100);assert(!d.querySelector('#overlay').hidden,'No timer notification');assert(d.querySelector('#overlay').textContent.includes('終了'),'Wrong notification');});
  await test('Health hydration update',()=>{A.open('health');const before=A.load('health',{water:1200}).water;click('[data-action="healthWater"]');assert(A.load('health',{}).water===before+200,'Water update');});
  await test('Wallet demo-only charge and purchase',()=>{A.open('wallet');const before=A.load('wallet',{balance:3240}).balance;click('[data-action="walletCharge"]');d.querySelector('#modal-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));assert(A.load('wallet',{}).balance===before+1000,'Demo charge');click('[data-action="walletPay"]');d.querySelector('#modal-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));assert(A.load('wallet',{}).balance===before+420,'Demo purchase');});
- await test('Text file create and preview',()=>{A.open('files');click('[data-action="fileNew"]');const f=d.querySelector('#modal-form');f.elements.name.value='QA.txt';f.elements.content.value='A little test.';f.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));const file=A.load('files',[]).find(f=>f.name==='QA.txt');assert(file,'File not saved');click(`[data-action="fileOpen"][data-id="${file.id}"]`);assert(d.querySelector('.file-preview').textContent==='A little test.','File preview');});
+ await test('Text file create and preview',()=>{A.open('files');click('[data-action="fileNew"]');const f=d.querySelector('#modal-form');f.elements.name.value='QA.txt';f.elements.content.value='A little test.';f.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));const file=A.load('files',[]).find(f=>f.name==='QA.txt');assert(file,'File not saved');A.actions.filesHome();click(`[data-action="fileOpen"][data-id="${file.id}"]`);assert(d.querySelector('.file-preview').textContent==='A little test.','File preview');});
  await test('2048 merge rules',()=>{const merge=A.gameMath.mergeLine;assert(JSON.stringify(merge([2,2,2,2]).line)==='[4,4,0,0]','Double merge');assert(merge([2,2,2,2]).gain===8,'Merge score');assert(JSON.stringify(merge([4,4,8,0]).line)==='[8,8,0,0]','Cascade merge occurred');assert(JSON.stringify(merge([0,2,0,2]).line)==='[4,0,0,0]','Gap compression');});
  await test('2048 interaction and persistence',()=>{A.open('games','2048');const before=[...d.querySelectorAll('.tile-2048')].map(c=>+c.dataset.value).reduce((a,b)=>a+b,0);for(const dir of ['left','up','right','down'])click(`[data-action="move2048"][data-value="${dir}"]`);const after=[...d.querySelectorAll('.tile-2048')].map(c=>+c.dataset.value).reduce((a,b)=>a+b,0);assert(after>before,'Moves did not spawn tiles');assert(A.load('2048state',null),'Board not saved');click('[data-action="undo2048"]');assert(d.querySelectorAll('.tile-2048').length===16,'Undo broke board');});
  await test('Snake start, pause and teardown',async()=>{A.open('games','snake');click('[data-action="snakeToggle"]');assert(d.querySelector('#snake-toggle').textContent.includes('一時停止'),'Snake not started');await delay(160);click('[data-action="snakeToggle"]');assert(d.querySelector('#snake-toggle').textContent.includes('スタート'),'Snake not paused');A.home();assert(A.current===null,'Snake teardown');});
@@ -141,7 +197,7 @@ frame.addEventListener('load',async()=>{
   assert(!d.querySelector('.lock-notifications .system-notification'),'Lock notifications stale');A.settings.focus=false;A.applySettings();A.home();
  });
  await test('Analog icon hands and simulated connection status update',()=>{
-  A.home();A.updateSystem();assert(d.querySelector('.clock-second')?.getAttribute('transform').startsWith('rotate('),'Clock hands missing');
+  A.home();A.updateSystem();assert(d.querySelector('.app-clock-second')?.getAttribute('transform').startsWith('rotate('),'Clock hands missing');
   A.settings.airplane=true;A.settings.wifi=false;A.applySettings();
   assert(!d.querySelector('#status-airplane').hidden,'Airplane indicator');assert(d.querySelector('#status-controls').getAttribute('aria-label').includes('オフ'),'Wi-Fi state label');
   A.settings.airplane=false;A.settings.wifi=true;A.applySettings();
