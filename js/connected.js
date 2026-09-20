@@ -42,11 +42,17 @@
     navigator.geolocation.getCurrentPosition(position => resolve({latitude: position.coords.latitude, longitude: position.coords.longitude, name: '現在地'}), error => reject(new Error(error.code === 1 ? '位置情報が許可されていません。ブラウザの権限設定を確認するか、場所を検索してください。' : '現在地を取得できません。場所を検索してください。')), {timeout: 10000, maximumAge: 60000, enableHighAccuracy: false});
   });
   N.share = async (title, text, url) => {
-    try {
-      if (navigator.share) await navigator.share({title, text, ...(N.safeURL(url) ? {url} : {})});
-      else if (navigator.clipboard) { await navigator.clipboard.writeText([title, text, url].filter(Boolean).join('\n')); A.toast('共有機能がないため、内容をコピーしました'); }
-      else { A.download(new Blob([[title, text, url].filter(Boolean).join('\n')], {type: 'text/plain;charset=utf-8'}), 'aura-share.txt'); A.toast('共有機能がないため、テキストを保存します'); }
-    } catch (error) { if (error.name !== 'AbortError') A.toast('共有できませんでした。権限を確認してください。'); }
+    const safe=N.safeURL(url),content=[title,text,safe].filter(Boolean).join('\n');
+    if(navigator.share){
+      try{await navigator.share({title,text,...(safe?{url:safe}:{})});return;}
+      catch(error){if(error.name==='AbortError')return;}
+    }
+    if(navigator.clipboard){
+      try{await navigator.clipboard.writeText(content);A.toast('共有できないため、内容をコピーしました');return;}
+      catch{/* Permission denial must not prevent the explicit export fallback. */}
+    }
+    try{A.download(new Blob([content],{type:'text/plain;charset=utf-8'}),'aura-share.txt');A.toast('共有・コピーできないため、テキストを保存します');}
+    catch{A.toast('共有できませんでした。権限を確認してください。');}
   };
   const stateBox = (message, retry = '') => `<div class="connection-state" role="status"><p>${esc(message)}</p>${retry ? `<button class="secondary-button" data-action="${retry}">再試行</button>` : ''}</div>`;
   const button = (action, label) => `<button class="connection-link" data-action="${action}">${esc(label)}</button>`;

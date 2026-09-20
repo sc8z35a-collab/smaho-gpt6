@@ -2,7 +2,7 @@
 // Interoperable device handoffs; opening another app never counts as delivery.
 (() => {
   const A = window.Aura, N = A.network, $ = A.$, esc = A.escape;
-  const button = (action, text) => `<button class="connection-link" data-action="${action}">${esc(text)}</button>`;
+  const button = (action, text) => `<button type="button" class="connection-link" data-action="${action}">${esc(text)}</button>`;
   const status = text => `<div class="connection-state" role="status">${esc(text)}</div>`;
   N.offerFile = (blob, name) => {
     const file = new File([blob], name, {type: blob.type || 'application/octet-stream'});
@@ -119,7 +119,7 @@
     A.overlay(`${A.overlayTitle('外部との連携')}<div class="connected-overlay"><h3>${esc(title)}</h3><p class="connected-caption">${esc(detail)}</p><div class="connection-toolbar">${tools[id] || ''}</div><p class="connected-caption">共有で選んだデータ以外はアップロードしません。公開APIに渡す検索語・座標の送信先は各画面に記載しています。</p>${button('connectionCenter','すべての接続状況')}</div>`);
   };
   A.actions.connectionCenter = () => A.overlay(`${A.overlayTitle('接続とプライバシー')}<div class="connected-overlay"><div id="network-status" class="connected-status ${navigator.onLine ? '' : 'offline'}">${navigator.onLine ? '端末はオンライン（各サービスの疎通は未確認）' : '端末はオフラインです'}</div><p class="connected-caption">無料の公開APIを使用します。サービスの利用制限・CORSなどで接続できない場合があります。個人データのサーバー同期や外部アカウントの認証情報の保存は行いません。</p>${Object.entries(capabilities).map(([id,[title,detail]]) => `<button class="list-row" data-app="${id}"><span class="row-main"><strong>${esc(A.apps[id].name)} · ${esc(title)}</strong><small>${esc(detail)}</small></span></button>`).join('')}${button('forgetLocation','保存した位置情報と天気を消去')}</div>`);
-  A.actions.forgetLocation = () => A.confirm('位置情報と天気を消去','保存した都市・現在地の座標・天気キャッシュを削除し、ページを再読み込みします。',() => { try { ['weatherLocation','weatherLive','weatherCity'].forEach(k => localStorage.removeItem('aura.' + k)); location.reload(); } catch { A.toast('削除できませんでした'); } });
+  A.actions.forgetLocation = () => A.confirm('位置情報と天気を消去','保存した都市・天気のお気に入り・地図の保存場所・現在地の座標・天気キャッシュを削除し、ページを再読み込みします。',() => { try { ['weatherLocation','weatherLive','weatherCity','weatherFavorites','mapSavedPlaces'].forEach(k => localStorage.removeItem('aura.' + k)); location.reload(); } catch { A.toast('削除できませんでした'); } });
   const updateNetwork = () => { const el = $('#network-status'); if (el) { el.textContent = navigator.onLine ? '端末はオンライン（各サービスの疎通は未確認）' : '端末はオフラインです'; el.classList.toggle('offline',!navigator.onLine); } };
   window.addEventListener('online',updateNetwork); window.addEventListener('offline',updateNetwork);
   A.actions.shareNotes = () => { const title = $('#note-title'), body = $('#note-body'); if (title && body) N.share(title.value || 'メモ',body.value); else N.share('auraのメモ',A.searchableNotes().map(n => `${n.title}\n${n.body}`).join('\n\n---\n\n')); };

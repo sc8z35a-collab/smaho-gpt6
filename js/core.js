@@ -426,7 +426,7 @@
   document.addEventListener('click',e=>{const button=e.target.closest('[data-app], [data-action]');if(!button || button.disabled)return;if(button.dataset.app)A.open(button.dataset.app);else{const fn=A.actions[button.dataset.action];if(fn)fn(button,e);}});
   A.$('#status-controls').onclick=A.controls;A.$('#status-time').onclick=A.notifications;A.$('#dynamic-island').onclick=()=>A.open('music','player');A.$('#home-search').onclick=A.spotlight;A.$('#desktop-lock').onclick=A.lock;A.$('#desktop-reset').onclick=A.home;A.$('#power-button').onclick=()=>A.locked?A.home():A.lock();A.$('#unlock-button').onclick=A.home;A.$('#lock-flashlight').onclick=A.actions.flashlight;A.$('#about-button').onclick=A.actions.about;
   let touchStartY=0;A.$('#lock-screen').addEventListener('touchstart',e=>touchStartY=e.touches[0].clientY,{passive:true});A.$('#lock-screen').addEventListener('touchend',e=>{if(touchStartY-e.changedTouches[0].clientY>50)A.home();},{passive:true});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!A.$('#overlay').hidden)A.closeOverlay();else A.home();}if(e.key==='h' && !['INPUT','TEXTAREA'].includes(e.target.tagName))A.home();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!A.$('#overlay').hidden)A.closeOverlay();else A.home();}if(e.key==='h'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.isComposing&&A.$('#overlay').hidden&&!e.target.closest('input,textarea,select,[contenteditable]'))A.home();});
   // Some mobile browsers force a 980px layout in "desktop site" mode.
   // Compensate only when a touch device's layout is much wider than its screen;
   // ordinary desktop windows and user pinch-zoom remain unchanged.
