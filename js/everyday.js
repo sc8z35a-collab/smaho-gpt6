@@ -10,7 +10,7 @@
   const field = (label, name, value = '', type = 'text', attrs = '') => `<label class="form-label" for="ev-${name}">${label}</label><input class="text-input" id="ev-${name}" name="${name}" type="${type}" value="${esc(value)}" ${attrs}>`;
   const area = (label, name, value = '') => `<label class="form-label" for="ev-${name}">${label}</label><textarea class="text-input" id="ev-${name}" name="${name}" rows="5" maxlength="12000">${esc(value)}</textarea>`;
   const select = (label, name, options, value) => `<label class="form-label" for="ev-${name}">${label}</label><select class="text-input" id="ev-${name}" name="${name}">${options.map(([id,text])=>`<option value="${esc(id)}" ${id===value?'selected':''}>${esc(text)}</option>`).join('')}</select>`;
-  const page = (id, content, actions = '') => { A.view(A.nav(A.apps[id].name, actions) + `<div class="app-content everyday ev-${id}">${content}</div>`); };
+  const page = (id, content, actions = '') => { A.view(A.nav(A.apps[id].name, actions) + `<div class="app-content everyday ev-${id}">${content}</div>`); A.decorateEveryday?.(id); };
   const empty = text => `<div class="ev-empty">${esc(text)}</div>`;
   const section = (label, action = '') => `<header class="ev-section"><h3>${label}</h3>${action}</header>`;
   const progress = (value, label) => `<div class="ev-progress" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(value)}"><i style="width:${Math.max(0,Math.min(100,value))}%"></i></div>`;
