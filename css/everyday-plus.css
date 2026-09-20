@@ -1,0 +1,22 @@
+/* Quiet surfaces, visible labels, secondary controls behind native details. */
+.everyday-plus .ep-button{min-height:44px;padding:11px 14px;border-radius:13px;background:var(--ev-surface);color:inherit;font-size:12px;border:1px solid var(--ev-border);text-align:center;overflow-wrap:anywhere}
+.everyday-plus button:focus-visible,.everyday-plus summary:focus-visible,.everyday-plus input:focus-visible,.everyday-plus select:focus-visible,.everyday-plus textarea:focus-visible{outline:2px solid #8d7d9c;outline-offset:3px}
+.everyday-plus .ev-chips .ep-button[aria-pressed=true]{background:#ded6e9;color:#594669;border-color:#bca9c9}
+.everyday-plus .ep-muted{font-size:11px;line-height:1.8;color:var(--ev-muted);overflow-wrap:anywhere;margin:12px 0}
+.ep-section{margin:24px 0}.ep-section>h3{font-size:16px;font-weight:600;margin:0 0 12px}.ep-section>.ev-icon-button{display:flex;margin:-42px 0 8px auto}
+.ep-details{margin:16px 0;border:1px solid var(--ev-border);border-radius:17px;background:var(--ev-surface);overflow:hidden}
+.ep-details summary{cursor:pointer;padding:16px;font-size:13px;min-height:48px;font-weight:600;overflow-wrap:anywhere}
+.ep-details>div{padding:0 14px 14px}.ep-details>div>.ep-button{margin:4px 3px 4px 0}
+.ep-two{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px 12px;margin-bottom:16px}
+.ep-two .form-label{margin:0}.ep-two select{min-width:0;width:100%;margin:0}
+.ep-actions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.ep-actions>button{flex:1}
+.ep-note{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9;font-size:14px}
+.ep-saved-row{display:flex;align-items:center;gap:6px;margin:8px 0}.ep-saved-row>.ep-button{flex:1;min-width:0;text-align:left}.ep-saved-row>.ev-icon-button{flex-shrink:0}
+.ep-intention,.ep-summary{display:flex;flex-direction:column;gap:9px;width:100%;padding:19px;border:1px solid var(--ev-border);border-radius:20px;background:var(--ev-surface);text-align:left;color:inherit;margin:12px 0;overflow-wrap:anywhere}
+.ep-intention{background:linear-gradient(125deg,#ece5f1,#f3eeeb)}.ep-intention small,.ep-summary span,.ep-summary small{font-size:11px;color:var(--ev-muted);font-weight:400;line-height:1.7}.ep-intention strong,.ep-summary strong{font-size:15px;line-height:1.7}
+.ep-outlook{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:12px 0;border-bottom:1px solid var(--ev-border);font-size:12px;color:inherit;text-align:left}.ep-outlook time,.ep-outlook strong{flex-shrink:0;font-size:11px}.ep-outlook span{flex:1;min-width:0;overflow-wrap:anywhere}
+.ep-budget-state{padding:12px 14px;border-radius:12px;background:#90a99a18;font-size:12px;color:#557261}.ep-budget-state.ep-over{background:#bd778a18;color:#a14f65}
+.ep-undo{position:sticky;bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--ev-border);border-radius:15px;background:var(--ev-surface);box-shadow:0 5px 22px #382c4015;font-size:11px;z-index:2}
+.everyday-plus .text-input{max-width:100%;min-width:0}.everyday-plus h1{overflow-wrap:anywhere}.everyday-plus .ev-date-switch input{min-width:0}.everyday-plus .ev-date-switch .ep-button{flex-shrink:0;padding:0}
+.screen-dark-mode .everyday-plus .ev-chips .ep-button[aria-pressed=true]{background:#4b3d59;color:#e3d4f0;border-color:#7f688d}.screen-dark-mode .ep-intention{background:linear-gradient(125deg,#3e3546,#342f32)}.screen-dark-mode .ep-budget-state{color:#b2cbb9}.screen-dark-mode .ep-budget-state.ep-over{color:#edb0c0}
+@media(max-width:360px){.ep-actions{gap:6px}.everyday-plus .ep-button{padding:10px;font-size:11px}.ep-two{gap:8px}.ep-intention,.ep-summary{padding:15px}.ep-undo{gap:6px}}
