@@ -1,0 +1,151 @@
+/* FHD MOVE APP: animate vector layers, not rasterized tiles or hit targets. */
+.icon-motion { transform-box:view-box; transform-origin:40px 40px; }
+[data-icon-motion=fhd] .icon-motion {
+  animation-name:var(--motion-name,none);
+  animation-duration:var(--motion-duration,6s);
+  animation-delay:var(--motion-phase,0s);
+  animation-timing-function:var(--motion-ease,cubic-bezier(.45,0,.55,1));
+  animation-iteration-count:infinite;
+  animation-play-state:var(--motion-play,paused);
+}
+[data-motion-visible=true] { --motion-play:running; }
+[data-motion-paused=true] .app-artwork,
+[data-motion-covered=true] .app-artwork,
+.home-editing .app-artwork { --motion-play:paused; }
+.scene-calendar { --motion-name:fhd-paper; --motion-duration:8s; }
+.scene-photos { --motion-name:fhd-bloom; --motion-duration:12s; }
+.scene-mail { --motion-name:fhd-float; --motion-duration:7s; }
+.scene-reminders { --motion-name:fhd-paper; --motion-duration:9s; }
+.scene-files { --motion-name:fhd-paper; --motion-duration:7s; }
+.scene-settings { --motion-name:fhd-turn; --motion-duration:36s; --motion-ease:linear; }
+.scene-games { --motion-name:fhd-rock; --motion-duration:6s; }
+.scene-health { --motion-name:fhd-heart; --motion-duration:3.6s; }
+.scene-wallet { --motion-name:fhd-paper; --motion-duration:10s; }
+.scene-habits { --motion-name:fhd-plant; --motion-duration:7s; transform-origin:40px 68px; }
+.scene-expenses { --motion-name:fhd-paper; --motion-duration:8s; }
+.scene-shopping { --motion-name:fhd-bag; --motion-duration:7s; transform-origin:40px 22px; }
+.scene-contacts { --motion-name:fhd-paper; --motion-duration:9s; }
+.scene-music { --motion-name:fhd-rock; --motion-duration:5s; }
+.motion-aperture { --motion-name:fhd-aperture; --motion-duration:7s; }
+.motion-cloud { --motion-name:fhd-cloud; --motion-duration:8s; }
+.motion-sun { --motion-name:fhd-turn; --motion-duration:48s; --motion-ease:linear; }
+.motion-compass { --motion-name:fhd-compass; --motion-duration:9s; }
+.motion-focus-hand { --motion-name:fhd-turn; --motion-duration:20s; --motion-ease:linear; }
+.motion-wave { --motion-name:fhd-wave; --motion-duration:2.8s; }
+.motion-trace { --motion-name:fhd-signal; --motion-duration:3.6s; }
+.motion-dot { --motion-name:fhd-dot; --motion-duration:2.8s; }
+.motion-signal { --motion-name:fhd-signal; --motion-duration:4s; }
+.motion-exchange { --motion-name:fhd-exchange; --motion-duration:5s; }
+.motion-location { --motion-name:fhd-location; --motion-duration:4s; }
+.motion-ribbon { --motion-name:fhd-ribbon; --motion-duration:6s; }
+.motion-check { --motion-name:fhd-signal; --motion-duration:5s; }
+.motion-display { --motion-name:fhd-display; --motion-duration:6s; }
+.motion-pencil { --motion-name:fhd-pencil; --motion-duration:6s; }
+@keyframes fhd-paper { 0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-1.1px) rotate(1deg)} }
+@keyframes fhd-bloom { 0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)} }
+@keyframes fhd-float { 0%,100%{transform:translateY(1px)}50%{transform:translateY(-1.8px)} }
+@keyframes fhd-turn { to{transform:rotate(360deg)} }
+@keyframes fhd-rock { 0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)} }
+@keyframes fhd-heart { 0%,35%,100%{transform:scale(1)}12%{transform:scale(1.035)}22%{transform:scale(1.012)}28%{transform:scale(1.025)} }
+@keyframes fhd-plant { 0%,100%{transform:rotate(-1.8deg)}50%{transform:rotate(1.8deg)} }
+@keyframes fhd-bag { 0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)} }
+@keyframes fhd-aperture { 0%,20%,100%{transform:rotate(0) scale(1)}48%,62%{transform:rotate(22deg) scale(.87)} }
+@keyframes fhd-cloud { 0%,100%{transform:translateX(-2px)}50%{transform:translateX(2px)} }
+@keyframes fhd-compass { 0%,100%{transform:rotate(-14deg)}35%{transform:rotate(18deg)}65%{transform:rotate(5deg)} }
+@keyframes fhd-wave { 0%,100%{transform:scaleY(.65)}32%{transform:scaleY(1)}68%{transform:scaleY(.4)} }
+@keyframes fhd-dot { 0%,45%,100%{transform:translateY(0)}22%{transform:translateY(-3px)} }
+@keyframes fhd-signal { 0%,100%{opacity:.42}45%,65%{opacity:1} }
+@keyframes fhd-exchange { 0%,100%{transform:translateX(-1.5px);opacity:.6}50%{transform:translateX(1.5px);opacity:1} }
+@keyframes fhd-location { 0%,100%{transform:scale(.86);opacity:.72}50%{transform:scale(1.1);opacity:1} }
+@keyframes fhd-ribbon { 0%,100%{transform:skewX(-3deg)}50%{transform:skewX(3deg)} }
+@keyframes fhd-display { 0%,100%{opacity:.7}35%,65%{opacity:1} }
+@keyframes fhd-pencil { 0%,100%{transform:translate(0,0) rotate(-2deg)}35%{transform:translate(-1px,.6px) rotate(1deg)}65%{transform:translate(.7px,-.5px) rotate(2deg)} }
+/* Reduced motion restores the original pose, rather than freezing mid-gesture. */
+[data-reduce-motion=true] .icon-motion { animation:none!important; }
+@media(prefers-reduced-motion:reduce) { .icon-motion { animation:none!important; } }
+
+/* A quiet editorial control panel; artwork remains the visual focus. */
+.motion-panel { padding:23px 20px 17px; margin:0 0 24px; border:1px solid #ffffff25; border-radius:25px; background:radial-gradient(ellipse at 90% 0,#54726b33,transparent 65%),linear-gradient(145deg,#293b43,#17232e); color:#f4f5ef; box-shadow:0 12px 32px -20px #0008; }
+.motion-kicker { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#b8c9c4; font-size:8px; letter-spacing:1.5px; }
+.motion-quality { border:1px solid #b4c9c855; border-radius:5px; padding:3px 5px; font-size:9px; letter-spacing:1px; }
+.motion-panel h3 { margin:18px 0 10px; font-size:21px; font-weight:500; letter-spacing:.6px; }
+.motion-lead { font-size:25px; line-height:1.65; letter-spacing:.06em; margin:0; }
+.motion-samples { display:flex; justify-content:space-between; gap:10px; padding:26px 0 23px; }
+.motion-samples .app-icon { width:56px; height:56px; border-radius:14px; box-shadow:0 8px 13px -6px #0009,inset 0 1px 0 #ffffff55; }
+.motion-copy { font-size:11px; line-height:1.95; color:#c6d1d1; margin:0 0 22px; }
+.motion-mode-picker { display:grid; grid-template-columns:1fr 1fr; gap:5px; padding:5px; border-radius:16px; background:#0003; border:1px solid #ffffff10; }
+.motion-mode-picker button { border-radius:11px; min-height:58px; padding:9px 5px; font-size:13px; color:#b8c4c9; }
+.motion-mode-picker button span { display:block; font-size:8px; letter-spacing:.7px; margin-top:5px; }
+.motion-mode-picker [aria-pressed=true] { background:#dcebcf; color:#263d36; box-shadow:0 2px 8px #0002; }
+.motion-status { color:#d4e5ce; font-size:10px; line-height:1.7; margin:13px 0; }
+.motion-gallery-link { width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px; text-align:left; padding:15px 0; border-top:1px solid #ffffff20; border-bottom:1px solid #ffffff20; font-size:11px; }
+.motion-gallery-link>span { font-size:19px; }
+.motion-footnote { font-size:9px; line-height:1.85; opacity:.65; margin:15px 0 0; }
+.motion-overlay { background:linear-gradient(150deg,#152933f5,#172131f7 65%,#29342cf5); }
+.motion-overlay>.motion-panel { max-width:460px; margin-left:auto; margin-right:auto; }
+.motion-overlay>.overlay-heading,.motion-overlay>.reset-layout { max-width:460px; margin-left:auto; margin-right:auto; }
+.motion-overlay>.overlay-heading h2 { font-size:18px; }
+.springboard-tools .home-motion-button { gap:5px; white-space:nowrap; font-size:8px; letter-spacing:.2px; }
+.motion-indicator { display:inline-block; width:5px; height:5px; border-radius:50%; background:#b5b9c4; flex-shrink:0; }
+.home-motion-button[data-active=true] .motion-indicator { background:#d4f4b9; box-shadow:0 0 7px #c4eca67a; }
+.motion-gallery-intro { font-size:11px; letter-spacing:1px; max-width:460px; margin:0 auto 12px; }
+.motion-gallery-intro>span { float:right; font-size:9px; opacity:.6; letter-spacing:0; }
+.motion-gallery-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; max-width:460px; margin:auto; }
+.motion-gallery-toolbar button { padding:9px 13px; font-size:10px; min-height:40px; border:1px solid #ffffff30; border-radius:12px; }
+.motion-detail { max-width:460px; margin:15px auto 23px; text-align:center; padding:25px 10px 14px; background:radial-gradient(ellipse at 50% 30%,#9bc6c222,transparent 70%); border:1px solid #ffffff16; border-radius:24px; }
+.motion-detail-art { display:flex; justify-content:center; }
+.motion-detail .app-icon { width:180px; height:180px; border-radius:26%; box-shadow:0 18px 28px -16px #000b,inset 0 1px 1px #ffffff55; }
+.motion-detail h3 { font-size:16px; font-weight:500; margin:20px 0 8px; }
+.motion-detail p { font-size:10px; color:#b4c3ca; margin:0 0 5px; line-height:1.8; }
+.motion-detail button { padding:11px 20px; font-size:10px; color:#d5e4c9; }
+.motion-gallery { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; max-width:460px; margin:auto; }
+.motion-gallery>button { display:flex; flex-direction:column; align-items:center; gap:8px; border:1px solid transparent; border-radius:15px; padding:10px 0; min-width:0; }
+.motion-gallery>button[aria-pressed=true] { background:#deebd410; border-color:#d4e8c866; }
+.motion-gallery .app-icon { width:58px; height:58px; border-radius:26%; }
+.motion-gallery>button>span:last-child { font-size:8px; white-space:nowrap; }
+.motion-gallery-overlay>.motion-footnote { text-align:center; }
+@media(max-width:350px) {
+  .motion-panel { padding:20px 15px 15px; }
+  .motion-samples { gap:8px; }
+  .motion-samples .app-icon { width:47px; height:47px; border-radius:12px; }
+  .motion-panel h3 { font-size:19px; }
+  .motion-lead { font-size:23px; }
+  .motion-gallery { gap:3px; }
+  .motion-gallery .app-icon { width:49px; height:49px; }
+  .springboard-tools { gap:2px; }
+  .springboard-tools .home-motion-button { font-size:7px; }
+}
+
+/* Image-review pass: stronger small-text contrast and a larger, stable entry. */
+.motion-footnote { opacity:1; color:#afc0c7; font-size:10px; }
+.motion-mode-picker button { color:#d2dde0; }
+.motion-mode-picker [aria-pressed=true] { color:#263d36; }
+.motion-gallery-intro>span { opacity:1; color:#b4c8ce; }
+.springboard-tools { gap:8px; justify-content:space-between; }
+.springboard-tools .home-motion-button { min-height:34px; padding:5px 8px; font-size:9px; opacity:1; border:1px solid #ffffff30; border-radius:9px; background:#ffffff12; }
+.motion-detail-nav { display:flex; justify-content:center; align-items:center; gap:22px; max-width:460px; margin:15px auto 0; }
+.motion-detail-nav button { min-width:44px; min-height:44px; border:1px solid #ffffff24; border-radius:50%; font-size:19px; }
+.motion-detail-nav button:hover { background:#ffffff12; }
+.motion-detail-nav>span { font-size:10px; letter-spacing:2px; color:#c3d5d6; font-variant-numeric:tabular-nums; min-width:60px; text-align:center; }
+.motion-detail { margin-top:12px; }
+.motion-detail button { font-size:11px; min-height:44px; }
+.motion-detail button>span { font-size:16px; margin-left:5px; }
+.motion-gallery>button { padding:10px 3px; }
+.overlay-open :is(#home-screen,#app-screen) .app-artwork { --motion-play:paused; }
+@media(max-width:350px) {
+  .springboard-tools { gap:3px; }
+  .springboard-tools .home-motion-button { font-size:8px; padding:5px; }
+}
+@media(max-height:560px) {
+  .springboard-tools { display:flex; justify-content:flex-end; padding-bottom:3px; }
+  .springboard-tools>button:not(.home-motion-button) { display:none; }
+}
+@media(min-width:760px) {
+  .motion-gallery-overlay>.overlay-heading,.motion-gallery-overlay>.motion-gallery-intro,.motion-gallery-overlay>.motion-gallery-toolbar { max-width:1000px; }
+  .motion-workbench { display:grid; grid-template-columns:minmax(260px,1fr) minmax(350px,1.25fr); align-items:start; gap:40px; max-width:1000px; margin:20px auto; }
+  .motion-detail-column { position:sticky; top:0; }
+  .motion-detail .app-icon { width:240px; height:240px; }
+  .motion-gallery { max-width:none; width:100%; gap:8px; }
+  .motion-gallery .app-icon { width:68px; height:68px; }
+  .motion-gallery>button { padding:12px 6px; }
+}
