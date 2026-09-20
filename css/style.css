@@ -404,7 +404,13 @@ a.primary-button{text-decoration:none;text-align:center;display:inline-flex;just
   pointer-events: none;
 }
 .mini-app { overflow: hidden; isolation: isolate; }
+:is(.app-icon,.mini-app) { container-type: inline-size; }
+.app-artwork { shape-rendering: geometricPrecision; }
 .app-artwork text { font-style: normal; }
+/* Optical sizing preserves the silhouette without crowding compact launchers. */
+@container (max-width: 40px) {
+  .app-artwork .app-fine-detail { display: none; }
+}
 .app-icon:after { background: linear-gradient(145deg,#ffffff18,transparent 45%,#00000008); }
 [data-icon-style=glass] :is(.app-icon,.mini-app) {
   background: linear-gradient(135deg,#fff6,#ffffff16)!important;

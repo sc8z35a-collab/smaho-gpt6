@@ -81,7 +81,10 @@
     const shadow = content => `<g filter="url(#ai-shadow)">${content}</g>`;
     const ticks = (cx,cy,r,count,color,width=1) => Array.from({length:count},(_,i)=>line(`M${cx} ${cy-r}v${i%5===0?3.7:1.6}`,color,i%5===0?width*1.4:width,`transform="rotate(${i*360/count} ${cx} ${cy})"`)).join('');
     const rule = (x,y,length,color='#bcc6d1') => line(`M${x} ${y}h${length}`,color,1.2);
-    const screw = (x,y) => circle(x,y,1.6,metal)+line(`M${x-.7} ${y+.7}l1.4-1.4`,'#5b697b',.7);
+    const screw = (x,y) => circle(x,y,1.8,'#435268')+circle(x,y-.15,1.5,metal)+circle(x,y-.15,1.1,'none','stroke="#f9fcff" stroke-width=".18"')+line(`M${x-.7} ${y+.55}l1.4-1.4`,'#526073',.5);
+    const fine = content => `<g class="app-fine-detail">${content}</g>`;
+    const texture = (x,y,w,h,r,name) => fine(rect(x,y,w,h,r,paint(name)));
+    const rim = (x,y,r) => circle(x,y,r,'none','stroke="url(#ai-rim)" stroke-width=".65"');
     const bookLines = (x,y,count,length,color='#aebac9') => Array.from({length:count},(_,i)=>rule(x,y+i*5,length-(i===count-1?6:0),color)).join('');
     const art = {};
 
@@ -97,12 +100,17 @@
     art.camera = () => shadow(path('M12 24h12l5-8h22l5 8h12a6 6 0 0 1 6 6v30a6 6 0 0 1-6 6H12a6 6 0 0 1-6-6V30a6 6 0 0 1 6-6Z',metal)+rect(7,34,66,25,3,ink)+rect(10,19,11,5,2,ink)+rect(58,27,10,5,1.5,paper))+
       Array.from({length:7},(_,i)=>line(`M${11+i*2} 38v16`,'#75808e',.55)).join('')+
       circle(42,44,23,ink)+circle(42,44,20.5,metal)+ticks(42,44,19,48,'#4a5668',.5)+circle(42,44,16.5,ink)+circle(42,44,13.6,paint('lens'))+
-      Array.from({length:6},(_,i)=>path('M42 32l10 7-3 10-10 5-9-9 3-9Z','none',`stroke="#91b9dc" stroke-width=".65" opacity=".4" transform="rotate(${i*60} 42 44)"`)).join('')+
-      circle(42,44,7.5,'#112337')+circle(39,40,4,'#a7e5f2','opacity=".55"')+circle(46,49,2.5,'#8789e7','opacity=".65"')+line('M28 36a17 17 0 0 1 21-6','#fff',1.2,'opacity=".75"')+circle(17,29,2,'#ed6f71')+screw(11,61)+screw(68,61);
+      circle(42,44,11.8,'#0c2035')+Array.from({length:7},(_,i)=>path('M42 32.3a11.7 11.7 0 0 1 9.15 4.4L46.6 43l-4.6-5.3Z',paint('blade'),`stroke="#93b8cc" stroke-width=".22" transform="rotate(${i*360/7} 42 44)"`)).join('')+
+      circle(42,44,5.7,'#081623')+circle(42,44,13.6,paint('lens-coat'))+rim(42,44,13.6)+rim(42,44,16.4)+
+      path('M31 38a12 12 0 0 1 14-6l-3 4a9 9 0 0 0-9 5Z','#d4ffff','opacity=".48"')+
+      '<ellipse cx="46" cy="51" rx="4.8" ry="1.3" transform="rotate(-30 46 51)" fill="#aeaaff" opacity=".28"/>'+
+      circle(38,39,1.5,'#e3ffff','opacity=".9"')+line('M28 36a17 17 0 0 1 21-6','#fff',.7,'opacity=".85"')+circle(17,29,2,'#8d263d')+circle(17,28.7,1.4,rose)+screw(11,61)+screw(68,61);
     art.weather = () => circle(51,26,22,'#fff','opacity=".06"')+Array.from({length:12},(_,i)=>line('M51 5v4','#ffdf87',1.5,`transform="rotate(${i*30} 51 26)"`)).join('')+
-      shadow(circle(51,26,15,gold))+circle(47,22,9,paint('glow'))+
-      shadow(path('M19 62a12 12 0 0 1-1-24 16 16 0 0 1 30-2 13 13 0 1 1 10 26Z',white))+
-      line('M17 44a8 8 0 0 1 7-1 12 12 0 0 1 22-4','#fff',1.5)+line('M23 66h27M28 70h14','#def3ff',1.4,'opacity=".55"');
+      shadow(circle(51,26,15,paint('sun')))+circle(47,22,9,paint('glow'))+
+      shadow(path('M19 62a12 12 0 0 1-1-24 16 16 0 0 1 30-2 13 13 0 1 1 10 26Z',paint('cloud')))+
+      path('M18 39a16 16 0 0 1 29-2 13 13 0 0 1 13 2c-11-2-12 8-22 7-8-1-8-8-20-7Z','#fff','opacity=".4"')+
+      line('M10 51a10 10 0 0 0 10 9h38a11 11 0 0 0 9-5','#a5c6e2',.75,'opacity=".6"')+
+      line('M17 43a8 8 0 0 1 6-1 12 12 0 0 1 22-5','#fff',1)+line('M23 66h27M28 70h14','#def3ff',1.1,'opacity=".45"');
     art.mail = () => shadow(rect(12,22,56,42,6,'#1868bb')+rect(19,14,42,40,4,paper))+
       rect(25,20,13,3,1,'#88bbdf')+bookLines(25,28,3,28,'#c3d3e2')+
       shadow(rect(10,29,60,36,5,white))+path('M11 31l29 23 29-23v30H11Z','#d2e6f9')+
@@ -120,7 +128,8 @@
       shadow(path('M55 14c-10 0-17 7-17 16 0 12 17 27 17 27s17-15 17-27c0-9-7-16-17-16Z',rose))+circle(55,30,8,paper)+circle(55,30,4,'#cc596d')+line('M43 27a12 12 0 0 1 11-8','#fff',1.1,'opacity=".65"');
     art.notes = () => shadow(rect(11,12,58,60,5,'#c9bfaa')+rect(10,8,58,60,5,paper))+rect(10,8,58,16,5,gold)+rect(10,19,58,6,0,gold)+
       Array.from({length:8},(_,i)=>circle(17+i*6,13,1.2,'#ad8747')+line(`M${17+i*6} 7v6`,'#fff3d3',1.8)).join('')+
-      line('M21 28v34','#efb1ad',.8)+bookLines(16,32,6,44,'#cbd6dc')+path('M54 68V55h14Z','#f1e5bd','stroke="#d8c899" stroke-width=".6"')+
+      line('M21 28v34','#efb1ad',.8)+bookLines(16,32,6,44,'#cbd6dc')+
+      path('M55 68V55h13Z','#bbae92','opacity=".35" transform="translate(.6 .6)"')+path('M54 68V55h14Z',paint('paper-fold'),'stroke="#d5c9b2" stroke-width=".45"')+line('M54.5 66.5V55.5h12','#fff',.5)+
       `<g transform="rotate(32 57 44)">${shadow(rect(54,25,7,33,1,gold))}${rect(54,25,7,6,1,rose)}${rect(54,31,7,3,0,metal)}${line('M56 35v22','#fff3bb',1)}${path('M54 58l3.5 8 3.5-8Z','#dcc6a2')}${path('M56.2 63l1.3 3 1.3-3Z',ink)}</g>`;
     art.reminders = () => shadow(rect(13,10,55,62,6,'#d1d7df')+rect(11,7,55,62,6,paper))+
       rect(28,5,22,9,3,metal)+rect(32,7,14,3,1,'#f5f7fa')+
@@ -134,8 +143,8 @@
       shadow(path('M7 39a5 5 0 0 1 5-5h20l5 5h31a5 5 0 0 1 5 6l-4 20a5 5 0 0 1-5 4H15a5 5 0 0 1-5-4Z',blue))+
       line('M12 40h18l5 5h33','#bfecff',1.3)+line('M17 64h44','#276ea9',.9,'opacity=".5"')+rect(31,53,20,4,2,'#d4f1ff','opacity=".75"');
     art.calculator = () => shadow(rect(13,7,54,68,8,'#19222d')+rect(13,5,54,67,8,metal)+rect(16,8,48,61,6,ink))+
-      rect(21,13,38,17,3,'#718f8b')+rect(23,15,34,13,2,'#c4dbca')+text(52,25,'128',12,'#385c50','style="text-anchor:end;font-family:monospace" letter-spacing="1"')+line('M26 18h8','#9bbfa9',1)+
-      Array.from({length:12},(_,i)=>{const x=21+(i%3)*13,y=35+Math.floor(i/3)*8;return rect(x,y+1,11,6,2,'#121b27')+rect(x,y,11,6,2,i%3===2?gold:metal)+text(x+5.5,y+4.8,['7','8','÷','4','5','×','1','2','−','0','·','='][i],5.3,i%3===2?'#754c29':'#334154','font-weight="700"');}).join('');
+      rect(21,13,38,17,3,'#718f8b')+rect(23,15,34,13,2,'#c4dbca')+text(53,25,'128',11,'#294d43','style="text-anchor:end;font-family:monospace" letter-spacing=".8"')+
+      Array.from({length:16},(_,i)=>{const x=21+(i%4)*9.8,y=35+Math.floor(i/4)*8;return rect(x,y+1,8.5,6,1.6,'#121b27')+rect(x,y,8.5,6,1.6,i%4===3?gold:metal)+text(x+4.25,y+4.65,['7','8','9','÷','4','5','6','×','1','2','3','−','C','0','=','+'][i],4.8,i%4===3?'#62401e':'#243348','font-weight="700"');}).join('');
     art.settings = () => {
       const teeth=Array.from({length:12},(_,i)=>rect(35,6,10,17,2,metal,`transform="rotate(${i*30} 40 40)"`)).join('');
       return shadow(teeth+circle(40,40,28,metal))+circle(40,40,24,ink)+circle(40,40,21,metal)+ticks(40,40,19,48,'#5a6777',.65)+circle(40,40,15,ink)+circle(40,40,11.7,metal)+circle(40,40,7.4,'#748296')+circle(40,40,5,ink)+
@@ -153,7 +162,7 @@
     art.wallet = () => shadow(rect(11,14,57,53,7,'#121c2b'))+
       `<g transform="rotate(-8 40 30)">${rect(15,13,47,29,4,gold)}${rect(19,18,8,6,1,'#fff0b6')}${rule(33,21,20,'#b99157')}</g>`+
       rect(16,24,48,29,4,green)+rect(16,30,48,3,0,'#376f68')+rect(19,36,9,6,1,'#d9eeb9')+
-      shadow(rect(11,39,58,29,5,ink))+rect(15,43,49,21,3,'none','stroke="#a7a7b5" stroke-width=".7" stroke-dasharray="1.5 2"')+
+      shadow(rect(11,39,58,29,5,paint('leather-ink')))+texture(11,39,58,29,5,'leather-grain')+rect(15,43,49,21,3,'none','stroke="#a7a7b5" stroke-width=".7" stroke-dasharray="1.5 2"')+
       rect(52,45,20,15,4,'#566178')+rect(54,47,16,11,3,'#65738b')+circle(61,52.5,3,gold)+circle(61,52.5,1.6,'#c49154')+line('M17 40h45','#8290a2',.8);
     art.recorder = () => rect(9,12,62,56,8,ink)+
       Array.from({length:5},(_,i)=>line(`M14 ${23+i*8}h52`,'#60728a',.5,'opacity=".4"')).join('')+
@@ -171,9 +180,9 @@
       path('M40 43V20a23 23 0 0 1 20 35Z','#e2d8ff','opacity=".6"')+ticks(40,43,21,30,'#ece8ff',.65)+
       line('M40 43V28','#fff',2)+line('M40 43l10 6','#fff',1.6)+circle(40,43,2.6,gold)+text(40,59,'FOCUS',4.7,'#f4ecff','letter-spacing="1.3"')+line('M19 27a28 28 0 0 1 25-12','#fff',1,'opacity=".7"');
     art.habits = () => circle(40,37,28,'#deedc5','opacity=".16"')+line('M40 58V27','#e6f5c3',2.5)+
-      shadow(path('M39 43C19 44 13 30 15 18c18-1 29 9 24 25Z',green)+path('M40 34c-1-18 11-24 25-23 1 15-8 27-25 23Z',green))+
+      shadow(path('M39 43C19 44 13 30 15 18c18-1 29 9 24 25Z',paint('leaf'))+path('M40 34c-1-18 11-24 25-23 1 15-8 27-25 23Z',paint('leaf')))+
       line('M39 42 21 24m19 9 19-16','#d9efad',1.3)+line('m28 31 1-7m4 14-9-1m25-13 8 1m-4-6v-4','#b8d79c',.7)+
-      shadow(path('M25 52h30l-4 16H29Z',paper))+rect(23,49,34,7,3,white)+line('M31 58l2 7m13-7-2 7','#cad7c7',1)+
+      shadow(path('M25 52h30l-4 16H29Z',paint('ceramic')))+rect(23,49,34,7,3,paint('ceramic'))+line('M26 51h28','#fff',.8)+line('M29 57l2 9','#fff',1,'opacity=".65"')+
       circle(62,59,9,'#e6f1d8')+line('m58 59 3 3 5-6','#629070',1.8);
     art.expenses = () => shadow(rect(12,11,47,60,5,ink)+rect(15,9,44,58,4,paper))+
       rect(15,9,7,58,2,green)+bookLines(28,20,2,24)+
@@ -185,13 +194,13 @@
       shadow(path('M14 31h52l-4 37H18Z',gold))+path('M57 32h9l-4 36-7-5Z','#bc8957')+
       path('M20 33h36l-2 29H22Z','#f4d8af','opacity=".4"')+line('M28 34v-8a12 12 0 0 1 24 0v8','#8c6647',3)+line('M28 33v-7a12 12 0 0 1 24 0v7','#ffedcb',1.5)+
       circle(28,35,2,'#b88d5d')+circle(52,35,2,'#b88d5d')+rect(28,44,23,14,3,paper)+path('M35 51c0-5 9-5 9 0 0 4-4 6-4 6s-5-2-5-6Z',green)+line('M22 64h31','#ffe5bd',1);
-    art.journal = () => shadow(rect(13,10,53,62,6,'#694b6c')+rect(16,13,48,57,4,paper)+rect(12,7,51,61,5,rose))+
+    art.journal = () => shadow(rect(13,10,53,62,6,'#694b6c')+rect(16,13,48,57,4,paper)+rect(12,7,51,61,5,paint('leather-rose')))+texture(12,7,51,61,5,'leather-grain')+
       rect(12,7,9,61,4,'#9c667f')+line('M23 12v51','#ffe2e5',.65,'opacity=".55"')+
-      rect(28,22,26,25,3,'none','stroke="#ffe1d7" stroke-width=".8"')+text(41,31,'DIARY',5.2,'#fff3dc','letter-spacing="1"')+
+      rect(28,22,26,25,3,'none','stroke="#ffe1d7" stroke-width=".8"')+text(41,31,'DIARY',5.2,'#fff3dc','letter-spacing=".9" font-weight="600"')+
       path('M41 35l1.5 3 3.5.5-2.5 2.5.5 3.5-3-1.5-3 1.5.5-3.5-2.5-2.5 3.5-.5Z',gold)+
       rect(53,8,3,59,1,'#734f72')+line('M56 9v56','#edb5c5',.7)+path('M38 67v8l4-3 4 3v-8Z',gold)+line('M18 70h18m11 0h14','#d0bca8',.8);
     art.contacts = () => shadow(rect(13,8,52,63,6,ink))+[18,31,44].map((y,i)=>rect(62,y,7,12,2,[gold,rose,green][i])).join('')+
-      rect(13,7,50,62,6,blue)+rect(17,11,42,54,3,'none','stroke="#c4e6ff" stroke-width=".6" stroke-dasharray="1.5 2"')+
+      rect(13,7,50,62,6,blue)+texture(13,7,50,62,6,'bookcloth')+rect(17,11,42,54,3,'none','stroke="#c4e6ff" stroke-width=".6" stroke-dasharray="1.5 2"')+
       shadow(circle(38,32,10,paper)+path('M22 55c0-20 32-20 32 0v2H22Z',paper))+
       line('M25 54c0-7 4-11 7-12','#fff',1.1)+rect(28,60,20,2,1,'#c3e1f5')+
       [19,32,45,58].map(y=>rect(9,y,9,3,1.5,metal)).join('');
@@ -222,18 +231,123 @@
     art.music = () => [21,27,33].map(r=>circle(40,40,r,'none','stroke="#fff" stroke-width=".6" opacity=".13"')).join('')+
       shadow(path('M32 52V23l29-7v32c0 6-6 10-12 9-7-1-8-7-2-11 3-2 6-2 9-2V29l-19 5v24c0 6-6 10-12 9-7-1-8-7-2-11 3-2 6-2 9-2Z',white))+
       path('M37 27v7l19-5v-7Z','#fff')+line('M34 25l24-6M24 60c2-2 5-3 8-2M48 50c2-2 5-3 8-2','#fff',1.3)+line('M38 35v21','#f1bac6',.9)+[7,13,10,5].map((h,i)=>rect(16+i*4,38-h/2,1.6,h,.8,'#fff','opacity=".35"')).join('');
+    // Bounded vector finishing, rather than raster noise or a global blur.
+    // Keep micro-detail separate so compact UI instances can omit it optically.
+    const finish = {
+      calendar: () => texture(12,30,56,30,2,'paper-grain')+
+        fine([65,67.4,69.5].map((y,i)=>line(`M16 ${y}h47`,i%2?'#fff':'#9caabc',.3)).join(''))+
+        [24,56].map(x=>circle(x,16.7,3.1,'none','stroke="#752944" stroke-width=".45"')+line(`M${x-.65} 8.5v7.5`,'#fff',.6)).join('')+
+        line('M12 28.8h56','#a94361',.6)+line('M15 12.3h50','#ffe7ed',.6),
+      photos: () => fine(Array.from({length:8},(_,i)=>`<g transform="rotate(${i*45} 40 40)">${line('M41 9c9 5 12 15 5 29','#fff',.45,'opacity=".5"')}${line('M42 15c4 7 4 13 0 20','#69495c',.35,'opacity=".12"')}</g>`).join(''))+
+        circle(40,40,6,paint('pearl'))+circle(38.4,38.3,1.3,'#fff','opacity=".8"'),
+      camera: () => texture(8,36,10,20,1,'grip')+texture(66,36,5,20,1,'grip')+
+        fine(line('M12 25.7h14m31 0h11','#fff',.45)+text(40,20.8,'A U R A',2.6,'#344458','font-weight="700"')+line('M9 58.5h8m49 0h5','#8a9caf',.4)+
+        [60,62,64,66].map(x=>line(`M${x} 28v2.7`,'#fff',.5)).join('')+line('M33 16.8h14','#fff',.55))+
+        rim(42,44,22.6)+circle(42,44,20.9,'none','stroke="#182c43" stroke-width=".45"'),
+      weather: () => line('M42 17a13 13 0 0 1 12-3','#fff7d4',.75)+fine(line('M16 68h2m35 0h2M20 72h2m24 0h2','#e5f6ff',.5,'opacity=".5"')),
+      mail: () => texture(21,16,38,12,2,'paper-grain')+texture(16,54,48,8,1,'paper-grain')+
+        line('M12 63.7h55','#afc6db',.6)+line('M14 32l24 19a3 3 0 0 0 4 0l24-19','#fff',.55)+
+        fine(path('M54 19h5v6h-5Z','none','stroke="#96b9d5" stroke-width=".5" stroke-dasharray=".6 .65"')+line('M52 22c-3-2-6 2-9 0m0 2c3 2 6-2 9 0','#9bb9ce',.4)),
+      clock: () => rim(40,40,33.5)+rim(40,40,30.8)+circle(40,40,28,'none','stroke="#c6cfda" stroke-width=".35"')+
+        fine(text(40,32,'AURA',3,'#8590a1','letter-spacing="1.1"')+text(40,52,'PRECISION',2.2,'#9aa3af','letter-spacing=".7"'))+
+        path('M18 23a29 29 0 0 1 41-5c-13-4-24-3-35 10Z',paint('crystal')),
+      maps: () => fine([[8,11],[16,11],[9,33],[16,37],[65,11],[65,59],[11,66],[18,69]].map(([x,y])=>rect(x,y,4,3,.5,'#edf3df','stroke="#97b99e" stroke-width=".3"')).join('')+
+        line('M48 4c-2 4-3 6-3 8M46 60c-4 7-6 12-5 17','#c1eff8',.55)+line('M28 51v24','#d5edff',.6))+
+        circle(55,30,7.9,'none','stroke="#a24262" stroke-width=".65"')+circle(55,29,3.4,paint('ruby')),
+      notes: () => fine(line('M14 69h37M15 71h37','#faf8ed',.35)+line('M11 24.8h55','#bb9247',.4))+
+        fine(`<g transform="rotate(32 57 44)">${line('M57 63.5l.5 1.1','#a0a8b1',.35)}${line('M59.5 35v21','#a77f3e',.35)}</g>`),
+      reminders: () => texture(13,15,51,48,2,'paper-grain')+fine(line('M14 70h48M16 72h43','#fff',.4)+line('M30 5.8h17','#fff',.5)+screw(30,9)+screw(47,9))+
+        [42,57].map((y,i)=>circle(23,y,3.8,'none',`stroke="${i?'#e5c7f7':'#f7d4a4'}" stroke-width=".55"`)).join(''),
+      files: () => fine(line('M20 18v12M33 25h25','#fff',.65)+line('M13 65q0 3 4 3h46','#214e80',.45)+line('M14 66.5h47','#94ceef',.4))+
+        rect(30,52.5,22,5,2.3,'none','stroke="#266f9f" stroke-width=".45"')+line('M33 54h16','#fff',.55,'opacity=".8"'),
+      calculator: () => fine(Array.from({length:16},(_,i)=>{const x=21+i%4*9.8,y=35+Math.floor(i/4)*8;return line(`M${x+1.8} ${y+.7}h4.9`,'#fff',.45,'opacity=".6"')+line(`M${x+1.4} ${y+5.4}h5.7`,'#101e30',.4,'opacity=".5"');}).join('')+
+        text(40,11,'A U R A',2.2,'#c6d3e2')+line('M23 15.3h33','#456859',.45)+line('M24 27.5h32','#eaffdd',.4))+
+        path('M23 15h24l-7 13H23Z','#fff','opacity=".1"'),
+      settings: () => fine(Array.from({length:12},(_,i)=>`<g transform="rotate(${i*30} 40 40)">${line('M37 7h6l1 1v7','#fff',.5,'opacity=".85"')}${line('M44 9v8','#65748a',.6)}${texture(37,8,6,7,1,'brushed')}</g>`).join(''))+
+        rim(40,40,27.6)+rim(40,40,21)+rim(40,40,11.5)+circle(40,40,7.1,'none','stroke="#d8e4f3" stroke-width=".35"'),
+      games: () => fine(line('M12 49c2-12 7-24 13-25h29c5 0 9 8 11 14','#fff',.65)+
+        [33,47].map(x=>circle(x,48,2.8,'none','stroke="#aeb9d0" stroke-width=".4"')+texture(x-2,46,4,4,2,'grip')).join('')+
+        [37,40,43].map(x=>circle(x,44,.55,'#777789')).join('')+screw(16,56)+screw(64,56))+rect(37,33,6,1,.5,'#f1c6ff'),
+      health: () => path('M16 29c0-10 13-16 22-4-10-5-18 2-19 10Z',paint('crystal'))+
+        fine(line('M43 60c8-7 16-15 20-23','#be446c',.6,'opacity=".4"'))+rim(59,58,8.7)+circle(59,58,6.8,'none','stroke="#ead2d9" stroke-width=".35"'),
+      wallet: () => fine(line('M17 41h46','#b5c0d0',.55)+line('M14 66h48','#0d192b',.6)+
+        line('M21 19v4m-2-2h8m-4-3v6','#a4773f',.4)+line('M32 27h23','#c9e7c1',.5)+
+        [22,27,32,37].map(x=>rect(x,47,3,1,.5,'#b9c5d3','opacity=".7"')).join('')+line('M57 49h9M56 57h9','#adc0d0',.45,'stroke-dasharray="1 1.2"'))+
+        rim(61,52.5,2.9)+circle(60.5,51.7,.8,'#fff1ba','opacity=".7"'),
+      recorder: () => rect(9,12,62,56,8,'none','stroke="url(#ai-rim)" stroke-width=".6"')+
+        fine([8,17,11,29,43,24,12,32,19,8,14].map((h,i)=>line(`M${13.6+i*5} ${41-h/2}v${h-2}`,'#ffc2d1',.4,'opacity=".75"')).join('')+
+        text(22,18,'-12',2.3,'#92a4ba')+text(60,18,'0 dB',2.3,'#92a4ba')+line('M14 61h51','#8a9cb2',.35)),
+      today: () => texture(14,30,42,37,3,'paper-grain')+fine(line('M15 14h49','#fff',.55)+line('M16 69h41','#a4b8b6',.45)+line('M14 29h50','#bdcfcc',.5))+
+        rim(62,60,10.5)+line('M55 55a9 9 0 0 1 10-3','#e7ffd9',.7),
+      focus: () => rim(40,43,28.5)+rim(40,43,25.9)+fine([35,38,41,44].map(x=>line(`M${x} 8v4`,'#718197',.4)).join('')+text(40,50,'25',4,'#f0eaff','letter-spacing=".6"'))+
+        path('M20 29a25 25 0 0 1 31-8c-11-1-20 4-25 12Z',paint('crystal')),
+      habits: () => fine(line('M19 22c2 8 7 13 16 17M44 30c8-2 14-8 18-15','#edffd1',.55,'opacity=".75"')+line('m25 29-4 1m12 6 1-6m14-3 1-6m5 2 5-1','#b2d4a0',.45))+
+        path('M25 50q15-3 30 0q-14 2-30 0Z','#5a6e52')+line('M26 49.8q14-2 28 0','#cfe2c2',.55)+line('M40 51v-5','#698f62',2)+line('M31 67h16','#adbcaa',.5),
+      expenses: () => fine(line('M16 65h35M17 67h29','#c4d6d1',.35)+line('M30 42v9m8-17v17m9-25v16','#fff',.6,'opacity=".7"')+ticks(59,57,12.8,48,'#a67537',.3))+
+        rim(59,57,13.7)+line('M49 50a12 12 0 0 1 15-3','#fff1c0',.8),
+      shopping: () => texture(20,39,34,23,2,'kraft')+fine(line('M19 35l2 30h32','#ffeac8',.6)+line('M58 38l-2 23 5 5','#a67b4f',.5))+
+        line('M29 44.5h21','#fff',.45)+line('M29 58.5h21','#bf925c',.45),
+      journal: () => fine(rect(25,11,35,53,2,'none','stroke="#f6c1c6" stroke-width=".45" stroke-dasharray="1.1 1.2"')+line('M14 11v51','#c997aa',.6)+line('M18 16v44','#80516c',.4)+line('M18 69h17m13 0h12','#fff8ed',.4))+
+        rect(28,22,26,25,3,'none','stroke="url(#ai-gold)" stroke-width=".65"')+fine(line('M30 24h22M30 45h22','#fff3d4',.4)+line('M40 69v3','#fff3c0',.5)),
+      contacts: () => fine([19,32,45,58].map(y=>line(`M10 ${y+.6}h6`,'#fff',.5)+line(`M10 ${y+2.7}h5`,'#657287',.4)).join('')+
+        [21,34,47].map((y,i)=>text(66,y+4,['A','M','Z'][i],3,'#605752','font-weight="700"')).join(''))+line('M25 55h26','#c0d2e3',.6)+line('M32 25a7 7 0 0 1 8-2','#fff',.7),
+      converter: () => fine(line('M13 15h46M22 48h45','#fff',.5)+line('M13 36h46M23 69h43','#7790a2',.5)+
+        [20,32,44].map((x,i)=>text(x,19.5,i+1,2.5,'#829aa9')).join('')+texture(22,49,46,3,1,'brushed'))+line('M19 42h28','#fff',.5),
+      reading: () => fine([0,.9,1.8].map(d=>line(`M10 ${64+d}q17-3 29 4m2 0q15-7 29-4`,d===.9?'#faf6e9':'#b9a78d',.35)).join('')+line('M12 18v42m56-43v43','#fffdf2',.5))+
+        path('M36 20q3 1 4 1v43l-4-2Z',paint('binding'))+path('M40 21l4-2v43l-4 2Z','#8a755a','opacity=".12"')+fine(line('M56 16v16','#ffd3d9',.6)),
+      sketch: () => fine(`<g transform="rotate(36 57 39)">${line('M60 25v29','#a47b39',.6)}${line('M53 19h7m-7 1.5h7m-7 1.5h7','#fff',.4)}${line('M55 59l1.5 5 1.5-5','#9f794e',.4)}</g>`)+
+        fine(`<g transform="rotate(-8 38 40)">${line('M15 68h43','#fff',.4)}${line('M18 17h12m-12 0v12','#fff',.5)}</g>`),
+      phone: () => fine(line('M17 25c1 11 9 23 20 30','#effff1',.65)+line('M49 65c5 2 11-2 13-5','#9dceb5',.6))+
+        line('M46 17a18 18 0 0 1 15 13','#fff',.55,'opacity=".65"'),
+      safari: () => rim(40,40,33.4)+rim(40,40,30.8)+circle(40,40,23,'none','stroke="#c9f0ff" stroke-width=".25" opacity=".55"')+
+        fine([0,90,180,270].map(a=>path('M40 26l1.5 6-1.5-1.5-1.5 1.5Z','#d4f6ff',`opacity=".45" transform="rotate(${a} 40 40)"`)).join(''))+
+        path('M17 24a29 29 0 0 1 39-8c-13-2-23 2-30 11Z',paint('crystal'))+circle(40,40,1.2,'#fff','opacity=".8"'),
+      messages: () => fine(line('M17 56l-1 8 14-6','#a4cfb8',.55)+line('M34 61c13 0 23-4 29-12','#aacbbb',.5))+
+        [26,39,52].map(x=>circle(x,38,3.5,'none','stroke="#639f83" stroke-width=".4"')+line(`M${x-1.2} 36h1.4`,'#d9f6e2',.6)).join(''),
+      music: () => fine(line('M35 25v28c0 4-5 8-10 8M59 19v28c0 4-4 7-8 7','#fff',.5)+line('M24 65c5 2 11-1 12-5m11-5c5 2 12-2 13-5','#bc526e',.55,'opacity=".5"'))+
+        path('M39 26l14-3v2l-14 3Z',paint('crystal'))
+    };
+    Object.keys(art).forEach(id => {
+      const base = art[id];
+      art[id] = now => base(now) + finish[id]();
+    });
     return art;
   })();
+  // Lit bevel, body tone, reflected light, and contact edge; no raster assets.
   const appIconGradients = {
-    white:['#ffffff','#dce7f3'], paper:['#fffefa','#eaeef3'], metal:['#f5f8fc','#9caabc'], ink:['#536379','#1c273b'],
-    gold:['#ffe4a1','#d9a25b'], blue:['#aadfff','#448dcf'], green:['#c0df9e','#4c977e'], rose:['#ffa9b8','#d35f80'], violet:['#c9bbed','#7d67af']
+    white:['#ffffff','#f9fcff','#edf4fc','#c5d5e7'], paper:['#fffefa','#fffdf6','#f6f3ea','#dce2e9'],
+    metal:['#f7fbff','#d3deeb','#a6b7ca','#e8eff7','#8195ad'], ink:['#66778d','#3b4d64','#26384d','#152236'],
+    gold:['#fff0bd','#f5d58d','#deb16b','#ffe3a2','#bf8a48'], blue:['#c5ecff','#8accf1','#55a1dc','#2b72b2'],
+    green:['#d2ebae','#a2cd94','#68a98e','#367d70'], rose:['#ffc3cc','#f592a9','#df6c8e','#b63f6e'], violet:['#dcd2f7','#b7a2df','#927cc3','#675091'],
+    blade:['#4e718e','#1d354e','#0b1a2f'], ceramic:['#d2ded7','#ffffff','#f5faf1','#c8d6cb','#95ab9e'],
+    'leather-rose':['#d79eaf','#be839a','#a66a87','#815371'], 'leather-ink':['#526279','#344358','#263549','#1b293c'],
+    'paper-fold':['#b7ad99','#eee6ce','#fffbee'], binding:['#e1d6c0','#baa98d','#8c785e'],
+    rim:['#ffffff','#d9e8f7','#74899f','#ebf6ff','#8193a7'], crystal:['#ffffff99','#ffffff35','#ffffff00']
   };
   let appIconInstance=0;
   A.appIcon = (id, now=new Date()) => {
     if(!Object.prototype.hasOwnProperty.call(appArtwork,id))return A.icon(id);
     const artwork=appArtwork[id](now);
-    const gradients=Object.entries(appIconGradients).filter(([name])=>artwork.includes(`ai-${name})`)).map(([name,colors])=>`<linearGradient id="ai-${name}" x1="0" y1="0" x2=".85" y2="1"><stop stop-color="${colors[0]}"/><stop offset="1" stop-color="${colors[1]}"/></linearGradient>`).join('');
-    const defs=`${gradients}<radialGradient id="ai-glow" cx=".3" cy=".15" r=".8"><stop stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient><radialGradient id="ai-lens" cx=".35" cy=".25" r=".8"><stop stop-color="#75c6d8"/><stop offset=".45" stop-color="#34557f"/><stop offset="1" stop-color="#101d32"/></radialGradient><filter id="ai-shadow" x="-30%" y="-30%" width="160%" height="170%" color-interpolation-filters="sRGB"><feDropShadow dx="0" dy="1.8" stdDeviation="1.25" flood-color="#15243c" flood-opacity=".23"/></filter>`;
+    const gradients=Object.entries(appIconGradients).filter(([name])=>artwork.includes(`ai-${name})`)).map(([name,colors])=>`<linearGradient id="ai-${name}" x1="0" y1="0" x2="${['ceramic','binding'].includes(name)?1:.85}" y2="${['ceramic','binding'].includes(name)?0:1}">${colors.map((color,i)=>`<stop offset="${i/(colors.length-1)}" stop-color="${color}"/>`).join('')}</linearGradient>`).join('');
+    const radial = (name,cx,cy,r,stops) => `<radialGradient id="ai-${name}" cx="${cx}" cy="${cy}" r="${r}">${stops.map(([offset,color,opacity=1])=>`<stop offset="${offset}" stop-color="${color}" stop-opacity="${opacity}"/>`).join('')}</radialGradient>`;
+    const materials = {
+      glow:radial('glow',.3,.15,.8,[[0,'#fff',.7],[1,'#fff',0]]),
+      lens:radial('lens',.35,.25,.8,[[0,'#acecfa'],[.25,'#408eab'],[.55,'#344f7c'],[.82,'#152b48'],[1,'#071422']]),
+      'lens-coat':radial('lens-coat',.3,.2,.85,[[0,'#b4f5ee',.45],[.35,'#4aa9d4',.07],[.65,'#685ae5',.15],[.88,'#8a96f1',.32],[1,'#060e1d',.4]]),
+      cloud:radial('cloud',.3,.1,1,[[0,'#fff'],[.38,'#fff'],[.7,'#e0edf9'],[.88,'#bdd4eb'],[1,'#8caed0']]),
+      sun:radial('sun',.32,.22,.82,[[0,'#fffbe1'],[.4,'#ffe393'],[.78,'#f6bf51'],[1,'#e49a28']]),
+      leaf:radial('leaf',.25,.18,1,[[0,'#d7edab'],[.35,'#96c779'],[.65,'#5c9c72'],[1,'#2a6f5e']]),
+      pearl:radial('pearl',.3,.2,.85,[[0,'#fff'],[.45,'#fff',.8],[1,'#eff2ff',.45]]),
+      ruby:radial('ruby',.3,.2,.8,[[0,'#ffdee0'],[.25,'#fa8c99'],[.65,'#d34767'],[1,'#8b2549']]),
+      'paper-grain':'<pattern id="ai-paper-grain" width="3" height="3" patternUnits="userSpaceOnUse"><path d="M.3.7h1.1m.3 1.5h.8" stroke="#9d907e" stroke-width=".13" opacity=".08"/><path d="M.4 1.1h.8" stroke="#fff" stroke-width=".2" opacity=".7"/></pattern>',
+      'leather-grain':'<pattern id="ai-leather-grain" width="2.4" height="2.4" patternUnits="userSpaceOnUse"><path d="m.2.6.5-.2.5.4m.3 1.1.6-.3.2.3" fill="none" stroke="#172337" stroke-width=".16" opacity=".2"/><path d="m.3.9.4-.2m1 1.5.5-.2" stroke="#ffe3eb" stroke-width=".13" opacity=".23"/></pattern>',
+      bookcloth:'<pattern id="ai-bookcloth" width="1.2" height="1.2" patternUnits="userSpaceOnUse"><path d="M0 .3h1.2M.3 0v1.2" stroke="#20446a" stroke-width=".15" opacity=".13"/><path d="M0 .7h1.2" stroke="#e6f6ff" stroke-width=".12" opacity=".25"/></pattern>',
+      grip:'<pattern id="ai-grip" width="1.4" height="1.4" patternUnits="userSpaceOnUse"><circle cx=".7" cy=".75" r=".27" fill="#060f1c" opacity=".45"/><path d="M.5.5h.4" stroke="#d7e6f8" stroke-width=".15" opacity=".35"/></pattern>',
+      brushed:'<pattern id="ai-brushed" width="3" height="1" patternUnits="userSpaceOnUse"><path d="M0 .2h3" stroke="#25384e" stroke-width=".1" opacity=".16"/><path d="M0 .5h2" stroke="#fff" stroke-width=".13" opacity=".4"/></pattern>',
+      kraft:'<pattern id="ai-kraft" width="2.8" height="2.8" patternUnits="userSpaceOnUse"><path d="M.4.3v.7m1.5.7v.6" stroke="#986537" stroke-width=".14" opacity=".24"/><path d="M.7 1.2h1" stroke="#fff2d0" stroke-width=".14" opacity=".4"/></pattern>',
+      shadow:'<filter id="ai-shadow" x="-35%" y="-35%" width="170%" height="180%" color-interpolation-filters="sRGB"><feDropShadow dx="0" dy="2" stdDeviation="1.45" flood-color="#15243c" flood-opacity=".24"/><feDropShadow dx="0" dy=".45" stdDeviation=".35" flood-color="#102039" flood-opacity=".22"/></filter>'
+    };
+    const defs=gradients+Object.entries(materials).filter(([name])=>artwork.includes(`ai-${name})`)).map(([,definition])=>definition).join('');
     const prefix=`aura-art-${++appIconInstance}-`;
     return `<svg xmlns="http://www.w3.org/2000/svg" class="app-artwork" data-app-art="${id}" viewBox="0 0 80 80" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><defs>${defs}</defs>${artwork}</svg>`.replace(/ai-/g,prefix);
   };
