@@ -310,8 +310,7 @@
   };
   A.actions.evShoppingListDelete=()=>A.confirm('リストを削除？','中の品は標準リストに移動します。',()=>{
     const list=rows('shopping'),id=shoppingList;
-    if(!A.save('shopping',list.map(x=>x.listId===id?{...x,listId:'default'}:x)))return;
-    if(!A.save('shoppingLists',rows('shoppingLists').filter(x=>x.id!==id))){A.save('shopping',list);return;}
+    if(!A.saveBatch({shopping:list.map(x=>x.listId===id?{...x,listId:'default'}:x),shoppingLists:rows('shoppingLists').filter(x=>x.id!==id),shoppingBudgets:rows('shoppingBudgets').filter(x=>x.id!==id)}))return;
     shoppingList='default';renderShopping();
   });
   A.actions.evShoppingBulk=()=>A.form('まとめて追加',area('1行に1品・100品まで','items','',8100),v=>{

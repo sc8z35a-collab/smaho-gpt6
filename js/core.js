@@ -7,6 +7,30 @@
   A.id = () => globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2);
   A.load = (key, fallback) => { try { const value = localStorage.getItem('aura.' + key); return value === null ? fallback : JSON.parse(value); } catch { return fallback; } };
   A.save = (key, value) => { try { localStorage.setItem('aura.' + key, JSON.stringify(value)); return true; } catch { A.toast('保存容量が不足しています。不要な写真を削除してください。'); return false; } };
+  // Related writes use snapshots so a failed write does not report success.
+  // localStorage has no transactions: rollback is best effort if storage itself
+  // becomes unavailable or another tab consumes its capacity.
+  A.saveBatch = values => {
+    let pending=[];const written=[];
+    try {
+      const keys=Object.keys(values);
+      if(keys.length===1)return A.save(keys[0],values[keys[0]]);
+      pending=Object.entries(values).map(([key,value])=>{
+        const encoded=JSON.stringify(value);
+        if(encoded===undefined)throw new Error('Invalid stored value');
+        return {key:'aura.'+key,encoded};
+      });
+      pending.forEach(item=>item.previous=localStorage.getItem(item.key));
+      for(const item of pending){localStorage.setItem(item.key,item.encoded);written.push(item);}
+      return true;
+    } catch {
+      let restored=true;
+      for(const item of written)try{localStorage.removeItem(item.key);}catch{restored=false;}
+      for(const item of written)if(item.previous!==null)try{localStorage.setItem(item.key,item.previous);}catch{restored=false;}
+      A.toast(restored?'保存できませんでした。変更は反映していません。':'保存と復元に失敗しました。データを書き出して保存状態を確認してください。');
+      return false;
+    }
+  };
   A.settings = A.load('settings', {wallpaper:'default', dark:false, wifi:true, bluetooth:true, cellular:true, airplane:false, focus:false, sound:true, brightness:100, volume:60});
   A.actions = {}; A.apps = {}; A.cleanups = []; A.current = null; A.locked = false;
   A.icons = {

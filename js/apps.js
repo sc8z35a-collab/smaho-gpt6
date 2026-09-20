@@ -32,7 +32,7 @@ let notes=A.load('notes',[
 {id:'note-3',title:'買いものリスト',body:'オーツミルク\n季節のフルーツ\nコーヒー豆\n小さな花束',updated:Date.now()-172800000},
 {id:'note-4',title:'auraへようこそ',body:'ここは、あなたのもう一台。\n\nメモは自動的に、このブラウザに保存されます。\n\n右上のペンから、新しいメモを書いてみてください。',updated:Date.now()-259200000}]);
 A.searchableNotes=()=>notes;
-A.noteModel={get:()=>notes,replace:list=>{if(!A.save('notes',list))return false;notes=list;return true;}};
+A.noteModel={get:()=>notes,replace:(list,related={})=>{if(!A.saveBatch({...related,notes:list}))return false;notes=list;return true;}};
 let currentNote=null,noteQuery='';
 let noteSort=A.load('noteSort','updated');
 if(!['updated','title'].includes(noteSort))noteSort='updated';
