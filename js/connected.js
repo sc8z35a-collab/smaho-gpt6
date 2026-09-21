@@ -95,12 +95,35 @@
     return '';
   };
   const weatherArt = code => A.scene(A.weatherScene(code));
+  // Decorative vector hero; unknown conditions never receive invented sunny art.
+  function weatherLandscape(code, night) {
+    const kind = A.weatherScene(code);
+    if (!kind) return '';
+    const sun = !night && ['clear','cloudy'].includes(kind), moon = night && ['clear','cloudy'].includes(kind);
+    return `<svg class="weather-landscape scene-${kind}" viewBox="0 0 360 180" aria-hidden="true" focusable="false"><defs>
+      <radialGradient id="wx-glow"><stop stop-color="${night?'#cdd9ff':'#ffe3ad'}" stop-opacity=".5"/><stop offset="1" stop-color="${night?'#cdd9ff':'#ffe3ad'}" stop-opacity="0"/></radialGradient>
+      <radialGradient id="wx-sun" cx=".35" cy=".25"><stop stop-color="#fffbe1"/><stop offset=".6" stop-color="#ffda87"/><stop offset="1" stop-color="#e6a34f"/></radialGradient>
+      <linearGradient id="wx-cloud" x2=".2" y2="1"><stop stop-color="${night?'#d1dcf1':'#ffffff'}"/><stop offset=".55" stop-color="${night?'#a6b9d6':'#edf3f6'}"/><stop offset="1" stop-color="${night?'#667f9e':'#acbfd1'}"/></linearGradient>
+      <linearGradient id="wx-hill" x2="0" y2="1"><stop stop-color="${night?'#526282':'#b4d0d4'}"/><stop offset="1" stop-color="${night?'#253854':'#4c7f92'}"/></linearGradient>
+    </defs>
+    ${night?'<g fill="#f4f3e3" opacity=".8"><circle cx="54" cy="27" r="1.4"/><circle cx="92" cy="65" r="1"/><circle cx="171" cy="21" r="1.5"/><circle cx="294" cy="42" r="1.4"/><circle cx="320" cy="92" r="1"/></g>':''}
+    ${sun||moon?'<ellipse cx="206" cy="70" rx="116" ry="89" fill="url(#wx-glow)"/>':''}
+    ${sun?'<circle cx="206" cy="67" r="39" fill="url(#wx-sun)"/><circle cx="206" cy="67" r="48" fill="none" stroke="#ffe9b5" stroke-opacity=".25"/><path d="M183 50a28 28 0 0 1 26-12" fill="none" stroke="#fffce8" stroke-width="2" stroke-linecap="round"/>':''}
+    ${moon?'<path class="wx-moon" d="M228 32a39 39 0 1 0 20 65 35 35 0 0 1-20-65Z" fill="#e6e8e0" stroke="#fff9df"/><path d="M204 67a24 24 0 0 0 14 25" fill="none" stroke="#bbc8d6" stroke-width="3" stroke-linecap="round"/>':''}
+    <path d="M0 149 65 110l42 16 51-23 65 40 52-30 85 39v28H0Z" fill="url(#wx-hill)" opacity=".5"/><path d="M0 169c78-48 94 17 180-9s125-6 180 0v20H0Z" fill="url(#wx-hill)" opacity=".75"/>
+    ${kind!=='clear'?'<g class="wx-cloud"><ellipse cx="176" cy="126" rx="77" ry="5" fill="#223e63" opacity=".12"/><path d="M104 111c-30 0-34-41-4-48 2-35 49-44 66-17 25-20 61-3 61 25 33-4 43 43 8 43Z" fill="url(#wx-cloud)" stroke="#f2f7ff" stroke-opacity=".5"/><path d="M103 108h119" stroke="#728baa" stroke-opacity=".15" stroke-width="3" stroke-linecap="round"/><path d="M111 61c4-18 28-25 40-12" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/></g>':''}
+    ${kind==='rain'?'<g class="wx-precip" stroke="#a6def7" stroke-width="3" stroke-linecap="round"><path d="m123 128-7 12m39-10-7 12m42-14-7 12m37-11-7 12"/></g>':''}
+    ${kind==='snow'?'<g class="wx-precip" fill="#f0fbff"><circle cx="122" cy="139" r="3"/><circle cx="152" cy="153" r="2.5"/><circle cx="188" cy="134" r="3"/><circle cx="215" cy="149" r="2.5"/></g>':''}
+    ${kind==='thunder'?'<path d="m182 114-19 24h16l-8 22 34-33h-20l9-13Z" fill="url(#wx-sun)"/>':''}
+    ${kind==='fog'?'<path d="M89 130h173m-157 12h137m-150 12h169" fill="none" stroke="#dce8ef" stroke-opacity=".65" stroke-width="3" stroke-linecap="round"/>':''}</svg>`;
+  }
   function weatherPanel() {
     const root = $('#live-weather');
     if (!root) return;
     const cache = currentWeather(), snapshot = A.weatherSnapshot();
     $('#app-screen').dataset.weatherScene = A.weatherScene(cache?.data.current.weather_code);
-    root.innerHTML = `<section class="weather-summary"><span class="connection-badge">OPEN-METEO</span><h2>${esc(weatherPlace.name)}</h2>${cache ? weatherArt(cache.data.current.weather_code) : ''}<div class="big-temperature">${snapshot.temp}°</div><p>${esc(snapshot.desc)}</p><small>最高 ${snapshot.high}°　最低 ${snapshot.low}°</small></section>${weatherBusy ? stateBox('天気を取得しています…') : ''}${weatherError ? stateBox(weatherError + (cache ? ' 最後に取得したデータを表示しています。' : ''), 'weatherRefresh') : ''}`;
+    $('#app-screen').dataset.weatherNight = String(cache?.data.current.is_day === 0);
+    root.innerHTML = `<section class="weather-summary"><span class="connection-badge">OPEN-METEO</span><h2>${esc(weatherPlace.name)}</h2>${cache ? weatherLandscape(cache.data.current.weather_code, cache.data.current.is_day === 0) : ''}<div class="big-temperature">${snapshot.temp}°</div><p>${esc(snapshot.desc)}</p><small>最高 ${snapshot.high}°　最低 ${snapshot.low}°</small></section>${weatherBusy ? stateBox('天気を取得しています…') : ''}${weatherError ? stateBox(weatherError + (cache ? ' 最後に取得したデータを表示しています。' : ''), 'weatherRefresh') : ''}`;
     if (cache) {
       const d = cache.data, h = d.hourly, daily = d.daily;
       // Both timestamps are in the provider's location timezone, not the device timezone.
@@ -116,7 +139,7 @@
     if (!force && cached && Date.now() - cached.savedAt < 900000) { weatherBusy = false; weatherError = ''; weatherPanel(); return; }
     const controller = weatherController = new AbortController(), place = {...weatherPlace};
     weatherBusy = true; weatherError = ''; weatherPanel();
-    const params = new URLSearchParams({latitude: place.latitude, longitude: place.longitude, current: 'temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m', hourly: 'temperature_2m,weather_code,precipitation_probability', daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max', timezone: 'auto', wind_speed_unit: 'ms', forecast_days: '7'});
+    const params = new URLSearchParams({latitude: place.latitude, longitude: place.longitude, current: 'temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day', hourly: 'temperature_2m,weather_code,precipitation_probability', daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max', timezone: 'auto', wind_speed_unit: 'ms', forecast_days: '7'});
     try {
       const data = await N.request(`https://api.open-meteo.com/v1/forecast?${params}`, {signal: controller.signal});
       if (controller !== weatherController || controller.signal.aborted) return;

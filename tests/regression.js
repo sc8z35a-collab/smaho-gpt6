@@ -293,8 +293,13 @@ frame.addEventListener('load',async()=>{
  await test('Wallet demo-only charge and purchase',()=>{A.open('wallet');const before=A.load('wallet',{balance:3240}).balance;click('[data-action="walletCharge"]');d.querySelector('#modal-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));assert(A.load('wallet',{}).balance===before+1000,'Demo charge');click('[data-action="walletPay"]');d.querySelector('#modal-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));assert(A.load('wallet',{}).balance===before+420,'Demo purchase');});
  await test('Text file create and preview',()=>{A.open('files');click('[data-action="fileNew"]');const f=d.querySelector('#modal-form');f.elements.name.value='QA.txt';f.elements.content.value='A little test.';f.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));const file=A.load('files',[]).find(f=>f.name==='QA.txt');assert(file,'File not saved');A.actions.filesHome();click(`[data-action="fileOpen"][data-id="${file.id}"]`);assert(d.querySelector('.file-preview').textContent==='A little test.','File preview');});
  await test('2048 merge rules',()=>{const merge=A.gameMath.mergeLine;assert(JSON.stringify(merge([2,2,2,2]).line)==='[4,4,0,0]','Double merge');assert(merge([2,2,2,2]).gain===8,'Merge score');assert(JSON.stringify(merge([4,4,8,0]).line)==='[8,8,0,0]','Cascade merge occurred');assert(JSON.stringify(merge([0,2,0,2]).line)==='[4,0,0,0]','Gap compression');});
- await test('2048 interaction and persistence',()=>{A.open('games','2048');const before=[...d.querySelectorAll('.tile-2048')].map(c=>+c.dataset.value).reduce((a,b)=>a+b,0);for(const dir of ['left','up','right','down'])click(`[data-action="move2048"][data-value="${dir}"]`);const after=[...d.querySelectorAll('.tile-2048')].map(c=>+c.dataset.value).reduce((a,b)=>a+b,0);assert(after>before,'Moves did not spawn tiles');assert(A.load('2048state',null),'Board not saved');click('[data-action="undo2048"]');assert(d.querySelectorAll('.tile-2048').length===16,'Undo broke board');});
- await test('Snake start, pause and teardown',async()=>{A.open('games','snake');click('[data-action="snakeToggle"]');assert(d.querySelector('#snake-toggle').textContent.includes('一時停止'),'Snake not started');await delay(160);click('[data-action="snakeToggle"]');assert(d.querySelector('#snake-toggle').textContent.includes('スタート'),'Snake not paused');A.home();assert(A.current===null,'Snake teardown');});
+ await test('2048 interaction and persistence',async()=>{
+  A.open('games','2048');const sum=()=>[...d.querySelectorAll('#tiles-2048 .g2048-face')].reduce((n,e)=>n+Number(e.textContent),0),before=sum();
+  for(const dir of ['left','up','right','down']){click(`[data-action="move2048"][data-value="${dir}"]`);await delay(200);}
+  const state=A.load('2048state',null);assert(state&&state.tiles.length===16,'Board not saved');assert(sum()>before,'Moves did not spawn tiles');assert(sum()===state.tiles.reduce((n,v)=>n+v,0),'Rendered board differs from save');
+  const previous=state.history.at(-1);assert(previous,'Undo history missing');click('[data-action="undo2048"]');assert(JSON.stringify(A.load('2048state',{}).tiles)===JSON.stringify(previous.tiles),'Undo did not restore previous board');assert(sum()===previous.tiles.reduce((n,v)=>n+v,0),'Undo drawing differs from restored board');
+ });
+ await test('Snake start, pause and teardown',async()=>{A.open('games','snake');click('[data-action="snakeToggle"]');assert(d.querySelector('#snake-toggle').textContent.includes('一時停止'),'Snake not started');await delay(160);click('[data-action="snakeToggle"]');assert(d.querySelector('#snake-toggle').textContent.includes('再開'),'Snake not paused');assert(!d.querySelector('#snake-curtain').hidden,'Pause curtain absent');A.home();assert(A.current===null,'Snake teardown');});
  await test('Memory mismatch locks and conceals cards',async()=>{A.open('games','memory');assert(d.querySelectorAll('.memory-card').length===16,'Card count');click('[data-action="memoryFlip"][data-index="0"]');assert(d.querySelector('[data-index="0"]').classList.contains('flipped'),'Card not revealed');click('[data-action="memoryFlip"][data-index="1"]');assert(d.querySelector('#memory-moves').textContent==='1','Move count');await delay(900);assert(d.querySelectorAll('.memory-card.flipped').length===0||d.querySelectorAll('.memory-card.matched').length===2,'Cards stuck open');});
  await test('Recent apps deduplicate and cap at eight',()=>{A.recentApps=[];Object.keys(A.apps).slice(0,10).forEach(id=>A.open(id));A.open('notes');A.open('notes');assert(A.recentApps.length===8,'History cap');assert(A.recentApps[0]==='notes','Most recent ordering');assert(new Set(A.recentApps).size===8,'Duplicate history');});
  await test('Recent apps preserve active editor and switch safely',()=>{A.open('calendar');A.open('notes');click('[data-action="noteNew"]');input('#note-title','QA recent editor');const editor=d.querySelector('#note-title');A.recents();click('[data-action="recentOpen"][data-id="notes"]');assert(d.querySelector('#note-title')===editor,'Current editor was recreated');A.recents();click('[data-action="recentOpen"][data-id="calendar"]');assert(A.current==='calendar','App switch failed');assert(d.querySelector('#overlay').hidden,'Overlay still open');});
@@ -563,6 +568,49 @@ frame.addEventListener('load',async()=>{
   const notes=w.localStorage.getItem('aura.notes'),wallpaper=A.settings.wallpaper,brightness=A.settings.brightness;
   A.actions.stReset();click('#overlay [data-action="closeOverlay"]');assert(A.settings.textSize==='largest','Cancel reset settings');
   A.actions.stReset();click('#confirm-yes');assert(A.settings.textSize==='standard'&&!A.settings.hideWidgets&&!A.settings.clockSeconds,'Reset incomplete');assert(w.localStorage.getItem('aura.notes')===notes,'Reset deleted notes');assert(A.settings.wallpaper===wallpaper&&A.settings.brightness===brightness,'Reset affected prior settings');
+ });
+ // Material artwork regressions: data, lifecycle, motion and independent SVG paints.
+ await test('World dials match digital time and retain their DOM',async()=>{
+  A.open('clock','world');const cards=[...d.querySelectorAll('[data-world-zone]')];assert(cards.length===5,'Missing cities');
+  for(const card of cards){const time=card.querySelector('[data-timezone]').textContent;assert(/^\d{2}:\d{2}$/.test(time),'Missing time');const [h,m]=time.split(':').map(Number);assert(card.querySelector('.world-hour').getAttribute('transform')===`rotate(${h%12*30+m/2} 90 90)`,'Dial mismatch');assert(card.querySelectorAll('.world-ticks path').length===60,'Missing minute indices');assert(card.querySelector('[data-world-date]').textContent,'Missing date');}
+  await delay(1100);assert(d.querySelector('[data-world-zone]')===cards[0],'Clock recreated its DOM');
+ });
+ await test('Weather material hero maps every condition without inventing unknown data',async()=>{
+  const originalCode=forecast.current.weather_code,originalDay=forecast.current.is_day;
+  try{
+   A.open('weather');
+   for(const [code,kind] of [[0,'clear'],[2,'cloudy'],[3,'overcast'],[45,'fog'],[61,'rain'],[71,'snow'],[95,'thunder']]){forecast.current.weather_code=code;forecast.current.is_day=1;await A.actions.weatherRefresh();assert(d.querySelector('.weather-landscape.scene-'+kind),'Wrong artwork '+kind);}
+   forecast.current.weather_code=0;forecast.current.is_day=0;await A.actions.weatherRefresh();assert(d.querySelector('.wx-moon'),'Night uses a sun');assert(d.querySelector('#app-screen').dataset.weatherNight==='true','Night surface missing');
+   forecast.current.weather_code=undefined;await A.actions.weatherRefresh();assert(!d.querySelector('.weather-landscape'),'Unknown weather invented');
+  }finally{forecast.current.weather_code=originalCode;forecast.current.is_day=originalDay;await A.actions.weatherRefresh();}
+ });
+ await test('Health rings follow records and failed saves retain values',()=>{
+  A.open('health');const values=A.healthData(),rings=[...d.querySelectorAll('.health-progress-ring')];assert(rings.length===3,'Missing activity rings');
+  [values.steps/8000,values.minutes/30,values.water/2000].forEach((v,i)=>assert(Number(rings[i].getAttribute('stroke-dasharray').split(' ')[0])===Math.max(0,Math.min(1,v))*100,'Wrong ring value'));
+  const nativeSave=A.save;A.save=()=>false;try{A.actions.healthWater();assert(A.healthData().water===values.water,'Failed save changed health');}finally{A.save=nativeSave;}
+  const content=d.querySelector('.health-dashboard');content.scrollTop=80;const scroll=content.scrollTop;click('[data-action="healthWater"]');assert(d.querySelector('.health-dashboard').scrollTop===scroll,'Hydration moved scroll');assert(d.activeElement.dataset.action==='healthWater','Hydration lost focus');assert(A.load('health',{}).water===values.water+200,'Hydration not saved');
+ });
+ await test('Zero health activity draws empty rings without fake progress',()=>{
+  A.open('health');const before=A.healthData();const save=(steps,minutes)=>{A.actions.healthAdd();const form=d.querySelector('#modal-form');form.elements.steps.value=steps;form.elements.minutes.value=minutes;submit('#modal-form');};
+  try{save(0,0);for(const ring of [...d.querySelectorAll('.health-progress-ring')].slice(0,2)){assert(ring.getAttribute('stroke-dasharray')==='0 100','Nonzero empty ring');assert(ring.getAttribute('stroke-linecap')==='butt','Empty ring has a visible cap');}}finally{save(before.steps,before.minutes);}
+ });
+ await test('Music discovery works without a heading and offers real local originals',()=>{
+  A.open('music');assert(typeof d.querySelector('#music-search').onsubmit==='function','Search failed to initialize');assert(d.querySelectorAll('.music-originals-covers .music-cover-art').length===3,'Missing local covers');
+  const audio=d.createElement('audio');let paused=false;audio.pause=()=>paused=true;audio.load=()=>{};d.querySelector('#music-results').append(audio);click('.music-originals-entry');assert(paused,'Catalogue preview not paused');assert(d.querySelector('.music-hero .vinyl-disc'),'Missing originals hero');click('[data-action="musicCatalogue"]');assert(d.querySelector('#music-search'),'Cannot return to search');
+ });
+ await test('Vector art owns every paint reference with no duplicate IDs',async()=>{
+  for(const app of ['clock','health','music','weather']){
+   A.open(app,app==='clock'?'world':undefined);if(app==='weather')await A.actions.weatherRefresh();
+   const ids=[...d.querySelectorAll('[id]')].map(e=>e.id);assert(new Set(ids).size===ids.length,'Duplicate IDs in '+app);
+   d.querySelectorAll('.world-dial,.health-ring-art,.water-vessel,.music-cover-art,.weather-landscape').forEach(svg=>{
+    assert(svg.getAttribute('aria-hidden')==='true','Decorative SVG exposed');assert(!svg.querySelector('image,script,foreignObject'),'External artwork');
+    const local=new Set([...svg.querySelectorAll('[id]')].map(e=>e.id));for(const match of svg.outerHTML.matchAll(/url\(#([^)]+)\)/g))assert(local.has(match[1]),'Unresolved paint '+match[1]);
+   });
+  }
+ });
+ await test('Record animation follows playback and respects reduced motion',()=>{
+  const reduced=A.settings.reduceMotion;
+  try{A.settings.reduceMotion=false;A.applySettings();A.open('music','player');A.music.start();const disc=d.querySelector('.player-art .vinyl-disc');assert(w.getComputedStyle(disc).animationPlayState==='running','Record is not playing');A.music.pause();assert(w.getComputedStyle(disc).animationPlayState==='paused','Record did not pause');A.settings.reduceMotion=true;A.applySettings();assert(w.getComputedStyle(disc).animationName==='none','Motion preference ignored');}finally{A.music.pause();A.settings.reduceMotion=reduced;A.applySettings();}
  });
  await test('App lifecycle cleanup and no captured errors',()=>{A.home();assert(A.cleanups.length===0,'Cleanup callbacks not drained');assert(!errors.length,errors.join('; '));});
 

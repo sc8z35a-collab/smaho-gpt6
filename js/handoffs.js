@@ -7,7 +7,7 @@
   N.offerFile = (blob, name) => {
     const file = new File([blob], name, {type: blob.type || 'application/octet-stream'});
     const shareable = navigator.canShare?.({files: [file]});
-    A.overlay(`${A.overlayTitle('ファイルを共有')}<div class="connected-overlay"><p>${esc(name)}</p><div class="connection-toolbar">${shareable ? '<button class="primary-button" id="share-ready">共有先を選ぶ</button>' : '<p>共有非対応。端末に保存</p>'}<button class="connection-link" id="save-ready">端末に保存</button></div><p id="file-share-status" role="status"></p></div>`);
+    A.overlay(`${A.overlayTitle('ファイルを共有')}<div class="connected-overlay"><p>${esc(name)}</p><div class="connection-toolbar">${shareable ? '<button class="primary-button" id="share-ready">共有先を選ぶ</button>' : '<p>共有非対応。端末に保存</p>'}<button class="connection-link" id="save-ready">端末に保存</button></div><p class="connected-caption">共有先を選択後に共有。自動アップロードなし</p><p id="file-share-status" role="status"></p></div>`);
     if ($('#share-ready')) $('#share-ready').onclick = async () => { try { await navigator.share({files: [file], title: name}); } catch (error) { if (error.name !== 'AbortError' && $('#file-share-status')) $('#file-share-status').textContent = '共有失敗。端末に保存'; } };
     $('#save-ready').onclick = () => A.download(blob, name);
   };
@@ -20,7 +20,8 @@
   A.actions.phoneDemo = () => originals.phone();
   A.actions.messagesDemo = () => originals.messages();
   A.actions.mailDemo = () => originals.mail();
-  A.actions.musicOriginals = () => originals.music();
+  A.actions.musicOriginals = () => { stopMusicCatalogue(); originals.music(); };
+  A.actions.musicCatalogue = () => A.open('music');
 
   A.apps.mail.render = () => {
     A.statusTheme(false); const draft = A.load('externalMailDraft', {}) || {};
@@ -57,6 +58,10 @@
   };
 
   let musicController, musicLastSearch = 0;
+  function stopMusicCatalogue() {
+    musicController?.abort();
+    $('#music-results')?.querySelectorAll('audio').forEach(audio => { audio.pause(); audio.removeAttribute('src'); audio.load(); });
+  }
   A.apps.music.render = arg => {
     if (arg === 'player') return originals.music(arg);
     A.statusTheme(false); $('#app-screen').classList.remove('music-app');
@@ -106,7 +111,7 @@
     calculator:['実為替レート換算','Frankfurter日次基準値。取引レートではありません'],
     clock:['実時刻・端末通知','許可後に通知。ページ終了・スリープ時は保証なし'],
     health:['手入力データ書き出し','サンプル・手入力。健康アカウント・センサー未接続'],
-    wallet:['デモのみ・実決済未接続','架空残高・実決済なし'],
+    wallet:['デモのみ・実決済未接続','架空残高・実決済未接続'],
     games:['端末内で実動作','外部接続を必要としない8ゲーム。スコアは端末内保存。'],
     settings:['接続状況・権限・プライバシー','通信設定はシミュレーション']
   };
