@@ -52,12 +52,12 @@
       ${tabs([['all','すべて'],['favorites','お気に入り'],['duplicates','重複候補']],contactFilter,'epContactFilter')}
       <div class="ep-two">${select('グループ','contact-group',[['*','すべて'],['','未分類'],...contactGroups().map(x=>[x,x])],contactGroup)}${select('並び順','contact-sort',[['favorite','お気に入り順'],['name','名前順']],contactSort)}</div>
       <p class="ep-muted" id="ep-contact-count"></p><div class="ev-card" id="ep-contact-results"></div>
-      ${details('書き出し',button('epContactExport','表示中の連絡先を書き出す')+button('evContactsExport','すべて書き出す'))}`,
+      ${details('書き出し',button('epContactExport','表示中を書き出す')+button('evContactsExport','すべて書き出す'))}`,
       iconButton('evContactEdit','連絡先を追加','plus'));
     const render=()=>{
       const list=visibleContacts(),duplicates=duplicateIds();
-      $('#ep-contact-count').textContent=`${list.length}件`+(contactFilter==='duplicates'?' · 同じ番号またはメール。自動統合しません。':'');
-      $('#ep-contact-results').innerHTML=list.map(x=>`<button class="ev-row ev-wide" data-action="evContactOpen" data-id="${esc(x.id)}"><span class="ev-avatar">${esc(Array.from(x.name)[0])}</span><span class="ev-grow"><strong>${esc(x.name)}${x.favorite?' ★':''}</strong><small>${esc(x.group||'未分類')} · ${esc(x.phone||x.email||'連絡先未入力')}${duplicates.has(x.id)?' · 重複候補':''}</small></span>${A.icon('arrow')}</button>`).join('')||empty('該当する連絡先はありません');
+      $('#ep-contact-count').textContent=`${list.length}件`+(contactFilter==='duplicates'?' · 同じ番号またはメール':'');
+      $('#ep-contact-results').innerHTML=list.map(x=>`<button class="ev-row ev-wide" data-action="evContactOpen" data-id="${esc(x.id)}"><span class="ev-avatar">${esc(Array.from(x.name)[0])}</span><span class="ev-grow"><strong>${esc(x.name)}${x.favorite?' ★':''}</strong><small>${esc(x.group||'未分類')} · ${esc(x.phone||x.email||'連絡先未入力')}${duplicates.has(x.id)?' · 重複候補':''}</small></span>${A.icon('arrow')}</button>`).join('')||empty('連絡先なし');
     };
     $('#ep-contact-query').value=contactQuery;
     $('#ep-contact-query').oninput=e=>{contactQuery=e.target.value;render();};
@@ -85,7 +85,7 @@
     page('contacts',`<div class="ev-contact-hero"><span class="ev-avatar">${esc(Array.from(x.name)[0])}</span><h1>${esc(x.name)}</h1><p class="ep-muted">${esc(x.group||'未分類')}</p>${button('evContactFavorite',x.favorite?'★ お気に入り':'☆ お気に入り',x.id,`aria-pressed="${!!x.favorite}"`)}</div>
       <div class="ev-contact-actions">${validPhone?`<a href="tel:${esc(phone)}">${A.icon('phone')}電話</a><a href="sms:${esc(phone)}">${A.icon('messages')}SMS</a>`:''}${x.email?`<a href="mailto:${esc(encodeURIComponent(x.email))}">${A.icon('mail')}メール</a>`:''}</div>
       <div class="ev-card ev-contact-info"><p>${esc(x.phone)}</p><p>${esc(x.email)}</p><p>${esc(x.note)}</p></div>
-      <p class="ev-caption">発信・送信は移動先で確認</p>${button('epContactCopy','連絡先をコピー',x.id)}
+      <p class="ev-caption">発信・送信は移動先で確認</p>${button('epContactCopy','コピー',x.id)}
       ${details('管理',button('evContactDelete','連絡先を削除',x.id))}`,
       iconButton('evContactEdit','連絡先を編集','edit',x.id),'evContactsHome');
   };
@@ -125,18 +125,18 @@
   const conversionLabel = x => `${x.value} ${units[x.category].units[x.from][0]} → ${units[x.category].units[x.to][0]}`;
   const savedConversions = key => rows(key).filter(x=>units[x.category]?.units[x.from]&&units[x.category]?.units[x.to]&&Number.isFinite(Number(x.value)));
   function conversionSaved(key, action, removeAction) {
-    return savedConversions(key).map(x=>`<div class="ep-saved-row">${button(action,conversionLabel(x),x.id)}${iconButton(removeAction,'削除','trash',x.id)}</div>`).join('')||empty('まだ保存していません');
+    return savedConversions(key).map(x=>`<div class="ep-saved-row">${button(action,conversionLabel(x),x.id)}${iconButton(removeAction,'削除','trash',x.id)}</div>`).join('')||empty('保存なし');
   }
   function renderConverter() {
     const options=Object.entries(units[conversion.category].units).map(([id,[label]])=>[id,label]);
     page('converter',`${select('種類','unit-category',Object.entries(units).map(([id,x])=>[id,x.name]),conversion.category)}
       <div class="ev-converter">${field('数値','unit-value',conversion.value,'number','step="any"')}${select('変換元','unit-from',options,conversion.from)}
-      ${button('evUnitSwap','↑↓ 単位を入れ替え')}${select('変換先','unit-to',options,conversion.to)}
+      ${button('evUnitSwap','↑↓ 入れ替え')}${select('変換先','unit-to',options,conversion.to)}
       <output id="ev-unit-result" aria-live="polite"></output><p class="ep-muted" id="ep-unit-hint"></p>
       <div class="ep-actions">${button('evUnitCopy','結果をコピー')}${button('epConversionRecord','履歴に残す')}</div></div>
       ${details('よく使う換算',button('epConversionPreset','この換算を登録')+conversionSaved('conversionPresets','epConversionUsePreset','epConversionRemovePreset'))}
-      ${details('保存した履歴（30件まで）',conversionSaved('conversionHistory','epConversionUseHistory','epConversionRemoveHistory'))}
-      ${details('表示の設定',select('有効数字','unit-precision',[[4,'4桁'],[8,'8桁'],[12,'12桁']],precision))}`);
+      ${details('履歴（30件まで）',conversionSaved('conversionHistory','epConversionUseHistory','epConversionRemoveHistory'))}
+      ${details('表示',select('有効数字','unit-precision',[[4,'4桁'],[8,'8桁'],[12,'12桁']],precision))}`);
     $('#ep-unit-category').onchange=e=>A.actions.evUnitCategory({dataset:{id:e.target.value}});
     ['value','from','to'].forEach(key=>$('#ep-unit-'+key).oninput=e=>{conversion[key]=e.target.value;updateConversion();});
     $('#ep-unit-precision').onchange=e=>{const next=Number(e.target.value);if(A.save('conversionPrecision',next)){precision=next;updateConversion();}else e.target.value=precision;};
@@ -144,7 +144,7 @@
   }
   function updateConversion() {
     $('#ev-unit-result').textContent=conversionText();
-    $('#ep-unit-hint').textContent=conversionValue()===null?'数値を確認してください。温度は絶対零度以上を入力。':'';
+    $('#ep-unit-hint').textContent=conversionValue()===null?'数値を確認。温度は絶対零度以上。':'';
   }
   A.apps.converter.render=renderConverter;
   A.actions.evUnitCategory=el=>{const category=el.dataset.id;if(!units[category])return;const keys=Object.keys(units[category].units);conversion={category,from:keys[0],to:keys[1],value:conversion.value};renderConverter();};
@@ -170,7 +170,7 @@
   const replaceReminders=list=>{if(!A.reminderModel.replace(list))return false;renderReminders();return true;};
   function renderReminders() {
     const list=reminders(),done=list.filter(x=>x.done).length;
-    page('reminders',`<div class="ev-hero sage"><span>完了したタスク</span><strong>${done}<small> / ${list.length}</small></strong></div>
+    page('reminders',`<div class="ev-hero sage"><span>完了</span><strong>${done}<small> / ${list.length}</small></strong></div>
       ${A.search('ep-reminder-query','タスク・メモ・手順を検索')}${tabs([['all','すべて'],['pending','未完了'],['today','今日まで'],['done','完了']],reminderFilter,'reminderFilter')}
       ${select('並び順','reminder-sort',[['priority','優先度順'],['due','期限順'],['name','名前順']],reminderSort)}
       <div class="ev-card" id="ep-reminder-results"></div>
@@ -209,7 +209,7 @@
     const x=reminders().find(x=>x.id===el.dataset.id);if(!x)return;
     page('reminders',`<div class="ev-heading"><span>${esc(x.due||'期限なし')}${x.priority?' · 優先':''}</span><h1>${esc(x.text)}</h1></div>
       ${button('epReminderComplete',x.done?'未完了に戻す':'タスクを完了',x.id)}<p class="ep-note">${esc(x.note||'メモはありません')}</p>
-      ${section('手順',`<div class="ev-card">${(x.steps||[]).map(s=>`<div class="ev-row"><button class="check-circle ${s.done?'checked':''}" data-action="epReminderStep" data-id="${esc(x.id)}" data-step="${esc(s.id)}" aria-label="${esc(s.text)}" aria-pressed="${!!s.done}">${s.done?'✓':''}</button><span>${esc(s.text)}</span></div>`).join('')||empty('編集から手順を追加できます')}</div><p class="ep-muted">手順のチェックとタスク全体の完了は別々に記録します。</p>`)}
+      ${section('手順',`<div class="ev-card">${(x.steps||[]).map(s=>`<div class="ev-row"><button class="check-circle ${s.done?'checked':''}" data-action="epReminderStep" data-id="${esc(x.id)}" data-step="${esc(s.id)}" aria-label="${esc(s.text)}" aria-pressed="${!!s.done}">${s.done?'✓':''}</button><span>${esc(s.text)}</span></div>`).join('')||empty('編集から手順を追加できます')}</div><p class="ep-muted">手順とタスクの完了は別々に記録</p>`)}
       ${details('その他の操作',button('epReminderPostpone','期限を1日延ばす',x.id)+button('epReminderDuplicate','複製する',x.id)+button('reminderDelete','削除する',x.id))}`,
       iconButton('reminderDetails','タスクを編集','edit',x.id),'epRemindersHome');
   };
@@ -229,7 +229,7 @@
     page('today',`<div class="ev-date-switch">${button('epTodayMove','‹','-1','aria-label="前の日"')}<input type="date" id="ep-today-date" value="${dashboardDay}" aria-label="表示日">${button('epTodayMove','›','1','aria-label="次の日"')}</div>
       ${dashboardDay!==day()?button('epTodayReset','今日に戻る'):''}<div class="ev-heading"><span>${new Date(dashboardDay+'T12:00:00').toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'})}</span><h1>${dashboardDay===day()?'今日':'この日のまとめ'}</h1></div>
       <div class="ev-metrics"><button data-app="focus"><strong>${minutes}<small>分</small></strong><span>集中</span></button><button data-app="habits"><strong>${checked}<small>/${habits.length}</small></strong><span>習慣</span></button><button data-app="reminders"><strong>${tasks.length}</strong><span>未完了タスク</span></button></div>
-      <p class="ep-muted">タスクは現在の未完了から、表示日までの期限と期限なしを表示。</p>
+      <p class="ep-muted">未完了：表示日までの期限・期限なし</p>
       <button class="ev-focus-link" data-app="focus">${A.icon('focus')}<span>集中する</span>${A.icon('arrow')}</button>
       <button class="ep-intention" data-action="epTodayIntention"><small>この日のひとこと</small><strong>${esc(rows('dailyIntentions').find(x=>x.date===dashboardDay)?.text||'大切にしたいことを一つ書く')}</strong></button>
       ${section('予定',iconButton('evTodayEvent','予定を追加','plus')+`<div class="ev-card">${events.map(x=>`<button class="ev-timeline" data-action="epTodayEvent" data-id="${esc(x.id)}"><time>${esc(x.time)}</time><span><strong>${esc(x.title)}</strong><small>${esc(x.place)}</small></span>${A.icon('arrow')}</button>`).join('')||empty('予定はありません')}</div>`)}
@@ -272,7 +272,7 @@
     page('shopping',`<div class="ev-list-picker"><select id="ev-shopping-list" aria-label="買い物リスト">${shoppingLists().map(x=>`<option value="${esc(x.id)}" ${x.id===shoppingList?'selected':''}>${esc(x.name)}</option>`).join('')}</select>${iconButton('evShoppingListNew','リストを追加','plus')}${iconButton('evShoppingListEdit','リストを編集','edit')}</div>
       <div class="ev-hero sand"><span>買うもの</span><strong>${pending.length}<small>品</small></strong><span>未購入の予定額 ${money(total(pending))}</span><div class="ev-hero-foot"><span>購入済み ${money(total(purchased))}</span><span>全品合計 ${money(combined)}</span></div></div>
       <button class="ev-budget" data-action="epShoppingBudget"><span>このリストの予算</span><strong>${budget?money(budget):'設定する'}</strong></button>
-      ${budget?`<p class="ep-budget-state ${combined>budget?'ep-over':''}">${combined>budget?'予算を '+money(combined-budget)+' 超過':'全品購入後の残り '+money(budget-combined)}</p>`:''}<p class="ep-muted">登録した単価×数量の合計です。価格未入力の品は0円で計算。</p>
+      ${budget?`<p class="ep-budget-state ${combined>budget?'ep-over':''}">${combined>budget?'予算を '+money(combined-budget)+' 超過':'全品購入後の残り '+money(budget-combined)}</p>`:''}<p class="ep-muted">単価×数量。価格未入力は0円</p>
       ${A.search('ep-shopping-query','このリストの品名を検索')}${tabs([['all','すべて'],['pending','未購入']],shoppingFilter,'evShoppingFilter')}
       ${details('並べ替え',select('各分類の並び順','shopping-sort',[['status','未購入を先に'],['name','名前順'],['price','合計金額が高い順']],shoppingSort))}
       <div id="ep-shopping-results"></div>${shoppingUndo?`<div class="ep-undo" role="status"><span>${shoppingUndo.length}品を削除しました</span>${button('epShoppingUndo','元に戻す')}</div>`:''}

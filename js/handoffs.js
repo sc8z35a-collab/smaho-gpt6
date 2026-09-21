@@ -7,13 +7,13 @@
   N.offerFile = (blob, name) => {
     const file = new File([blob], name, {type: blob.type || 'application/octet-stream'});
     const shareable = navigator.canShare?.({files: [file]});
-    A.overlay(`${A.overlayTitle('ファイルを共有')}<div class="connected-overlay"><p>${esc(name)}</p><p class="connected-caption">選択後に共有</p><div class="connection-toolbar">${shareable ? '<button class="primary-button" id="share-ready">共有先を選ぶ</button>' : '<p>共有非対応。端末に保存</p>'}<button class="connection-link" id="save-ready">端末に保存</button></div><p id="file-share-status" role="status"></p></div>`);
+    A.overlay(`${A.overlayTitle('ファイルを共有')}<div class="connected-overlay"><p>${esc(name)}</p><div class="connection-toolbar">${shareable ? '<button class="primary-button" id="share-ready">共有先を選ぶ</button>' : '<p>共有非対応。端末に保存</p>'}<button class="connection-link" id="save-ready">端末に保存</button></div><p id="file-share-status" role="status"></p></div>`);
     if ($('#share-ready')) $('#share-ready').onclick = async () => { try { await navigator.share({files: [file], title: name}); } catch (error) { if (error.name !== 'AbortError' && $('#file-share-status')) $('#file-share-status').textContent = '共有失敗。端末に保存'; } };
     $('#save-ready').onclick = () => A.download(blob, name);
   };
   const phoneNumber = raw => String(raw).replace(/[\s()-]/g, '');
   const validPhone = value => /^\+?[0-9]{3,15}$/.test(value);
-  const handoffNote = '<details class="ui-help"><summary>連携について</summary><p class="connected-caption">対応アプリが必要。発信・送信は移動先で確認。auraは送受信・通話状況を取得しません。</p></details>';
+  const handoffNote = '<details class="ui-help"><summary>連携について</summary><p class="connected-caption">対応アプリが必要。発信・送信は移動先で確認。送受信・通話状況は取得しません。</p></details>';
   const originals = Object.fromEntries(['phone','messages','mail','music'].map(id => [id, A.apps[id].render]));
   // Native inboxes cannot be read here; never badge them with seeded demo counts.
   A.mailUnread = () => 0; A.messageUnread = () => 0;
@@ -24,13 +24,13 @@
 
   A.apps.mail.render = () => {
     A.statusTheme(false); const draft = A.load('externalMailDraft', {}) || {};
-    A.view(A.nav('メール', button('mailDemo', 'デモ')) + `<div class="app-content"><span class="connection-badge">MAIL HANDOFF</span><h1 class="app-title">メール作成</h1><p class="app-subtitle">送信はメールアプリで</p><form id="external-mail"><label class="form-label">宛先</label><input class="text-input" type="email" name="to" required maxlength="254" placeholder="name@example.com" value="${esc(draft.to || '')}"><label class="form-label">件名</label><input class="text-input" name="subject" maxlength="200" value="${esc(draft.subject || '')}"><label class="form-label">本文</label><textarea class="text-input" name="body" rows="7" maxlength="6000">${esc(draft.body || '')}</textarea><div class="connection-toolbar"><button class="primary-button" type="submit">作成先へ</button>${button('saveExternalDraft', '下書きを保存')}</div></form><div id="mail-handoff" aria-live="polite"></div>${handoffNote}<div class="connection-card"><h3>受信トレイ</h3><div class="connection-toolbar">${N.link('https://mail.google.com/', 'Gmail')}${N.link('https://outlook.live.com/mail/', 'Outlook')}</div><p>受信・認証は各サービスへ。auraは読取不可</p></div></div>`);
+    A.view(A.nav('メール', button('mailDemo', 'デモ')) + `<div class="app-content"><p class="app-subtitle">送信はメールアプリで</p><form id="external-mail"><label class="form-label">宛先</label><input class="text-input" type="email" name="to" required maxlength="254" placeholder="name@example.com" value="${esc(draft.to || '')}"><label class="form-label">件名</label><input class="text-input" name="subject" maxlength="200" value="${esc(draft.subject || '')}"><label class="form-label">本文</label><textarea class="text-input" name="body" rows="7" maxlength="6000">${esc(draft.body || '')}</textarea><div class="connection-toolbar"><button class="primary-button" type="submit">作成先へ</button>${button('saveExternalDraft', '下書きを保存')}</div></form><div id="mail-handoff" aria-live="polite"></div>${handoffNote}<div class="connection-card"><h3>受信トレイ</h3><div class="connection-toolbar">${N.link('https://mail.google.com/', 'Gmail')}${N.link('https://outlook.live.com/mail/', 'Outlook')}</div><p>受信同期なし</p></div></div>`);
     $('#external-mail').onsubmit = e => {
       e.preventDefault(); if (!e.currentTarget.reportValidity()) return;
       const v = Object.fromEntries(new FormData(e.currentTarget));
       const uri = `mailto:${encodeURIComponent(v.to)}?subject=${encodeURIComponent(v.subject)}&body=${encodeURIComponent(v.body)}`;
       const gmail = 'https://mail.google.com/mail/?' + new URLSearchParams({view:'cm', fs:'1', to:v.to, su:v.subject, body:v.body});
-      $('#mail-handoff').innerHTML = `<div class="connection-card"><h3>未送信</h3><p>宛先：${esc(v.to)}</p><a class="primary-button" href="${esc(uri)}">メールアプリで作成</a><div class="connection-toolbar">${N.link(gmail, 'Gmailで作成')}<button class="connection-link" id="share-mail">本文を共有・コピー</button></div><p>タップで内容を引き渡し。長文は共有・コピー</p></div>`;
+      $('#mail-handoff').innerHTML = `<div class="connection-card"><h3>未送信</h3><p>宛先：${esc(v.to)}</p><a class="primary-button" href="${esc(uri)}">メールアプリで作成</a><div class="connection-toolbar">${N.link(gmail, 'Gmailで作成')}<button class="connection-link" id="share-mail">本文を共有・コピー</button></div><p>長文は共有・コピー</p></div>`;
       $('#share-mail').onclick = () => N.share(v.subject, v.body);
     };
     $('#external-mail').oninput = () => { $('#mail-handoff').textContent = ''; };
@@ -38,7 +38,7 @@
   A.actions.saveExternalDraft = () => { const f = $('#external-mail'); if (f && A.save('externalMailDraft', Object.fromEntries(new FormData(f)))) A.toast('下書き保存・未送信'); };
   A.apps.messages.render = arg => {
     if (['misaki','haru','aura'].includes(arg)) return originals.messages(arg);
-    A.view(A.nav('メッセージ', button('messagesDemo', 'デモ')) + `<div class="app-content"><span class="connection-badge">SMS / MESSAGING</span><h1 class="app-title">メッセージ作成</h1><form id="external-message"><label class="form-label">電話番号</label><input class="text-input" type="tel" name="number" required maxlength="25" placeholder="09012345678 / +819012345678"><label class="form-label">メッセージ</label><textarea class="text-input" name="body" rows="7" required maxlength="2000" placeholder="本文"></textarea><button class="primary-button" type="submit" style="margin-top:15px">作成先へ</button></form><div id="message-handoff" aria-live="polite"></div>${handoffNote}<p class="connected-caption">SMSは有料の場合あり。WhatsAppは国番号が必要。自動返信はデモのみ</p></div>`);
+    A.view(A.nav('メッセージ', button('messagesDemo', 'デモ')) + `<div class="app-content"><form id="external-message"><label class="form-label">電話番号</label><input class="text-input" type="tel" name="number" required maxlength="25" placeholder="09012345678 / +819012345678"><label class="form-label">メッセージ</label><textarea class="text-input" name="body" rows="7" required maxlength="2000" placeholder="本文"></textarea><button class="primary-button" type="submit" style="margin-top:15px">作成先へ</button></form><div id="message-handoff" aria-live="polite"></div>${handoffNote}<p class="connected-caption">SMSは有料の場合あり。WhatsAppは国番号が必要</p></div>`);
     $('#external-message').onsubmit = e => {
       e.preventDefault(); const v = Object.fromEntries(new FormData(e.currentTarget)), phone = phoneNumber(v.number);
       if (!validPhone(phone)) return A.toast('電話番号を3〜15桁の数字で入力してください');
@@ -49,7 +49,7 @@
     $('#external-message').oninput = () => { $('#message-handoff').textContent = ''; };
   };
   A.apps.phone.render = () => {
-    A.view(A.nav('電話', button('phoneDemo', 'デモ')) + `<div class="app-content"><span class="connection-badge">DEVICE CALLING</span><h1 class="app-title">電話</h1><form id="external-phone"><label class="form-label">電話番号</label><input id="live-phone-number" class="text-input" type="tel" name="number" required maxlength="25" placeholder="電話番号を入力" autocomplete="tel"><div class="dial-keypad" style="margin-top:20px">${['1','2','3','4','5','6','7','8','9','+','0','⌫'].map(n => `<button type="button" class="dial-key" data-live-key="${n}" aria-label="${n === '⌫' ? '一文字削除' : n}">${n}</button>`).join('')}</div><button class="primary-button" type="submit" style="margin-top:18px">番号を確認</button></form><div id="phone-handoff" aria-live="polite"></div>${handoffNote}<p class="connected-caption">通話は契約料金。auraに緊急通報機能はありません。緊急時は標準電話アプリへ</p></div>`);
+    A.view(A.nav('電話', button('phoneDemo', 'デモ')) + `<div class="app-content"><form id="external-phone"><label class="form-label">電話番号</label><input id="live-phone-number" class="text-input" type="tel" name="number" required maxlength="25" placeholder="電話番号を入力" autocomplete="tel"><div class="dial-keypad" style="margin-top:20px">${['1','2','3','4','5','6','7','8','9','+','0','⌫'].map(n => `<button type="button" class="dial-key" data-live-key="${n}" aria-label="${n === '⌫' ? '一文字削除' : n}">${n}</button>`).join('')}</div><button class="primary-button" type="submit" style="margin-top:18px">番号を確認</button></form><div id="phone-handoff" aria-live="polite"></div>${handoffNote}<p class="connected-caption">通話は契約料金。auraに緊急通報機能はありません。緊急時は標準電話アプリへ</p></div>`);
     const input = $('#live-phone-number');
     A.$$('[data-live-key]').forEach(el => el.onclick = () => { const key = el.dataset.liveKey; input.value = key === '⌫' ? input.value.slice(0,-1) : (input.value + key).slice(0,25); $('#phone-handoff').textContent = ''; });
     $('#external-phone').oninput = () => { $('#phone-handoff').textContent = ''; };
@@ -60,7 +60,7 @@
   A.apps.music.render = arg => {
     if (arg === 'player') return originals.music(arg);
     A.statusTheme(false); $('#app-screen').classList.remove('music-app');
-    A.view(A.nav('ミュージック', button('musicOriginals', '音源')) + `<div class="app-content"><span class="connection-badge">MUSIC DISCOVERY</span><h1 class="app-title">楽曲検索</h1><p class="app-subtitle">検索して試聴</p><form id="music-search" class="connected-search"><input class="text-input" type="search" required maxlength="100" aria-label="曲名やアーティスト" placeholder="曲名やアーティスト"><button class="primary-button" type="submit">検索</button></form><div id="music-results" aria-live="polite"><p class="connected-caption">検索先：Apple iTunes。試聴は地域・権利により異なります</p></div><div class="connection-toolbar">${N.link('https://music.apple.com/jp/', 'Apple Music')}${N.link('https://open.spotify.com/', 'Spotify')}</div><p class="connected-caption">フル再生は公式サービスへ。試聴は画面移動で停止</p></div>`);
+    A.view(A.nav('ミュージック', button('musicOriginals', '音源')) + `<div class="app-content"><form id="music-search" class="connected-search"><input class="text-input" type="search" required maxlength="100" aria-label="曲名やアーティスト" placeholder="曲名やアーティスト"><button class="primary-button" type="submit">検索</button></form><div id="music-results" aria-live="polite"><p class="connected-caption">Apple iTunes · 地域・権利による試聴制限あり</p></div><div class="connection-toolbar">${N.link('https://music.apple.com/jp/', 'Apple Music')}${N.link('https://open.spotify.com/', 'Spotify')}</div><p class="connected-caption">フル再生は公式サービスへ。試聴は画面移動で停止</p></div>`);
     const root = $('#music-results');
     A.cleanups.push(() => { musicController?.abort(); root.querySelectorAll('audio').forEach(a => { a.pause(); a.removeAttribute('src'); a.load(); }); });
     $('#music-search').onsubmit = async e => {
@@ -79,46 +79,46 @@
   };
 
   const capabilities = {
-    today:['今日のまとめ','予定・タスク・習慣・集中記録を端末内で集計。'],
-    focus:['集中タイマー','記録は端末内保存。ページ終了中は通知されません。'],
-    habits:['習慣の記録','達成日・連続日数を端末内で管理。'],
-    expenses:['家計簿・CSV出力','手入力の収支と予算。銀行や決済サービスへの接続はありません。'],
-    shopping:['買い物リスト','数量・予定額・購入状態を保存。テキスト出力に対応。'],
-    journal:['日記・気分の記録','端末内保存とテキスト出力。クラウド同期はありません。'],
-    contacts:['連絡先・vCard出力','自分で登録した相手の電話・SMS・メールを対応アプリへ引き渡します。'],
-    converter:['単位換算','長さ・重さ・温度・体積・面積・速度・データ容量を端末内で換算。'],
-    reading:['読書記録','本・進捗・読書メモを端末内で保存。'],
-    sketch:['スケッチ・PNG出力','描画を自動保存。画像の自動アップロードはありません。'],
-    safari:['アプリ内検索・Webへ移動','Wikipediaは画面内、GoogleなどのWeb検索は別タブで利用。'],
-    maps:['実地図・場所検索','OpenStreetMap / Nominatim。経路案内はGoogle マップへ引き渡します。'],
-    weather:['実予報・保存キャッシュ','Open-Meteo。取得日時を表示し、取得失敗時は保存データと明示。'],
-    mail:['メール作成・受信サービスへ移動','mailto / Gmail / Outlook。aura内の受信同期・送信確認は未接続。'],
-    messages:['SMS・WhatsApp・共有','端末の対応アプリへ引き渡し。返信を自動取得するものではありません。'],
-    phone:['端末の電話アプリへ引き渡し','telリンク。実通話は端末で行い、架空の連絡先は使用しません。'],
-    music:['外部楽曲検索・試聴','Apple iTunes Search API。フル再生は公式サービスで行います。'],
-    calendar:['予定書き出し・Google カレンダー','ICSをApple / Google / Outlook等へ取り込めます。双方向同期ではありません。'],
-    notes:['メモの共有','編集中のメモまたは一覧をOS共有・コピー・テキスト保存で持ち出せます。'],
-    reminders:['リスト共有・タスク書き出し','OS共有とiCalendar VTODO形式。取り込み対応は利用先によります。'],
-    files:['URLからテキスト読込・共有','HTTPSかつCORS対応のテキストのみ。自動アップロードはありません。'],
-    photos:['実写真・OS共有','写真を開いて共有できます。端末への保存にも対応。クラウド自動同期はありません。'],
-    camera:['実カメラ・写真への保存','許可後に撮影。共有は写真アプリから。自動アップロードはありません。'],
-    recorder:['実録音・音声共有','音声の共有ボタンを利用。録音はアプリ終了時に破棄されます。'],
-    calculator:['実為替レート換算','Frankfurterの日次基準レート。リアルタイム取引レートではありません。'],
-    clock:['実時刻・端末通知','許可した場合にブラウザ通知。ページ終了・OSスリープ時の発火保証はありません。'],
-    health:['手入力データ書き出し','健康アカウント・センサーは未接続。表示にはサンプルが含まれます。'],
-    wallet:['デモのみ・実決済未接続','決済基盤・契約がないため、架空残高を実際のお金として扱いません。'],
+    today:['今日のまとめ','予定・タスク・習慣・集中記録を集計'],
+    focus:['集中タイマー','ページ終了中は通知なし'],
+    habits:['習慣の記録','達成日・連続日数'],
+    expenses:['家計簿・CSV出力','手入力。銀行・決済接続なし'],
+    shopping:['買い物リスト','数量・予定額・購入状態'],
+    journal:['日記・気分の記録','端末内保存。クラウド同期なし'],
+    contacts:['連絡先・vCard出力','電話・SMS・メールを対応アプリへ'],
+    converter:['単位換算','端末内で換算'],
+    reading:['読書記録','本・進捗・読書メモ'],
+    sketch:['スケッチ・PNG出力','自動保存。自動アップロードなし'],
+    safari:['アプリ内検索・Webへ移動','Wikipediaは画面内。Web検索は別タブ'],
+    maps:['実地図・場所検索','OpenStreetMap / Nominatim。経路はGoogle マップへ'],
+    weather:['実予報・保存キャッシュ','Open-Meteo。取得失敗時は保存データ'],
+    mail:['メール作成・受信サービスへ移動','受信同期・送信確認なし'],
+    messages:['SMS・WhatsApp・共有','対応アプリへ。返信の自動取得なし'],
+    phone:['端末の電話アプリへ引き渡し','実通話は端末で。架空の連絡先は使用しません'],
+    music:['外部楽曲検索・試聴','Apple iTunes。フル再生は公式サービスへ'],
+    calendar:['予定書き出し・Google カレンダー','ICS書き出し。双方向同期なし'],
+    notes:['メモの共有','OS共有・コピー・テキスト保存'],
+    reminders:['リスト共有・タスク書き出し','OS共有・VTODO（対応は利用先による）'],
+    files:['URLからテキスト読込・共有','HTTPS・CORS対応のみ。自動アップロードなし'],
+    photos:['実写真・OS共有','OS共有・端末保存。クラウド同期なし'],
+    camera:['実カメラ・写真への保存','許可後に撮影。自動アップロードなし'],
+    recorder:['実録音・音声共有','録音はアプリ終了時に破棄'],
+    calculator:['実為替レート換算','Frankfurter日次基準値。取引レートではありません'],
+    clock:['実時刻・端末通知','許可後に通知。ページ終了・スリープ時は保証なし'],
+    health:['手入力データ書き出し','サンプル・手入力。健康アカウント・センサー未接続'],
+    wallet:['デモのみ・実決済未接続','架空残高・実決済なし'],
     games:['端末内で実動作','外部接続を必要としない8ゲーム。スコアは端末内保存。'],
-    settings:['接続状況・権限・プライバシー','Wi-FiなどのOS設定はシミュレーション。実通信状態とは別です。']
+    settings:['接続状況・権限・プライバシー','通信設定はシミュレーション']
   };
   const nav = A.nav;
   const localApps = new Set(['today','focus','habits','expenses','shopping','journal','contacts','converter','reading','sketch']);
   A.nav = (title, right = '', ...args) => nav(title, right + (A.current && !localApps.has(A.current) ? button('appConnections','連携') : ''), ...args);
   A.actions.appConnections = () => {
     const id = A.current, [title, detail] = capabilities[id] || capabilities.settings;
-    const tools = {calendar:button('calendarExchange','予定を外部で使う'), notes:button('shareNotes','メモを共有'), reminders:button('shareReminders','リストを共有') + button('exportReminders','タスクを書き出す'), files:button('fileURLImport','URLから読む') + button('shareFile','開いているファイルを共有'), photos:button('photoShare','開いている写真を共有'), camera:'<button class="connection-link" data-app="photos">写真を開く</button>', calculator:button('currencyOpen','為替換算を開く'), clock:button('clockNotifyPermission','端末通知を有効にする'), health:button('healthExport','記録をJSONで書き出す')};
+    const tools = {calendar:button('calendarExchange','予定を書き出す'), notes:button('shareNotes','メモを共有'), reminders:button('shareReminders','リストを共有') + button('exportReminders','タスクを書き出す'), files:button('fileURLImport','URLから読む') + button('shareFile','ファイルを共有'), photos:button('photoShare','写真を共有'), camera:'<button class="connection-link" data-app="photos">写真を開く</button>', calculator:button('currencyOpen','為替換算'), clock:button('clockNotifyPermission','端末通知を有効に'), health:button('healthExport','記録をJSONで書き出す')};
     A.overlay(`${A.overlayTitle('外部との連携')}<div class="connected-overlay"><h3>${esc(title)}</h3><p class="connected-caption">${esc(detail)}</p><div class="connection-toolbar">${tools[id] || ''}</div><p class="connected-caption">共有は選択データのみ。検索語・座標の送信先は各画面に表示</p>${button('connectionCenter','すべての接続状況')}</div>`);
   };
-  A.actions.connectionCenter = () => A.overlay(`${A.overlayTitle('接続とプライバシー')}<div class="connected-overlay"><div id="network-status" class="connected-status ${navigator.onLine ? '' : 'offline'}">${navigator.onLine ? 'オンライン・外部接続未確認' : 'オフライン'}</div><p class="connected-caption">公開APIは利用制限あり。データ同期・認証情報の保存なし</p>${Object.entries(capabilities).map(([id,[title,detail]]) => `<button class="list-row" data-app="${id}"><span class="row-main"><strong>${esc(A.apps[id].name)} · ${esc(title)}</strong><small>${esc(detail)}</small></span></button>`).join('')}${button('forgetLocation','保存した位置情報と天気を消去')}</div>`);
+  A.actions.connectionCenter = () => A.overlay(`${A.overlayTitle('接続とプライバシー')}<div class="connected-overlay"><div id="network-status" class="connected-status ${navigator.onLine ? '' : 'offline'}">${navigator.onLine ? 'オンライン・外部接続未確認' : 'オフライン'}</div><p class="connected-caption">公開APIは利用制限あり。データ同期・認証情報の保存なし</p>${Object.entries(capabilities).map(([id,[title,detail]]) => `<button class="list-row" data-app="${id}"><span class="row-main"><strong>${esc(A.apps[id].name)}</strong><small>${esc(detail)}</small></span></button>`).join('')}${button('forgetLocation','保存した位置情報と天気を消去')}</div>`);
   A.actions.forgetLocation = () => A.confirm('位置情報と天気を消去','保存した都市・天気のお気に入り・地図の保存場所・現在地の座標・天気キャッシュを削除し、ページを再読み込みします。',() => { try { ['weatherLocation','weatherLive','weatherCity','weatherFavorites','mapSavedPlaces'].forEach(k => localStorage.removeItem('aura.' + k)); location.reload(); } catch { A.toast('削除できません'); } });
   const updateNetwork = () => { const el = $('#network-status'); if (el) { el.textContent = navigator.onLine ? 'オンライン・外部接続未確認' : 'オフライン'; el.classList.toggle('offline',!navigator.onLine); } };
   window.addEventListener('online',updateNetwork); window.addEventListener('offline',updateNetwork);
@@ -136,7 +136,7 @@
   A.actions.exportReminders = () => icsDownload(A.searchableReminders().flatMap(r => ['BEGIN:VTODO',`UID:${icsEscape(r.id)}@aura.local`,`DTSTAMP:${dateICS(new Date())}`,`SUMMARY:${icsEscape(r.text)}`,`STATUS:${r.done ? 'COMPLETED' : 'NEEDS-ACTION'}`,`PRIORITY:${r.priority ? '1' : '0'}`,...(/^\d{4}-\d{2}-\d{2}$/.test(r.due || '') ? [`DUE;VALUE=DATE:${r.due.replace(/-/g,'')}`] : []),'END:VTODO']),'aura-reminders.ics');
   A.actions.shareFile = () => { const file = A.currentTextFile?.(); if (!file) return A.toast('先に共有するファイルを開いてください'); N.share(file.name,file.content); };
   A.actions.fileURLImport = () => {
-    A.closeOverlay(); A.view(A.nav('URLからテキストを読む','','filesHome','戻る') + `<div class="app-content"><p class="app-subtitle">HTTPS / CORS対応の公開テキストを取り込みます。</p><form id="remote-file"><label class="form-label">URL</label><input name="url" class="text-input" type="url" required placeholder="https://example.com/data.txt" maxlength="2000"><label class="form-label">保存する名前</label><input name="name" class="text-input" required value="download.txt" maxlength="80"><button class="primary-button" type="submit" style="margin-top:16px">読み込んで保存</button></form><div id="remote-file-status" aria-live="polite"></div><p class="connected-caption">上限100KB。TXT / MD / JSON / CSV。認証付きURLやHTMLは非対応。取得したテキストはこのブラウザにのみ保存します。</p></div>`);
+    A.closeOverlay(); A.view(A.nav('URLからテキストを読む','','filesHome','戻る') + `<div class="app-content"><p class="app-subtitle">HTTPS / CORS対応の公開テキストのみ</p><form id="remote-file"><label class="form-label">URL</label><input name="url" class="text-input" type="url" required placeholder="https://example.com/data.txt" maxlength="2000"><label class="form-label">保存する名前</label><input name="name" class="text-input" required value="download.txt" maxlength="80"><button class="primary-button" type="submit" style="margin-top:16px">読み込んで保存</button></form><div id="remote-file-status" aria-live="polite"></div><p class="connected-caption">上限100KB。TXT / MD / JSON / CSV。認証付きURL・HTML非対応。ブラウザ内保存。</p></div>`);
     const lifecycle = new AbortController(); A.cleanups.push(() => lifecycle.abort());
     $('#remote-file').onsubmit = async e => {
       e.preventDefault(); const form = e.currentTarget, v = Object.fromEntries(new FormData(form)), root = $('#remote-file-status');
@@ -165,7 +165,7 @@
   A.actions.currencyOpen = () => {
     A.closeOverlay(); A.statusTheme(false); $('#app-screen').classList.remove('calc-app');
     const options = selected => ['JPY','USD','EUR','GBP','AUD','CAD','CHF','CNY','KRW'].map(c => `<option ${c === selected ? 'selected' : ''}>${c}</option>`).join('');
-    A.view(A.nav('為替換算','','calculatorHome','戻る') + `<div class="app-content"><span class="connection-badge">DAILY EXCHANGE RATES</span><h1 class="app-title">為替換算</h1><form id="currency-form"><label class="form-label">金額</label><input class="text-input" name="amount" type="number" min="0" max="1000000000000" step="any" required value="1"><label class="form-label">元の通貨</label><select class="text-input" name="base">${options('USD')}</select><label class="form-label">換算先</label><select class="text-input" name="quote">${options('JPY')}</select><button class="primary-button" type="submit" style="margin-top:20px">最新の公表レートで換算</button></form><div id="currency-result" aria-live="polite"></div><p class="connected-caption">出典：${N.link('https://frankfurter.dev/','Frankfurter')}。日次参考値・手数料なし。休日は直近値。取引レートではありません</p></div>`);
+    A.view(A.nav('為替換算','','calculatorHome','戻る') + `<div class="app-content"><form id="currency-form"><label class="form-label">金額</label><input class="text-input" name="amount" type="number" min="0" max="1000000000000" step="any" required value="1"><label class="form-label">元の通貨</label><select class="text-input" name="base">${options('USD')}</select><label class="form-label">換算先</label><select class="text-input" name="quote">${options('JPY')}</select><button class="primary-button" type="submit" style="margin-top:20px">換算</button></form><div id="currency-result" aria-live="polite"></div><p class="connected-caption">出典：${N.link('https://frankfurter.dev/','Frankfurter')}。日次参考値・手数料なし。休日は直近値。取引レートではありません</p></div>`);
     const root = $('#currency-result'); A.cleanups.push(() => currencyController?.abort());
     $('#currency-form').onsubmit = async e => {
       e.preventDefault(); const v = Object.fromEntries(new FormData(e.currentTarget)), amount = Number(v.amount); if (!Number.isFinite(amount) || amount < 0 || amount > 1e12) return;

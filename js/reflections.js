@@ -28,14 +28,14 @@
   // and a monthly mood / writing summary. Original editor remains canonical.
   let journalMonth=month(),journalTag='';
   const journalTags=x=>[...new Set(String(x.tags||'').split(/[,、\s]+/).map(x=>x.replace(/^#/,'')).filter(Boolean))];
-  const journalCards=list=>list.map(x=>`<button class="ev-card ev-journal-entry" data-action="evJournalEdit" data-id="${esc(x.id)}"><header><time>${esc(x.date)}</time><span>${esc({5:'晴れ',4:'穏やか',3:'ふつう',2:'曇り',1:'雨'}[x.mood]||'')}</span></header><h3>${esc(x.title||'日記')}</h3><p>${esc(x.body.slice(0,180))}${x.body.length>180?'…':''}</p><small>${esc(journalTags(x).map(t=>'#'+t).join(' '))}</small></button>`).join('')||empty('該当する日記はありません');
+  const journalCards=list=>list.map(x=>`<button class="ev-card ev-journal-entry" data-action="evJournalEdit" data-id="${esc(x.id)}"><header><time>${esc(x.date)}</time><span>${esc({5:'晴れ',4:'穏やか',3:'ふつう',2:'曇り',1:'雨'}[x.mood]||'')}</span></header><h3>${esc(x.title||'日記')}</h3><p>${esc(x.body.slice(0,180))}${x.body.length>180?'…':''}</p><small>${esc(journalTags(x).map(t=>'#'+t).join(' '))}</small></button>`).join('')||empty('日記なし');
   function renderJournal() {
     const list=rows('journal').sort((a,b)=>b.date.localeCompare(a.date)),tags=[...new Set(list.flatMap(journalTags))].sort((a,b)=>a.localeCompare(b,'ja'));
     if(journalTag&&!tags.includes(journalTag))journalTag='';
     const summaryMonth=journalMonth||month(),monthly=list.filter(x=>x.date.startsWith(summaryMonth)),anniversaries=list.filter(x=>x.date<today()&&x.date.slice(5)===today().slice(5));
-    page('journal','日記を探す',`<div class="fr-filters">${field('月（空欄ですべて）','journal-month',journalMonth,'month')}${select('タグ','journal-tag',[['','すべてのタグ'],...tags.map(x=>[x,x])],journalTag)}</div>
-      <div class="ep-actions">${button('frJournalAll','すべての月')}${button('frJournalRandom','過去の日記を1件開く')}</div>
-      ${details(summaryMonth+' のまとめ',`<div class="fr-metrics">${metric('書いた日',new Set(monthly.map(x=>x.date)).size+'日')}${metric('本文の文字数',sum(monthly,x=>Array.from(x.body).length)+'字')}</div><div class="fr-bars">${[['5','晴れ'],['4','穏やか'],['3','ふつう'],['2','曇り'],['1','雨']].map(([mood,label])=>{const count=monthly.filter(x=>String(x.mood)===mood).length;return `<div><span>${label}</span><meter min="0" max="${Math.max(1,monthly.length)}" value="${count}">${count}</meter><strong>${count}日</strong></div>`;}).join('')}</div><p class="ep-muted">記録した気分の内訳です。</p>`)}
+    page('journal','日記を探す',`<div class="fr-filters">${field('月（空欄ですべて）','journal-month',journalMonth,'month')}${select('タグ','journal-tag',[['','すべて'],...tags.map(x=>[x,x])],journalTag)}</div>
+      <div class="ep-actions">${button('frJournalAll','すべての月')}${button('frJournalRandom','過去の日記を開く')}</div>
+      ${details(summaryMonth+' のまとめ',`<div class="fr-metrics">${metric('書いた日',new Set(monthly.map(x=>x.date)).size+'日')}${metric('文字数',sum(monthly,x=>Array.from(x.body).length)+'字')}</div><div class="fr-bars">${[['5','晴れ'],['4','穏やか'],['3','ふつう'],['2','曇り'],['1','雨']].map(([mood,label])=>{const count=monthly.filter(x=>String(x.mood)===mood).length;return `<div><span>${label}</span><meter min="0" max="${Math.max(1,monthly.length)}" value="${count}">${count}</meter><strong>${count}日</strong></div>`;}).join('')}</div>`)}
       ${details('過去の今日',journalCards(anniversaries))}<p class="ep-muted" id="fr-journal-count" role="status"></p><div id="fr-journal-results"></div>`);
     const render=()=>{const visible=list.filter(x=>(!journalMonth||x.date.startsWith(journalMonth))&&(!journalTag||journalTags(x).includes(journalTag)));$('#fr-journal-count').textContent=visible.length+'件';$('#fr-journal-results').innerHTML=journalCards(visible);};
     $('#fr-journal-month').onchange=e=>{if(!e.target.value||validMonth(e.target.value)){journalMonth=e.target.value;renderJournal();}};
@@ -57,21 +57,21 @@
   }
   function readingSummary() {
     const sessions=rows('readingSessions').filter(x=>x.date.startsWith(readingMonth));
-    return `<div class="fr-metrics">${metric('読んだページ',sum(sessions,x=>Math.max(0,x.to-x.from))+'ページ')}${metric('読書時間',sum(sessions,x=>x.minutes)+'分')}${metric('記録した日',new Set(sessions.map(x=>x.date)).size+'日')}${metric('読んだ本',new Set(sessions.map(x=>x.bookId)).size+'冊')}</div><p class="ep-muted">「読書を記録」の履歴を集計。進捗だけの更新は含みません。</p>`;
+    return `<div class="fr-metrics">${metric('読んだページ',sum(sessions,x=>Math.max(0,x.to-x.from))+'ページ')}${metric('読書時間',sum(sessions,x=>x.minutes)+'分')}${metric('記録した日',new Set(sessions.map(x=>x.date)).size+'日')}${metric('読んだ本',new Set(sessions.map(x=>x.bookId)).size+'冊')}</div><p class="ep-muted">進捗だけの更新は含みません。</p>`;
   }
   function renderReading() {
-    page('reading','本を探す・計画する',`${A.search('fr-book-query','書名・著者・読書メモを検索')}${select('並び順','book-sort',[['title','書名順'],['author','著者順'],['progress','進捗が高い順']],bookSort)}
+    page('reading','計画・検索',`${A.search('fr-book-query','書名・著者・読書メモを検索')}${select('並び順','book-sort',[['title','書名順'],['author','著者順'],['progress','進捗が高い順']],bookSort)}
       ${details('月の読書記録',field('集計月','reading-month',readingMonth,'month')+'<div id="fr-reading-summary">'+readingSummary()+'</div>')}
-      ${details('すべての本から引用を探す',A.search('fr-quote-query','引用・書名・著者を検索')+'<div id="fr-quote-results"></div>')}
+      ${details('引用を検索',A.search('fr-quote-query','引用・書名・著者を検索')+'<div id="fr-quote-results"></div>')}
       <div id="fr-book-results"></div>`);
     const render=()=>{
       const list=rows('reading').filter(x=>normalize([x.title,x.author,x.note].join(' ')).includes(normalize(bookQuery))).sort((a,b)=>bookSort==='progress'?b.page/b.total-a.page/a.total:bookSort==='author'?(a.author||'').localeCompare(b.author||'','ja')||a.title.localeCompare(b.title,'ja'):a.title.localeCompare(b.title,'ja'));
-      $('#fr-book-results').innerHTML=list.map(x=>`<article class="ev-card fr-book"><button class="ep-summary" data-action="evBookOpen" data-id="${esc(x.id)}"><strong>${esc(x.title)}</strong><span>${esc(x.author)} · ${x.page}/${x.total}ページ</span></button>${button('frBookDeadline',deadlineText(x),x.id)}</article>`).join('')||empty('該当する本はありません');
+      $('#fr-book-results').innerHTML=list.map(x=>`<article class="ev-card fr-book"><button class="ep-summary" data-action="evBookOpen" data-id="${esc(x.id)}"><strong>${esc(x.title)}</strong><span>${esc(x.author)} · ${x.page}/${x.total}ページ</span></button>${button('frBookDeadline',deadlineText(x),x.id)}</article>`).join('')||empty('本なし');
     };
     const quotes=()=>{
       const books=new Map(rows('reading').map(x=>[x.id,x]));
       const matches=rows('readingQuotes').filter(x=>books.has(x.bookId)&&normalize(x.text+' '+books.get(x.bookId).title+' '+books.get(x.bookId).author).includes(normalize(quoteQuery)));
-      $('#fr-quote-results').innerHTML=matches.map(x=>`<button class="ep-summary" data-action="evBookOpen" data-id="${esc(x.bookId)}"><strong class="ep-note">${esc(x.text)}</strong><small>${esc(books.get(x.bookId).title)}${x.page?' · p.'+x.page:''}</small></button>`).join('')||empty('引用はありません');
+      $('#fr-quote-results').innerHTML=matches.map(x=>`<button class="ep-summary" data-action="evBookOpen" data-id="${esc(x.bookId)}"><strong class="ep-note">${esc(x.text)}</strong><small>${esc(books.get(x.bookId).title)}${x.page?' · p.'+x.page:''}</small></button>`).join('')||empty('引用なし');
     };
     $('#fr-book-query').value=bookQuery;$('#fr-book-query').oninput=e=>{bookQuery=e.target.value;render();};$('#fr-book-sort').onchange=e=>{bookSort=e.target.value;render();};
     $('#fr-reading-month').onchange=e=>{if(validMonth(e.target.value)){readingMonth=e.target.value;$('#fr-reading-summary').innerHTML=readingSummary();}};
@@ -88,14 +88,14 @@
   let habitMonth=month();
   function habitSummary() {
     const habits=rows('habits'),counts=habits.map(x=>({name:x.name,count:new Set(x.days.filter(d=>d.startsWith(habitMonth)&&d<=today())).size}));
-    return `<div class="fr-metrics">${metric('達成の合計',sum(counts,x=>x.count)+'回')}${metric('取り組んだ日',new Set(habits.flatMap(x=>x.days).filter(d=>d.startsWith(habitMonth)&&d<=today())).size+'日')}</div>${counts.map(x=>`<div class="fr-count-row"><span>${esc(x.name)}</span><strong>${x.count}日</strong></div>`).join('')||empty('習慣を追加すると表示します')}<p class="ep-muted">現在取り組んでいる習慣の記録を集計します。</p>`;
+    return `<div class="fr-metrics">${metric('達成の合計',sum(counts,x=>x.count)+'回')}${metric('取り組んだ日',new Set(habits.flatMap(x=>x.days).filter(d=>d.startsWith(habitMonth)&&d<=today())).size+'日')}</div>${counts.map(x=>`<div class="fr-count-row"><span>${esc(x.name)}</span><strong>${x.count}日</strong></div>`).join('')||empty('習慣なし')}`;
   }
   function renderHabits() {
     const list=rows('habits'),archive=rows('habitArchive');
-    page('habits','習慣を整理する',`${details('月のまとめ',field('集計月','habit-month',habitMonth,'month')+'<div id="fr-habit-summary">'+habitSummary()+'</div>',true)}
-      ${section('取り組んでいる習慣',list.map((x,i)=>`<article class="ev-card fr-habit"><strong>${esc(x.name)}</strong><div class="ep-actions">${button('frHabitMove','↑',x.id,`data-offset="-1" aria-label="上へ移動" ${i===0?'disabled':''}`)}${button('frHabitMove','↓',x.id,`data-offset="1" aria-label="下へ移動" ${i===list.length-1?'disabled':''}`)}${button('frHabitDuplicate','複製',x.id)}${button('frHabitArchive','休止',x.id)}</div></article>`).join('')||empty('取り組んでいる習慣はありません'))}
-      ${details('休止中の習慣（'+archive.length+'件）',archive.map(x=>`<div class="fr-count-row"><span>${esc(x.name)}<small>${new Set(x.days).size}日分の記録を保持</small></span>${button('frHabitRestore','再開',x.id)}</div>`).join('')||empty('休止中の習慣はありません'))}
-      ${button('frHabitExport','すべての達成履歴をCSVで保存')}<p class="ep-muted">休止すると日々の一覧から隠れ、記録は保持されます。再開すると元の記録で戻ります。</p>`);
+    page('habits','習慣を整理',`${details('月のまとめ',field('集計月','habit-month',habitMonth,'month')+'<div id="fr-habit-summary">'+habitSummary()+'</div>',true)}
+      ${section('取り組んでいる習慣',list.map((x,i)=>`<article class="ev-card fr-habit"><strong>${esc(x.name)}</strong><div class="ep-actions">${button('frHabitMove','↑',x.id,`data-offset="-1" aria-label="上へ移動" ${i===0?'disabled':''}`)}${button('frHabitMove','↓',x.id,`data-offset="1" aria-label="下へ移動" ${i===list.length-1?'disabled':''}`)}${button('frHabitDuplicate','複製',x.id)}${button('frHabitArchive','休止',x.id)}</div></article>`).join('')||empty('習慣なし'))}
+      ${details('休止中の習慣（'+archive.length+'件）',archive.map(x=>`<div class="fr-count-row"><span>${esc(x.name)}<small>${new Set(x.days).size}日分の記録</small></span>${button('frHabitRestore','再開',x.id)}</div>`).join('')||empty('休止中の習慣はありません'))}
+      ${button('frHabitExport','達成履歴をCSVで保存')}<p class="ep-muted">休止中も記録は保持</p>`);
     $('#fr-habit-month').onchange=e=>{if(validMonth(e.target.value)){habitMonth=e.target.value;$('#fr-habit-summary').innerHTML=habitSummary();}};
   }
   A.actions.frHabits=renderHabits;
@@ -117,15 +117,15 @@
     const previous=new Date(date);previous.setDate(1);previous.setMonth(previous.getMonth()-1);const previousMonth=day(previous).slice(0,7);
     const mins=filter=>sum(history.filter(filter),x=>x.minutes),week=mins(x=>x.date>=thisStart&&x.date<=now),previousWeek=mins(x=>x.date>=lastStart&&x.date<=lastEnd);
     const monthly=mins(x=>x.date.startsWith(currentMonth)&&x.date<=now),previousMonthly=mins(x=>x.date.startsWith(previousMonth));
-    return `<div class="fr-metrics">${metric('直近7日',week+'分')}${metric('その前の7日',previousWeek+'分')}${metric('今月（今日まで）',monthly+'分')}${metric('前月（全日）',previousMonthly+'分')}</div><p class="ep-muted">直近7日間の差：${week-previousWeek>=0?'+':''}${week-previousWeek}分。手入力・修正後の記録も含みます。</p>`;
+    return `<div class="fr-metrics">${metric('直近7日',week+'分')}${metric('その前の7日',previousWeek+'分')}${metric('今月（今日まで）',monthly+'分')}${metric('前月（全日）',previousMonthly+'分')}</div><p class="ep-muted">直近7日間の差：${week-previousWeek>=0?'+':''}${week-previousWeek}分。手入力・修正も含む。</p>`;
   }
   function renderFocus() {
     page('focus','集中の履歴',`${details('週・月の振り返り',focusComparisons(),true)}${A.search('fr-focus-query','集中した内容を検索')}
       <div class="fr-date-range">${field('開始日','focus-from',focusFrom,'date')}${field('終了日','focus-to',focusTo,'date')}</div>
-      <div class="ep-actions">${button('frFocusAdd','手入力で記録')}${button('frFocusExport','表示中をCSV保存')}${button('frFocusAll','全期間に戻す')}</div><p class="ep-muted" id="fr-focus-count" role="status"></p><div class="ev-card" id="fr-focus-results"></div>`);
+      <div class="ep-actions">${button('frFocusAdd','手入力で記録')}${button('frFocusExport','表示中をCSV保存')}${button('frFocusAll','全期間')}</div><p class="ep-muted" id="fr-focus-count" role="status"></p><div class="ev-card" id="fr-focus-results"></div>`);
     const render=()=>{
-      const list=focusRows();$('#fr-focus-count').textContent=focusRangeValid()?`${list.length}件 · 合計 ${sum(list,x=>x.minutes)}分`:'開始日と終了日の順序を確認してください';
-      $('#fr-focus-results').innerHTML=list.map(x=>`<button class="ev-row ev-wide" data-action="frFocusEdit" data-id="${esc(x.id)}"><span class="ev-grow"><strong>${esc(x.label||'集中')}</strong><small>${esc(x.date)} · ${x.source==='manual'?'手入力':'タイマー'}${x.edited?' · 修正済み':''}</small></span><strong>${x.minutes}分</strong></button>`).join('')||empty('該当する記録はありません');
+      const list=focusRows();$('#fr-focus-count').textContent=focusRangeValid()?`${list.length}件 · 合計 ${sum(list,x=>x.minutes)}分`:'日付の順序を確認';
+      $('#fr-focus-results').innerHTML=list.map(x=>`<button class="ev-row ev-wide" data-action="frFocusEdit" data-id="${esc(x.id)}"><span class="ev-grow"><strong>${esc(x.label||'集中')}</strong><small>${esc(x.date)} · ${x.source==='manual'?'手入力':'タイマー'}${x.edited?' · 修正済み':''}</small></span><strong>${x.minutes}分</strong></button>`).join('')||empty('記録なし');
     };
     $('#fr-focus-query').value=focusQuery;$('#fr-focus-query').oninput=e=>{focusQuery=e.target.value;render();};
     $('#fr-focus-from').onchange=e=>{focusFrom=e.target.value;render();};$('#fr-focus-to').onchange=e=>{focusTo=e.target.value;render();};render();
