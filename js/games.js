@@ -44,7 +44,7 @@ let future2048=restored2048?readHistory2048(saved2048.future,32-history2048.leng
 const storedCheckpoint2048=A.load('2048checkpoint',null),checkpointState2048=readSnapshot2048(storedCheckpoint2048?.state);
 let checkpoint2048=checkpointState2048&&Number.isSafeInteger(storedCheckpoint2048.savedAt)&&storedCheckpoint2048.savedAt>0&&storedCheckpoint2048.savedAt<=8640000000000000?{state:checkpointState2048,savedAt:storedCheckpoint2048.savedAt}:null;
 let nodes2048=new Map(),animations2048=new Set();
-let busy2048=false,pending2048=null,moveTimer2048=null,finishMove2048=null,saveOK2048=true,hint2048=null;
+let busy2048=false,pending2048=null,moveTimer2048=null,finishMove2048=null,saveOK2048=true,prefsDirty2048=false,hint2048=null;
 const reduced2048=()=>A.settings.reduceMotion||window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const active2048=()=>A.current==='games'&&gamePage==='2048'&&!!$('#board-2048')&&!document.hidden;
 const waiting2048=()=>!continued2048&&Math.max(...tiles)>=2048;
@@ -54,7 +54,11 @@ if(!tiles.some(Boolean)){spawn();spawn();}
 function snapshot2048(){return {version:2,tiles:[...tiles],score,moves:turns2048,combo:combo2048,peakCombo:peakCombo2048,continued:continued2048,seed:seed2048};}
 function restore2048(s){tiles=[...s.tiles];score=s.score;turns2048=s.moves;combo2048=s.combo;peakCombo2048=s.peakCombo;continued2048=s.continued;seed2048=s.seed;}
 function save2048(){
- best=Math.max(best,score);records2048.maxTile=Math.max(records2048.maxTile,...tiles);records2048.bestCombo=Math.max(records2048.bestCombo,peakCombo2048);
+ // Preserve larger records already stored by another tab; the board is still last-write-wins.
+ const stored=A.load('2048records',{})||{};
+ best=Math.max(best,score,count2048(A.load('2048best',0)));
+ records2048.maxTile=Math.max(records2048.maxTile,...tiles,count2048(stored.maxTile));
+ records2048.bestCombo=Math.max(records2048.bestCombo,peakCombo2048,count2048(stored.bestCombo));
  saveOK2048=A.saveBatch({'2048best':best,'2048state':{...snapshot2048(),history:history2048,future:future2048},'2048records':records2048});
 }
 // Retain the existing public mergeLine contract for other consumers.
@@ -135,7 +139,8 @@ function render2048(message=''){
  $('#result-2048').hidden=!(over||win);$('#result-title-2048').textContent=win?'2048、達成。':'ひと休み。また、その先へ。';
  $('#result-copy-2048').textContent=win?'おめでとうございます。4096、その先も目指せます。':`${number2048(score)}点・${number2048(turns2048)}手。${history2048.length?'「戻す」で別の道を探せます。':'新しい盤面でもう一度。'}`;
  $('#continue-2048').hidden=!win;
- $('#save-2048').textContent=saveOK2048?'端末に自動保存':'未保存・保存し直す';$('#save-2048').classList.toggle('save-failed',!saveOK2048);
+ const saved=saveOK2048&&!prefsDirty2048;
+ $('#save-2048').textContent=saved?'端末に自動保存':'未保存・保存し直す';$('#save-2048').classList.toggle('save-failed',!saved);$('#save-2048').disabled=busy2048;
  $('#status-2048').textContent=message||(win?'2048達成。「続ける」でプレイを再開できます。':over?'動かせる手がありません。':empty<=2?'空きマスが少なくなっています。合体でスペースを確保。':'同じ数字を重ねて、2048へ。');
  board.setAttribute('aria-label',`2048の盤面。スコア ${score}。`+Array.from({length:4},(_,r)=>`${r+1}行目 ${tiles.slice(r*4,r*4+4).map(v=>v||'空').join('、')}`).join('。'));
 }
@@ -156,7 +161,7 @@ function renderPractice2048(){
 }
 function slide2048(plan,spawned){
  const layer=$('#tiles-2048'),duration=reduced2048()||!layer.animate?0:prefs2048.speed==='quick'?95:150;
- const step=(layer.clientWidth+parseFloat(getComputedStyle(layer).getPropertyValue('--g-gap')))/4;
+ const geometry=getComputedStyle(layer),step=(parseFloat(geometry.width)+parseFloat(geometry.getPropertyValue('--g-gap')))/4;
  const survivors=new Map(),removed=[],slides=[];
  busy2048=true;
  for(const path of plan.paths){
@@ -177,14 +182,15 @@ function slide2048(plan,spawned){
   }
   if(spawned>=0){const el=tile2048(spawned,tiles[spawned]);nodes2048.set(spawned,el);layer.append(el);animate2048(el.firstElementChild,[{transform:'scale(.5)',opacity:0},{transform:'scale(1)',opacity:1}],{duration:180,easing:'cubic-bezier(.16,1,.3,1)'});}
   busy2048=false;burst2048(plan.merged);
-  const message=waiting2048()||!movable()?'':plan.gain?`${plan.merged.length}組が合体、${number2048(plan.gain)}点獲得。${combo2048>1?combo2048+'手連続の合体。':''}`:'タイルを移動しました。';
+  const empty=tiles.filter(v=>!v).length;
+  const message=waiting2048()||!movable()?'':(plan.gain?`${plan.merged.length}組が合体、${number2048(plan.gain)}点獲得。${combo2048>1?combo2048+'手連続の合体。':''}`:'タイルを移動しました。')+(empty<=2?` 残りの空きは${empty}マスです。`:'');
   render2048(message);
   if(plan.gain){const gain=$('#gain-2048');gain.textContent='+'+number2048(plan.gain);animate2048(gain,[{opacity:1,transform:'translateY(5px)'},{opacity:0,transform:'translateY(-22px)'}],{duration:700,easing:'ease-out'});}
   if(waiting2048())animate2048($('#result-2048'),[{opacity:0,transform:'translateY(8px)'},{opacity:1,transform:'translateY(0)'}],{duration:320,easing:'ease-out'});
   const next=pending2048;pending2048=null;if(next)move2048(next);
  };
  finishMove2048=finish;
- $('#undo-2048').disabled=true;$('#redo-2048').disabled=true;$('#hint-2048').disabled=true;
+ $('#undo-2048').disabled=true;$('#redo-2048').disabled=true;$('#hint-2048').disabled=true;$('#save-2048').disabled=true;
  $('#checkpoint-save-2048').disabled=true;$('#checkpoint-load-2048').disabled=true;$('#checkpoint-delete-2048').disabled=true;
  if(duration)moveTimer2048=setTimeout(finish,duration);else finish();
 }
@@ -258,28 +264,31 @@ function game2048(){
  paint2048();save2048();render2048(recoveryNotice2048?'保存された盤面を読み込めなかったため、新しい盤面で開始しました。':'');recoveryNotice2048=false;
  const board=$('#board-2048');let pointer=null;
  const on=(target,type,fn,options)=>{target.addEventListener(type,fn,options);gameCleanups.push(()=>target.removeEventListener(type,fn,options));};
- on(board,'pointerdown',e=>{if(!e.isPrimary||e.button!==0||pointer)return;pointer={id:e.pointerId,x:e.clientX,y:e.clientY};board.setPointerCapture(e.pointerId);board.focus({preventScroll:true});});
+ on(board,'pointerdown',e=>{if(!active2048()||!$('#overlay').hidden||waiting2048()||!e.isPrimary||e.button!==0||pointer)return;pointer={id:e.pointerId,x:e.clientX,y:e.clientY};board.setPointerCapture(e.pointerId);board.focus({preventScroll:true});});
  on(board,'pointerup',e=>{if(!pointer||e.pointerId!==pointer.id)return;const dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;pointer=null;if(board.hasPointerCapture(e.pointerId))board.releasePointerCapture(e.pointerId);if(Math.max(Math.abs(dx),Math.abs(dy))<18)return;move2048(Math.abs(dx)>Math.abs(dy)?dx>0?'right':'left':dy>0?'down':'up');});
  const cancelPointer=()=>{pointer=null;};on(board,'pointercancel',cancelPointer);on(board,'lostpointercapture',cancelPointer);
  listenKey(e=>{
   if(!active2048()||!$('#overlay').hidden||e.isComposing||e.target.closest('input,textarea,select,[contenteditable]')||e.altKey)return;
   const key=e.key.toLowerCase(),modifier=e.ctrlKey||e.metaKey;
+  if(!modifier&&waiting2048()&&e.target===board&&(key==='enter'||e.code==='Space')){e.preventDefault();if(!e.repeat)A.actions.continue2048();return;}
   if(key==='z'||key==='y'){e.preventDefault();if(!e.repeat)historyStep2048(key==='y'||e.shiftKey);return;}
   if(modifier)return;
   const d={arrowleft:'left',arrowright:'right',arrowup:'up',arrowdown:'down',a:'left',d:'right',w:'up',s:'down'}[key];
   if(d){e.preventDefault();if(e.repeat&&busy2048)return;move2048(d);}
  });
- const settle=()=>{pending2048=null;pointer=null;if(finishMove2048)finishMove2048();for(const animation of animations2048)animation.cancel();animations2048.clear();};
+ const settle=()=>{pending2048=null;pointer=null;if(finishMove2048)finishMove2048();stopMotion2048();};
  on(document,'visibilitychange',()=>{if(document.hidden)settle();});on(window,'blur',settle);
  const media=window.matchMedia('(prefers-reduced-motion: reduce)');on(media,'change',()=>{if(reduced2048())settle();});
- const observer=new MutationObserver(()=>{if(!$('#overlay').hidden){pending2048=null;pointer=null;}if(reduced2048())settle();});
+ const observer=new MutationObserver(()=>{if(!$('#overlay').hidden||reduced2048())settle();});
  observer.observe($('#overlay'),{attributes:true,attributeFilter:['hidden']});observer.observe($('#phone-screen'),{attributes:true,attributeFilter:['data-reduce-motion']});
- gameCleanups.push(()=>{observer.disconnect();stopMotion2048();nodes2048.clear();});
+ let width=0;const resize=typeof ResizeObserver==='function'?new ResizeObserver(entries=>{const next=entries[0].contentRect.width;if(width&&Math.abs(next-width)>.5)settle();width=next;}):null;
+ resize?.observe(board);on(window,'resize',settle);
+ gameCleanups.push(()=>{resize?.disconnect();observer.disconnect();stopMotion2048();nodes2048.clear();});
 }
 A.actions.move2048=el=>move2048(el.dataset.value);
 A.actions.undo2048=()=>historyStep2048();A.actions.redo2048=()=>historyStep2048(true);A.actions.hint2048=hintMove2048;
-A.actions.continue2048=()=>{if(!active2048()||busy2048)return;continued2048=true;save2048();render2048('4096、その先へ。続けてプレイできます。');$('#board-2048').focus({preventScroll:true});};
-A.actions.save2048=()=>{if(!active2048())return;save2048();render2048(saveOK2048?'進行状況を保存しました。':'保存できませんでした。このページを閉じずに保存容量を確認してください。');};
+A.actions.continue2048=()=>{if(!active2048()||busy2048||!waiting2048()||!$('#overlay').hidden)return;continued2048=true;save2048();render2048('4096、その先へ。続けてプレイできます。');$('#board-2048').focus({preventScroll:true});};
+A.actions.save2048=()=>{if(!active2048()||busy2048||!$('#overlay').hidden)return;save2048();if(prefsDirty2048)prefsDirty2048=!A.save('2048preferences',prefs2048);render2048(saveOK2048&&!prefsDirty2048?'進行状況と見た目の設定を保存しました。':'保存できていない項目があります。このページを閉じずに保存容量を確認してください。');};
 A.actions.restart2048=()=>{if(!active2048())return;pending2048=null;A.confirm('新しい2048をはじめる','現在の盤面と取り消し履歴をリセットします。最高点・自己記録・見た目の設定は残ります。',()=>{
  if(!active2048())return;stopMotion2048();tiles=Array(16).fill(0);score=0;turns2048=0;combo2048=0;peakCombo2048=0;continued2048=false;history2048=[];future2048=[];seed2048=Math.floor(Math.random()*2**32);clearHint2048();spawn();spawn();save2048();paint2048();render2048('新しい盤面です。2048を目指しましょう。');
 });};
@@ -310,9 +319,9 @@ A.actions.checkpointDelete2048=()=>{
  });
 };
 function preference2048(key,value){
- const allowed=key==='theme'?['ceramic','aurora']:['smooth','quick'];if(!active2048()||!allowed.includes(value))return;
- prefs2048[key]=value;const saved=A.save('2048preferences',prefs2048);
- if(!saved)render2048('見た目の設定を保存できませんでした。このページ内だけに適用します。');
+ const allowed=key==='theme'?['ceramic','aurora']:['smooth','quick'];if(!active2048()||busy2048||!$('#overlay').hidden||!allowed.includes(value))return;
+ prefs2048[key]=value;prefsDirty2048=!A.save('2048preferences',prefs2048);
+ render2048(prefsDirty2048?'見た目の設定が未保存です。画面下の「保存し直す」で再試行できます。':'見た目の設定を保存しました。');
  if(key==='theme')$('.studio-2048').dataset.material=value;
  A.$$(`.studio-2048 [data-action="${key}2048"]`).forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.value===value)));
 }
