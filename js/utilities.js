@@ -31,23 +31,161 @@ function startCall(number){if(!number)return A.toast('番号を入力');callNumb
 function saveCall(){if(!callNumber)return;callLog.unshift({number:callNumber,name:phoneContacts.find(c=>c.number===callNumber)?.name||callNumber,date:Date.now(),duration:Math.floor((Date.now()-callStarted)/1000)});callLog=callLog.slice(0,40);A.save('callLog',callLog);callNumber='';}
 A.actions.phoneCall=()=>startCall(dial);A.actions.contactCall=el=>{dial=el.dataset.number;startCall(dial);};A.actions.callFromLog=el=>startCall(el.dataset.number);A.actions.phoneEnd=()=>{clearInterval(callTimer);callTimer=null;saveCall();phoneTab='recent';phone();};A.actions.callControl=el=>{const label=el.dataset.label;if(label==='消音'||label==='スピーカー'){el.classList.toggle('active');el.setAttribute('aria-pressed',el.classList.contains('active'));A.toast(`${label}を${el.classList.contains('active')?'オン':'オフ'}にしました（デモ）`);}else if(label==='キーパッド'){A.overlay(`${A.overlayTitle('通話中のキーパッド')}<div class="dial-keypad">${'123456789*0#'.split('').map(n=>`<button class="dial-key" style="color:#26303d" data-action="callDtmf" data-value="${n}">${n}</button>`).join('')}</div><p class="control-footer">音はこのブラウザ内だけで再生されます。</p>`);}else A.toast('デモでは利用不可');};A.actions.callDtmf=el=>{dialTone(el.dataset.value);A.haptic();};
 // Clock: timers work while the document is open; no OS alarm integration.
-let clockTab='world',stopwatch={running:false,start:0,elapsed:0,laps:[]},timer={running:false,remaining:300,end:0},alarms=A.load('alarms',[{id:'alarm-1',time:'07:00',label:'ゆっくり、目覚めよう',enabled:false},{id:'alarm-2',time:'08:30',label:'一日をはじめる',enabled:false}]);let alarmLast='',clockInterval=null;
+let clockTab='world',stopwatch={running:false,start:0,elapsed:0,laps:[]},timer=readTimerStore().session,alarms=A.load('alarms',[{id:'alarm-1',time:'07:00',label:'ゆっくり、目覚めよう',enabled:false},{id:'alarm-2',time:'08:30',label:'一日をはじめる',enabled:false}]);let alarmLast='',clockInterval=null;
+// One atomic record keeps completion history and the deadline in sync.
+const TIMER_MAX=10859;
+const timerModes={timer:{name:'タイマー',label:'自分のペースで',duration:300},work:{name:'集中',label:'ひとつのことに、集中',duration:1500},rest:{name:'休憩',label:'少し、ひと息',duration:300}};
+function defaultTimer(){return {id:'',running:false,remaining:300,duration:300,end:0,mode:'timer',label:'自分のペースで',finished:false};}
+function readTimerStore(){
+  const raw=A.load('clockTimer',null),fallback={session:defaultTimer(),history:[],presets:[],sound:true};
+  if(!raw||typeof raw!=='object')return fallback;
+  const t=raw.session;
+  if(t&&['timer','work','rest'].includes(t.mode)&&Number.isFinite(t.duration)&&t.duration>=1&&t.duration<=10859&&Number.isFinite(t.remaining)&&t.remaining>=0&&t.remaining<=t.duration&&Number.isFinite(t.end)&&t.end>=0&&t.end<=8640000000000000){
+    fallback.session={...defaultTimer(),...t,label:String(t.label||'タイマー').slice(0,40),running:t.running===true&&t.end>0,finished:t.finished===true};
+  }
+  const valid=r=>r&&typeof r.id==='string'&&typeof r.label==='string'&&['timer','work','rest'].includes(r.mode)&&Number.isFinite(r.duration)&&r.duration>=1&&r.duration<=10859;
+  fallback.history=Array.isArray(raw.history)?raw.history.filter(r=>valid(r)&&Number.isFinite(r.date)&&r.date>0&&r.date<=8640000000000000).slice(0,40):[];
+  fallback.presets=Array.isArray(raw.presets)?raw.presets.filter(valid).slice(0,8):[];
+  fallback.sound=raw.sound!==false;
+  return fallback;
+}
+let timerStore=readTimerStore();
+function saveTimer(next,extra={}){
+  const store={...timerStore,...extra,session:next};
+  if(!A.save('clockTimer',store))return false;
+  timerStore=store;timer=next;return true;
+}
+const timerRemaining=()=>timer.running?Math.max(0,(timer.end-Date.now())/1000):timer.remaining;
+const timerBusy=()=>timer.running||!!timer.id&&!timer.finished;
+const timerLength=s=>s>=60?`${Math.floor(s/60)}分${s%60?`${s%60}秒`:''}`:`${s}秒`;
+const timerTime=end=>new Date(end).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',hour12:false});
+function timerDial(){
+  return `<svg class="tm-dial-art" viewBox="0 0 320 320" aria-hidden="true"><defs>
+    <linearGradient id="tm-metal" x2=".8" y2="1"><stop stop-color="#fffdf7"/><stop offset=".45" stop-color="#e7d6c0"/><stop offset=".75" stop-color="#fcf7ed"/><stop offset="1" stop-color="#d6bfa3"/></linearGradient>
+    <linearGradient id="tm-copper" x2="1" y2="1"><stop stop-color="#ecc098"/><stop offset=".5" stop-color="#c88b63"/><stop offset="1" stop-color="#925c42"/></linearGradient>
+    <radialGradient id="tm-face" cx=".4" cy=".25" r=".8"><stop stop-color="#fffcf6"/><stop offset="1" stop-color="#eee6db"/></radialGradient>
+  </defs><circle class="tm-metal" cx="160" cy="160" r="155" fill="url(#tm-metal)"/><circle cx="160" cy="160" r="151" fill="none" stroke="#fff" stroke-opacity=".65"/><circle class="tm-face" cx="160" cy="160" r="145" fill="url(#tm-face)"/>
+  <g class="tm-ticks">${Array.from({length:60},(_,i)=>`<path d="M160 23v${i%5===0?10:4}" transform="rotate(${i*6} 160 160)" stroke="currentColor" stroke-width="${i%5===0?1.8:1}"/>`).join('')}</g>
+  <g class="tm-dial-numbers" text-anchor="middle"><text x="160" y="51">00</text><text x="277" y="164">15</text><text x="160" y="278">30</text><text x="43" y="164">45</text></g>
+  <circle class="tm-track" cx="160" cy="160" r="108" fill="none" stroke-width="4"/>
+  <circle id="tm-progress" cx="160" cy="160" r="108" fill="none" stroke="url(#tm-copper)" stroke-width="5" stroke-linecap="round" pathLength="100" stroke-dasharray="100 100" transform="rotate(-90 160 160)"/>
+  <g id="tm-hand"><circle cx="160" cy="52" r="7" fill="url(#tm-copper)"/><circle cx="158.5" cy="50.5" r="2" fill="#fff5df"/></g>
+  </svg>`;
+}
+function timerView(){
+  const busy=timerBusy(),done=timer.finished;
+  const today=timerStore.history.filter(h=>new Date(h.date).toDateString()===new Date().toDateString());
+  return `<div class="tm-heading"><div><span class="tm-eyebrow">A LITTLE TIME, JUST FOR YOU</span><h1>時間に、余白を。</h1></div><button class="tm-icon-button" data-action="timerHistory" aria-label="完了履歴">${icon('clock')}</button></div>
+  <div class="tm-modes" aria-label="タイマーのモード">${Object.entries(timerModes).map(([id,m])=>`<button data-action="timerMode" data-value="${id}" aria-pressed="${timer.mode===id}" ${busy?'disabled':''}>${m.name}</button>`).join('')}</div>
+  <div class="tm-stage ${timer.running?'is-running':''} ${done?'is-complete':''}" data-mode="${timer.mode}">
+    <div class="tm-caption"><span class="tm-status-dot"></span><span id="tm-state" role="status">${done?'おつかれさまでした':timer.running?'時間を大切に、ひとつずつ':busy?'ひと息ついても、大丈夫':'準備ができたら、はじめよう'}</span></div>
+    <div class="tm-dial">${timerDial()}<div class="tm-dial-center"><span class="tm-dial-label">${esc(timer.label)}</span><strong id="timer-display" role="timer" aria-label="残り時間">${timeString(Math.ceil(timerRemaining()))}</strong><span class="tm-dial-state">${done?'COMPLETE':timer.running?'IN PROGRESS':busy?'PAUSED':'READY WHEN YOU ARE'}</span></div></div>
+    <div class="tm-timing"><span>${icon('alarm')}<span id="tm-end"></span></span><span id="tm-percent"></span></div>
+  </div>
+  ${!busy?`<div class="tm-editor"><span>時間を設定</span><div><label><input type="number" id="timer-minutes" min="0" max="180" step="1" value="${Math.floor(timer.duration/60)}" aria-label="分"><span>分</span></label><span class="tm-colon">:</span><label><input type="number" id="timer-seconds" min="0" max="59" step="1" value="${timer.duration%60}" aria-label="秒"><span>秒</span></label></div><button data-action="timerLabel" aria-label="タイマーの名前を編集">${icon('edit')}</button></div>`:`<div class="tm-session-info"><span>${timerModes[timer.mode].name} · ${timerLength(timer.duration)}</span><button data-action="timerAdd">${icon('plus')} 1分追加</button></div>`}
+  <div class="tm-actions"><button class="tm-reset" data-action="timerReset" aria-label="設定時間にリセット">${icon('refresh')}</button><button class="tm-start" data-action="timerToggle">${icon(timer.running?'pause':'play')}<span>${timer.running?'一時停止':done?'もう一度':busy?'再開する':'はじめる'}</span></button><button class="tm-sound" data-action="timerSound" aria-label="終了音" aria-pressed="${timerStore.sound}">${icon(timerStore.sound?'volume':'close')}</button></div>
+  <section class="tm-presets"><div class="tm-section-heading"><h2>いつもの時間</h2><button data-action="timerSavePreset" ${busy?'disabled':''}>${icon('plus')} 保存</button></div><div class="tm-preset-grid">${[[1,'ひと呼吸','wind'],[3,'お茶の時間','sun'],[5,'ひと休み','leaf'],[10,'小さな作業','edit']].map(([m,label,ic])=>`<button class="tm-preset ${timer.duration===m*60?'selected':''}" data-action="timerPreset" data-value="${m}" ${busy?'disabled':''}><span class="tm-preset-icon">${icon(ic)}</span><strong>${m}<small> min</small></strong><span>${label}</span></button>`).join('')}</div>
+  ${timerStore.presets.length?`<div class="tm-saved">${timerStore.presets.map(p=>`<div><button data-action="timerUsePreset" data-id="${esc(p.id)}" ${busy?'disabled':''}><span>${esc(p.label)}</span><small>${timerLength(p.duration)}</small></button><button data-action="timerDeletePreset" data-id="${esc(p.id)}" aria-label="${esc(p.label)}を削除">${icon('close')}</button></div>`).join('')}</div>`:''}</section>
+  <div class="tm-today"><span class="tm-today-icon">${icon('check')}</span><div><strong>今日の小さな積み重ね</strong><span>${today.length?`${today.length}回完了 · ${timerLength(today.reduce((s,h)=>s+h.duration,0))}`:'最初のひとつを、ここから。'}</span></div><button data-action="timerHistory" aria-label="すべての履歴を見る">${icon('chevronRight')}</button></div>
+  <details class="tm-help"><summary>通知・保存について</summary><p>タイマーはこのブラウザに保存。画面を移動・再読み込みしても終了予定を維持します。ページ終了・端末スリープ中の通知は保証されません。集中モード・消音設定中は終了音が鳴りません。</p><p>集中・休憩は手動で切り替えます。「集中」アプリの記録とは別に保存します。Spaceキーで開始・一時停止できます。</p><button data-action="clockNotifyPermission">端末通知を有効にする</button><button data-action="timerTestSound">終了音を試す</button></details>`;
+}
+function updateTimerView(){
+  if(!$('#timer-display'))return;
+  const left=timerRemaining(),ratio=Math.min(1,Math.max(0,left/timer.duration));
+  $('#timer-display').textContent=timeString(Math.ceil(left));
+  $('#tm-progress').style.strokeDashoffset=String(100*(1-ratio));
+  $('#tm-hand').setAttribute('transform',`rotate(${360*(1-ratio)} 160 160)`);
+  $('#tm-percent').textContent=timer.finished?'完了':`${Math.floor((1-ratio)*100)}% 経過`;
+  $('#tm-end').textContent=timer.finished?'あなたの時間を、次のことへ':`${timer.running?'終了予定':timerBusy()?'一時停止中 · 残り':'開始すると'} ${timerBusy()&&!timer.running?timerLength(Math.ceil(left)):timerTime(timer.running?timer.end:Date.now()+timer.duration*1000)}${!timerBusy()?' に終了':''}`;
+}
+function timerInputDuration(){
+  const min=$('#timer-minutes'),sec=$('#timer-seconds');
+  if(!min||!sec)return timer.duration;
+  const m=Number(min.value),s=Number(sec.value);
+  if(!min.value.trim()||!sec.value.trim()||!Number.isInteger(m)||!Number.isInteger(s)||m<0||m>180||s<0||s>59||m*60+s===0)return null;
+  return m*60+s;
+}
+function setTimerDuration(duration,mode=timer.mode,label=timer.label){
+  if(timerBusy())return A.toast('リセットしてから変更できます');
+  if(!Number.isInteger(duration)||duration<1||duration>TIMER_MAX)return;
+  if(saveTimer({...defaultTimer(),duration,remaining:duration,mode,label}))clock();
+}
+function finishTimer(){
+  if(!timer.running||Date.now()<timer.end)return;
+  const entry={id:timer.id,label:timer.label,mode:timer.mode,duration:timer.duration,date:timer.end};
+  const next={...timer,running:false,remaining:0,finished:true};
+  const history=[entry,...timerStore.history.filter(h=>h.id!==timer.id)].slice(0,40);
+  if(!saveTimer(next,{history})){
+    // Do not ring every second if storage fills up at the deadline.
+    timer=next;timerStore={...timerStore,session:next,history};
+    A.toast('タイマー終了。履歴を保存できませんでした');
+  }
+  if(A.current==='clock'&&clockTab==='timer')clock();
+  alarmNotice('タイマーが終了しました',timerStore.sound,`${timer.label} · ${timerLength(timer.duration)}`);
+}
 const clockTabs=()=>A.tabs([{id:'world',icon:'globe',name:'世界時計',action:'clockTab',value:'world'},{id:'alarm',icon:'alarm',name:'アラーム',action:'clockTab',value:'alarm'},{id:'stopwatch',icon:'timer',name:'ストップウォッチ',action:'clockTab',value:'stopwatch'},{id:'timer',icon:'clock',name:'タイマー',action:'clockTab',value:'timer'}],clockTab);
 const stopwatchElapsed=()=>stopwatch.elapsed+(stopwatch.running?Date.now()-stopwatch.start:0);
 function stopwatchFormat(ms){return `${String(Math.floor(ms/60000)).padStart(2,'0')}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}.${String(Math.floor(ms/10)%100).padStart(2,'0')}`;}
-function clock(){A.statusTheme(false);A.view(A.nav('時計',clockTab==='alarm'?`<button data-action="alarmAdd" aria-label="アラームを追加">${icon('plus')}</button>`:'')+`<div class="app-content" id="clock-content"></div>`+clockTabs());const el=$('#clock-content');
+function clock(){const active=document.activeElement?.dataset,scroll=$('#clock-content')?.scrollTop||0;A.statusTheme(false);$('#app-screen').classList.toggle('timer-studio',clockTab==='timer');A.view(A.nav('時計',clockTab==='alarm'?`<button data-action="alarmAdd" aria-label="アラームを追加">${icon('plus')}</button>`:'')+`<div class="app-content" id="clock-content"></div>`+clockTabs());const el=$('#clock-content');
 if(clockTab==='world')el.innerHTML=`<h1 class="app-title">世界時計</h1><p class="app-subtitle"></p>${[['東京','Asia/Tokyo','あなたの小さな世界'],['ニューヨーク','America/New_York','AMERICA'],['ロンドン','Europe/London','EUROPE'],['パリ','Europe/Paris','EUROPE'],['シドニー','Australia/Sydney','OCEANIA']].map(([name,zone,desc])=>`<div class="clock-world"><div><small>${desc}</small><h3>${name}</h3></div><strong data-timezone="${zone}"></strong></div>`).join('')}`;
 else if(clockTab==='alarm')el.innerHTML=`<h1 class="app-title">アラーム</h1><p class="app-subtitle">ページ稼働中のみ。背面・ロック中は保証なし</p>${alarms.map(a=>`<div class="alarm-row"><div><strong class="alarm-time" style="color:${a.enabled?'inherit':'#a9aab3'}">${a.time}</strong><small>${esc(a.label)} · 毎日</small></div><button class="toggle ${a.enabled?'on':''}" data-action="alarmToggle" data-id="${a.id}" aria-label="${a.time}のアラーム" aria-pressed="${a.enabled}"></button><button class="delete-small" data-action="alarmDelete" data-id="${a.id}" aria-label="アラーム削除">×</button></div>`).join('')}`;
 else if(clockTab==='stopwatch')el.innerHTML=`<h1 class="app-title">ストップウォッチ</h1><div class="stopwatch-display" id="stopwatch-display">${stopwatchFormat(stopwatchElapsed())}</div><div class="stopwatch-actions"><button class="round-action" data-action="stopwatchLap">${stopwatch.running?'ラップ':'リセット'}</button><button class="round-action ${stopwatch.running?'stop':'start'}" data-action="stopwatchToggle">${stopwatch.running?'停止':'開始'}</button></div><div id="lap-list">${stopwatch.laps.map((l,i)=>`<div class="lap-row"><span>ラップ ${stopwatch.laps.length-i}</span><span>${stopwatchFormat(l-(stopwatch.laps[i+1]||0))}</span></div>`).join('')}</div>`;
-else el.innerHTML=`<h1 class="app-title">タイマー</h1><p class="app-subtitle">ページ稼働中のみ通知</p>${timer.running?`<div class="timer-ring" id="timer-display">${timeString((timer.end-Date.now())/1000)}</div>`:`<div class="timer-picker"><input type="number" id="timer-minutes" min="0" max="180" value="${Math.floor(timer.remaining/60)}" aria-label="分">分<input type="number" id="timer-seconds" min="0" max="59" value="${timer.remaining%60}" aria-label="秒">秒</div><p class="setting-description" style="text-align:center;margin-bottom:45px"></p>`}<div class="stopwatch-actions"><button class="round-action" data-action="timerReset">リセット</button><button class="round-action ${timer.running?'stop':'start'}" data-action="timerToggle">${timer.running?'一時停止':'開始'}</button></div><div class="game-toolbar" style="justify-content:center;margin-top:25px">${[1,3,5,10].map(m=>`<button data-action="timerPreset" data-value="${m}" style="background:#e4e5eb;color:#8b8d99">${m}分</button>`).join('')}</div>`;
-updateClockView();}
-function updateClockView(){if(A.current!=='clock')return;A.$$('[data-timezone]').forEach(el=>el.textContent=new Date().toLocaleTimeString('en-GB',{timeZone:el.dataset.timezone,hour:'2-digit',minute:'2-digit'}));if($('#stopwatch-display'))$('#stopwatch-display').textContent=stopwatchFormat(stopwatchElapsed());if($('#timer-display'))$('#timer-display').textContent=timeString(Math.ceil((timer.end-Date.now())/1000));}
+else {el.classList.add('tm-content');el.innerHTML=timerView();
+  ['#timer-minutes','#timer-seconds'].forEach(selector=>{const input=$(selector);if(input)input.oninput=()=>{
+    const duration=timerInputDuration();if(!duration)return;
+    if(saveTimer({...timer,duration,remaining:duration,finished:false,id:''})){
+      updateTimerView();$('.tm-stage').classList.remove('is-complete');$('#tm-state').textContent='準備ができたら、はじめよう';$('.tm-dial-state').textContent='READY WHEN YOU ARE';
+      A.$$('.tm-preset').forEach(p=>p.classList.toggle('selected',Number(p.dataset.value)*60===duration));
+    }
+  };});
+}
+updateClockView();el.scrollTop=scroll;
+if(active?.action){const target=A.$$('[data-action]',el).find(b=>b.dataset.action===active.action&&b.dataset.value===active.value&&b.dataset.id===active.id);target?.focus({preventScroll:true});}}
+function updateClockView(){if(A.current!=='clock')return;A.$$('[data-timezone]').forEach(el=>el.textContent=new Date().toLocaleTimeString('en-GB',{timeZone:el.dataset.timezone,hour:'2-digit',minute:'2-digit'}));if($('#stopwatch-display'))$('#stopwatch-display').textContent=stopwatchFormat(stopwatchElapsed());updateTimerView();}
 function beep(){try{const c=getAudioContext();if(!c)return;for(let i=0;i<3;i++){const o=c.createOscillator(),g=c.createGain(),t=c.currentTime+i*.35;o.frequency.value=880;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.1,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.23);o.connect(g);g.connect(c.destination);o.start(t);o.stop(t+.25);o.onended=()=>{o.disconnect();g.disconnect();};}}catch{}}
-function alarmNotice(title){A.notify({app:'clock',title:title==='タイマーが終了しました'?'タイマー終了':title,body:'時計を開く'});if(!A.settings.focus&&!A.noticeMuted?.('clock')){A.network?.clockNotice(title);beep();}}
-A.clockTick=()=>{updateClockView();if(timer.running&&Date.now()>=timer.end){timer.running=false;timer.remaining=0;if(A.current==='clock'&&clockTab==='timer')clock();alarmNotice('タイマーが終了しました');}const n=new Date(),minute=n.toTimeString().slice(0,5),key=n.toDateString()+minute;if(key!==alarmLast){alarmLast=key;const alarm=alarms.find(a=>a.enabled&&a.time===minute);if(alarm)alarmNotice(alarm.label||'アラーム');}};
-A.apps.clock.render=()=>{clock();clearInterval(clockInterval);clockInterval=setInterval(updateClockView,45);A.cleanups.push(()=>clearInterval(clockInterval));};A.actions.clockTab=el=>{clockTab=el.dataset.value;clock();};
+function alarmNotice(title,sound=true,body='時計を開く'){A.notify({app:'clock',title:title==='タイマーが終了しました'?'タイマー終了':title,body});if(!A.settings.focus&&!A.noticeMuted?.('clock')){A.network?.clockNotice(title);if(sound&&A.settings.sound)beep();}}
+A.clockTick=()=>{finishTimer();updateClockView();const n=new Date(),minute=n.toTimeString().slice(0,5),key=n.toDateString()+minute;if(key!==alarmLast){alarmLast=key;const alarm=alarms.find(a=>a.enabled&&a.time===minute);if(alarm)alarmNotice(alarm.label||'アラーム');}};
+A.apps.clock.render=arg=>{
+  if(['world','alarm','stopwatch','timer'].includes(arg))clockTab=arg;
+  finishTimer();clock();clearInterval(clockInterval);clockInterval=setInterval(updateClockView,80);
+  const keydown=e=>{if(e.code==='Space'&&!e.repeat&&A.current==='clock'&&clockTab==='timer'&&$('#overlay').hidden&&!e.target.closest('button,input,textarea,select,summary,[contenteditable]')){e.preventDefault();A.actions.timerToggle();}};
+  document.addEventListener('keydown',keydown);A.cleanups.push(()=>{clearInterval(clockInterval);document.removeEventListener('keydown',keydown);});
+};A.actions.clockTab=el=>{clockTab=el.dataset.value;clock();};
 A.actions.stopwatchToggle=()=>{if(stopwatch.running){stopwatch.elapsed=stopwatchElapsed();stopwatch.running=false;}else{stopwatch.start=Date.now();stopwatch.running=true;}clock();};A.actions.stopwatchLap=()=>{if(stopwatch.running)stopwatch.laps.unshift(stopwatchElapsed());else stopwatch={running:false,start:0,elapsed:0,laps:[]};clock();};
-A.actions.timerToggle=()=>{if(timer.running){timer.remaining=Math.max(0,Math.ceil((timer.end-Date.now())/1000));timer.running=false;}else{const min=+$('#timer-minutes').value,sec=+$('#timer-seconds').value;if(!Number.isFinite(min)||!Number.isFinite(sec)||min<0||min>180||sec<0||sec>59)return A.toast('0〜180分、0〜59秒で指定してください');const total=Math.floor(min*60+sec);if(!total)return A.toast('時間を指定');timer.remaining=total;timer.end=Date.now()+total*1000;timer.running=true;try{getAudioContext();}catch{}}clock();};A.actions.timerReset=()=>{timer={running:false,remaining:300,end:0};clock();};A.actions.timerPreset=el=>{timer={running:false,remaining:+el.dataset.value*60,end:0};clock();};A.actions.alarmToggle=el=>{const a=alarms.find(a=>a.id===el.dataset.id);a.enabled=!a.enabled;A.save('alarms',alarms);if(a.enabled){try{getAudioContext();}catch{}}clock();};A.actions.alarmDelete=el=>{alarms=alarms.filter(a=>a.id!==el.dataset.id);A.save('alarms',alarms);clock();};A.actions.alarmAdd=()=>A.form('新しいアラーム','<label class="form-label">時刻</label><input class="text-input" type="time" name="time" value="07:00" required><label class="form-label">ラベル</label><input class="text-input" name="label" placeholder="一日をはじめよう" maxlength="60">',v=>{alarms.push({id:A.id(),...v,enabled:true});A.save('alarms',alarms);try{getAudioContext();}catch{}clock();});
+A.actions.timerToggle=()=>{
+  if(timer.running){if(Date.now()>=timer.end){finishTimer();return;}if(saveTimer({...timer,remaining:timerRemaining(),running:false,end:0}))clock();return;}
+  const duration=timerBusy()?timer.duration:timerInputDuration();
+  if(!duration)return A.toast('1秒〜180分59秒を整数で指定してください');
+  const remaining=timerBusy()?timer.remaining:duration;
+  if(saveTimer({...timer,id:timerBusy()?timer.id:A.id(),duration,remaining,running:true,finished:false,end:Date.now()+remaining*1000})){
+    try{getAudioContext();}catch{}clock();
+  }
+};
+A.actions.timerReset=()=>{const reset=()=>{if(saveTimer({...timer,id:'',running:false,finished:false,remaining:timer.duration,end:0}))clock();};if(timerBusy())A.confirm('タイマーをリセット','進行中の時間を取り消し、設定時間に戻します。完了履歴には残りません。',reset);else reset();};
+A.actions.timerPreset=el=>{const duration=Number(el.dataset.value)*60;setTimerDuration(duration,'timer',({1:'ひと呼吸',3:'お茶の時間',5:'ひと休み',10:'小さな作業'})[el.dataset.value]||'タイマー');};
+A.actions.timerMode=el=>{const mode=el.dataset.value;if(timerModes[mode])setTimerDuration(timerModes[mode].duration,mode,timerModes[mode].label);};
+A.actions.timerAdd=()=>{
+  if(!timerBusy())return;if(timer.running&&Date.now()>=timer.end)return finishTimer();
+  if(timer.duration+60>TIMER_MAX)return A.toast('最大180分59秒まで追加できます');
+  if(saveTimer({...timer,duration:timer.duration+60,remaining:timerRemaining()+60,end:timer.running?timer.end+60000:0}))clock();
+};
+A.actions.timerSound=()=>{if(saveTimer(timer,{sound:!timerStore.sound}))clock();};
+A.actions.timerTestSound=()=>{if(!timerStore.sound||!A.settings.sound||A.settings.focus||A.noticeMuted?.('clock'))return A.toast('終了音・サウンドをオン、集中モード・通知の消音をオフにしてください');beep();};
+A.actions.timerLabel=()=>{if(timerBusy())return;A.form('この時間に名前を',`<label class="form-label" for="tm-label">名前</label><input class="text-input" id="tm-label" name="label" maxlength="40" value="${esc(timer.label)}" required>`,v=>{if(!v.label.trim())return false;if(!saveTimer({...timer,label:v.label.trim()}))return false;clock();});};
+A.actions.timerSavePreset=()=>{
+  if(timerBusy())return;const duration=timerInputDuration();if(!duration)return A.toast('有効な時間を指定してください');
+  if(timerStore.presets.length>=8)return A.toast('保存は8件まで。不要なプリセットを削除してください');
+  A.form('いつもの時間に追加',`<p>${timerLength(duration)} · ${timerModes[timer.mode].name}</p><label class="form-label" for="tm-preset-name">名前</label><input class="text-input" id="tm-preset-name" name="label" maxlength="40" value="${esc(timer.label)}" required>`,v=>{
+    if(!v.label.trim())return false;
+    const preset={id:A.id(),duration,mode:timer.mode,label:v.label.trim()};
+    if(!saveTimer(timer,{presets:[...timerStore.presets,preset]}))return false;clock();
+  });
+};
+A.actions.timerUsePreset=el=>{const p=timerStore.presets.find(p=>p.id===el.dataset.id);if(p)setTimerDuration(p.duration,p.mode,p.label);};
+A.actions.timerDeletePreset=el=>{const p=timerStore.presets.find(p=>p.id===el.dataset.id);if(p)A.confirm('プリセットを削除',`「${esc(p.label)}」を削除します。`,()=>{if(saveTimer(timer,{presets:timerStore.presets.filter(p=>p.id!==el.dataset.id)}))clock();});};
+A.actions.timerHistory=()=>A.overlay(`${A.overlayTitle('時間の記録')}<p class="tm-history-intro">完了した時間だけを、このブラウザに。<br>最新40件を保存します。</p><div class="tm-history-list">${timerStore.history.map(h=>`<article><span class="tm-history-check">${icon('check')}</span><div><strong>${esc(h.label)}</strong><small>${new Date(h.date).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${timerModes[h.mode].name}</small></div><b>${timerLength(h.duration)}</b></article>`).join('')||'<div class="tm-history-empty">まだ、まっさらな時間。<p>タイマーを完了すると、ここに記録されます。</p></div>'}</div>${timerStore.history.length?'<button class="tm-history-clear" data-action="timerClearHistory">完了履歴を削除</button>':''}`);
+A.actions.timerClearHistory=()=>A.confirm('完了履歴を削除','すべてのタイマー完了履歴を削除します。進行中のタイマーとプリセットは残ります。',()=>{if(saveTimer(timer,{history:[]})){if(A.current==='clock'&&clockTab==='timer')clock();A.actions.timerHistory();}});
+A.actions.alarmToggle=el=>{const a=alarms.find(a=>a.id===el.dataset.id);a.enabled=!a.enabled;A.save('alarms',alarms);if(a.enabled){try{getAudioContext();}catch{}}clock();};A.actions.alarmDelete=el=>{alarms=alarms.filter(a=>a.id!==el.dataset.id);A.save('alarms',alarms);clock();};A.actions.alarmAdd=()=>A.form('新しいアラーム','<label class="form-label">時刻</label><input class="text-input" type="time" name="time" value="07:00" required><label class="form-label">ラベル</label><input class="text-input" name="label" placeholder="一日をはじめよう" maxlength="60">',v=>{alarms.push({id:A.id(),...v,enabled:true});A.save('alarms',alarms);try{getAudioContext();}catch{}clock();});
 // Health is sample/manual data, not measurements or medical advice.
 let health=A.load('health',{steps:6240,minutes:24,water:1200});
 function healthApp(){const move=Math.min(health.steps/8000,1),exercise=Math.min(health.minutes/30,1);A.view(A.nav('ヘルスケア',`<button data-action="healthAdd" aria-label="記録を追加">${icon('plus')}</button>`)+`<div class="app-content"><h1 class="app-title">ヘルスケア</h1><p class="app-subtitle"><span class="demo-label">サンプル</span></p><div class="health-hero"><div class="activity-rings"><svg viewBox="0 0 140 140"><circle cx="70" cy="70" r="58" fill="none" stroke="#5e2635" stroke-width="11"/><circle cx="70" cy="70" r="58" fill="none" stroke="#f75381" stroke-width="11" stroke-dasharray="${move*364} 364" stroke-linecap="round"/><circle cx="70" cy="70" r="43" fill="none" stroke="#354921" stroke-width="11"/><circle cx="70" cy="70" r="43" fill="none" stroke="#b8e643" stroke-width="11" stroke-dasharray="${exercise*270} 270" stroke-linecap="round"/><circle cx="70" cy="70" r="28" fill="none" stroke="#1d454b" stroke-width="11"/><circle cx="70" cy="70" r="28" fill="none" stroke="#67d9e3" stroke-width="11" stroke-dasharray="132 176" stroke-linecap="round"/></svg><span>♡</span></div><div><div class="activity-stat"><small>ムーブ</small><strong>${Math.round(health.steps*.042)} <span style="font-size:10px">kcal</span></strong></div><div class="activity-stat"><small>エクササイズ</small><strong>${health.minutes} <span style="font-size:10px">/ 30分</span></strong></div><div class="activity-stat"><small>スタンド</small><strong>9 <span style="font-size:10px">/ 12時間</span></strong></div></div></div><article class="health-card"><h3>♧　歩数</h3><strong>${health.steps.toLocaleString()}</strong> <small>歩</small><div class="bar-chart">${[48,67,52,86,73,94,Math.min(100,health.steps/90)].map((v,i)=>`<div><span style="height:${v}%"></span>${['月','火','水','木','金','土','日'][i]}</div>`).join('')}</div></article><article class="health-card"><h3 style="color:#67a1c9">◉　水分補給</h3><strong>${health.water.toLocaleString()}</strong> <small>/ 2,000 ml</small><div class="progress-track" style="background:#ecf1f7;margin:15px 0"><span style="width:${Math.min(100,health.water/20)}%;background:#8bb9dd"></span></div><button class="secondary-button" data-action="healthWater" style="width:100%;background:#eaf3fa;color:#699abd">+ コップ一杯（200ml）</button></article><article class="health-card"><h3 style="color:#a58bc5">☾　睡眠</h3><strong>7<small>時間</small> 32<small>分</small></strong><p class="setting-description" style="padding:0">サンプルの睡眠記録</p></article><p class="setting-description">サンプル・手入力。センサー・医療連携なし。ムーブはデモ推計</p></div>`);}
