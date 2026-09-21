@@ -57,7 +57,7 @@ frame.addEventListener('load',async()=>{
   A.closeOverlay();A.actions.appContext({dataset:{id:'calendar'}});check();assert(d.querySelector('.context-app [data-app-art="calendar"]'),'Mini art missing');
   A.closeOverlay();A.notify({app:'clock',title:'Icon check',body:'Local artwork validation'});A.notifications();check();
   assert(d.querySelector('.notification-stack [data-app-art="clock"]'),'Notification artwork missing');
-  A.actions.dismissNotice(d.querySelector('.notification-stack .notification-dismiss'));
+  A.actions.dismissNotice(d.querySelector('.notification-stack [data-action="dismissNotice"]'));
  });
  await test('Calendar date and clock hands update without replacing launchers',()=>{
   A.home();const launcher=d.querySelector('[data-app="calendar"]'),day=launcher.querySelector('.app-calendar-date');
@@ -107,7 +107,7 @@ frame.addEventListener('load',async()=>{
  await test('Voice recorder permission is opt-in',()=>{A.open('recorder');assert(d.querySelector('.record-button'),'Record control missing');assert(!d.querySelector('.recording'),'Unexpected recording started');});
  await test('Phone offline dial and call history',async()=>{A.open('phone');click('[data-action="phoneDemo"]');for(const n of ['1','2','3'])click(`[data-action="dialKey"][data-value="${n}"]`);assert(d.querySelector('#dial-display').textContent==='123','Dialing');click('[data-action="phoneCall"]');assert(d.querySelector('.call-screen').textContent.includes('外部接続なし'),'Missing simulation label');await delay(1100);click('[data-action="phoneEnd"]');assert(A.load('callLog',[]).some(c=>c.number==='123'),'Call log');});
  await test('Stopwatch start, lap, and stop',async()=>{A.open('clock');click('[data-action="clockTab"][data-value="stopwatch"]');click('[data-action="stopwatchToggle"]');await delay(120);click('[data-action="stopwatchLap"]');assert(d.querySelector('.lap-row'),'Lap missing');click('[data-action="stopwatchToggle"]');assert(d.querySelector('#stopwatch-display').textContent!=='00:00.00','Clock did not advance');});
- await test('Timer completes and notifies',async()=>{click('[data-action="clockTab"][data-value="timer"]');input('#timer-minutes','0');input('#timer-seconds','1');click('[data-action="timerToggle"]');await delay(2100);assert(!d.querySelector('#overlay').hidden,'No timer notification');assert(d.querySelector('#overlay').textContent.includes('終了'),'Wrong notification');});
+ await test('Timer completes and notifies',async()=>{click('[data-action="clockTab"][data-value="timer"]');input('#timer-minutes','0');input('#timer-seconds','1');click('[data-action="timerToggle"]');await delay(2100);assert(A.load('notifications',[]).some(n=>n.app==='clock'&&n.title.includes('タイマー終了')),'No timer notification in history');});
  await test('Health hydration update',()=>{A.open('health');const before=A.load('health',{water:1200}).water;click('[data-action="healthWater"]');assert(A.load('health',{}).water===before+200,'Water update');});
  await test('Wallet demo-only charge and purchase',()=>{A.open('wallet');const before=A.load('wallet',{balance:3240}).balance;click('[data-action="walletCharge"]');d.querySelector('#modal-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));assert(A.load('wallet',{}).balance===before+1000,'Demo charge');click('[data-action="walletPay"]');d.querySelector('#modal-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));assert(A.load('wallet',{}).balance===before+420,'Demo purchase');});
  await test('Text file create and preview',()=>{A.open('files');click('[data-action="fileNew"]');const f=d.querySelector('#modal-form');f.elements.name.value='QA.txt';f.elements.content.value='A little test.';f.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));const file=A.load('files',[]).find(f=>f.name==='QA.txt');assert(file,'File not saved');A.actions.filesHome();click(`[data-action="fileOpen"][data-id="${file.id}"]`);assert(d.querySelector('.file-preview').textContent==='A little test.','File preview');});
@@ -166,7 +166,7 @@ frame.addEventListener('load',async()=>{
   input('#spotlight-query','not-a-real-app-123');assert(d.querySelector('.search-empty'),'Missing search empty state');
  });
  await test('Notifications escape text, persist, and dismiss individually',()=>{
-  A.actions.clearNotifications();A.closeOverlay();A.settings.focus=false;
+  A.actions.clearNotifications();click('#confirm-yes');A.closeOverlay();A.settings.focus=false;
   A.notify({app:'mail',title:'<b>QA notice</b>',body:'<img src=x onerror=alert(1)>'});
   assert(A.load('notifications',[]).length===1,'Notice not stored');assert(d.querySelector('#notification-banner'),'Missing banner');
   assert(!d.querySelector('#notification-banner img,#notification-banner b'),'Notification HTML injection');
@@ -177,7 +177,7 @@ frame.addEventListener('load',async()=>{
   A.closeOverlay();A.settings.focus=true;A.applySettings();A.notify({app:'mail',title:'Focus test',body:'Quietly saved'});
   assert(!d.querySelector('#notification-banner'),'Focus showed banner');assert(A.load('notifications',[]).length===1,'Focus lost notice');
   assert(!d.querySelector('#status-focus').hidden,'Focus status missing');
-  A.settings.focus=false;A.applySettings();A.actions.clearNotifications();
+  A.settings.focus=false;A.applySettings();A.actions.clearNotifications();click('#confirm-yes');
  });
  await test('Message typing and background reply notify and deep-link',async()=>{
   A.open('messages','haru');const form=d.querySelector('#chat-form');form.elements.message.value='QA background reply';
@@ -190,10 +190,10 @@ frame.addEventListener('load',async()=>{
   assert(!d.querySelector('.typing-indicator'),'Typing indicator stuck');assert(A.load('chatUnread',{}).haru===0,'Chat remains unread');
  });
  await test('Notifications are bounded and clear updates the lock screen',()=>{
-  A.settings.focus=true;for(let i=0;i<45;i++)A.notify({app:'mail',title:'Notice '+i,body:'QA'});
-  assert(A.load('notifications',[]).length===40,'Unbounded history');A.lock();
+  A.settings.focus=true;for(let i=0;i<105;i++)A.notify({app:'mail',title:'Notice '+i,body:'QA'});
+  assert(A.load('notifications',[]).length===100,'Unbounded history');A.lock();
   assert(d.querySelectorAll('.lock-notifications .system-notification').length===2,'Lock history count');
-  A.actions.clearNotifications();assert(A.load('notifications',[]).length===0,'Clear not persisted');
+  A.actions.clearNotifications();click('#confirm-yes');assert(A.load('notifications',[]).length===0,'Clear not persisted');
   assert(!d.querySelector('.lock-notifications .system-notification'),'Lock notifications stale');A.settings.focus=false;A.applySettings();A.home();
  });
  await test('Analog icon hands and simulated connection status update',()=>{
@@ -211,7 +211,7 @@ frame.addEventListener('load',async()=>{
  await test('Overlay traps keyboard focus and restores opener',()=>{
   A.home();const opener=d.querySelector('#home-search');opener.focus();opener.click();
   const overlay=d.querySelector('#overlay');assert(overlay.getAttribute('role')==='dialog','Dialog semantics');
-  const items=[...overlay.querySelectorAll('button:not(:disabled),input,textarea,select,a[href]')].filter(el=>el.getClientRects().length);
+  const items=[...overlay.querySelectorAll('button:not(:disabled),input,textarea,select,a[href]'),...d.querySelectorAll('#toast.visible button')].filter(el=>el.getClientRects().length);
   items.at(-1).focus();items.at(-1).dispatchEvent(new w.KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));
   assert(d.activeElement===items[0],'Focus escaped dialog');A.closeOverlay();assert(d.activeElement===opener,'Focus not restored');
  });
@@ -278,7 +278,7 @@ frame.addEventListener('load',async()=>{
   A.open('weather');click('[data-action="weatherCities"]');input('#city-search input','Test');submit('#city-search');await until(()=>d.querySelector('[data-city-index]'));click('[data-city-index]');await until(()=>d.querySelectorAll('.live-forecast-row').length===7);assert(A.load('weatherLocation',{}).name==='Test City','Selected location not saved');
  });
  await test('Service timeout is reported without infinite loading',async()=>{
-  w.fetch=(url,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(new w.DOMException('Aborted','AbortError')),{once:true}));try{let message='';try{await A.network.request('https://example.test/',{timeout:10});}catch(e){message=e.message;}assert(message.includes('タイムアウト'),'No timeout message');}finally{w.fetch=fixtureFetch;}
+  w.fetch=(url,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(new w.DOMException('Aborted','AbortError')),{once:true}));try{let message='';try{await A.network.request('https://example.test/',{timeout:10});}catch(e){message=e.message;}assert(/タイムアウト|通信時間切れ/.test(message),'No timeout message');}finally{w.fetch=fixtureFetch;}
  });
  await test('Music catalogue escapes titles and does not autoplay previews',async()=>{
   A.open('music');input('#music-search input','Test');submit('#music-search');await until(()=>d.querySelector('.connected-track'));assert(!d.querySelector('.connected-track b'),'Unsafe title');const audio=d.querySelector('.connected-track audio');assert(audio&&audio.paused&&!audio.autoplay,'Unrequested playback');A.home();assert(!audio.getAttribute('src'),'Audio not released on exit');
@@ -303,10 +303,85 @@ frame.addEventListener('load',async()=>{
   for(const [body,type,expected] of [['<html>bad</html>','text/html','形式'],['x'.repeat(102401),'text/plain','100KB']]){A.open('files');A.actions.fileURLImport();w.fetch=()=>Promise.resolve(new w.Response(body,{headers:{'Content-Type':type}}));try{input('#remote-file [name=url]','https://example.test/file.txt');submit('#remote-file');await until(()=>d.querySelector('#remote-file-status').textContent.includes(expected));}finally{w.fetch=fixtureFetch;}}
  });
  await test('Binary sharing offers explicit save without automatic upload',()=>{
-  A.network.offerFile(new w.Blob(['test'],{type:'text/plain'}),'qa.txt');assert(d.querySelector('#save-ready'),'Save fallback missing');assert(d.querySelector('#overlay').textContent.includes('アップロードしません'),'Consent explanation absent');
+  A.network.offerFile(new w.Blob(['test'],{type:'text/plain'}),'qa.txt');assert(d.querySelector('#save-ready'),'Save fallback missing');assert(d.querySelector('#overlay').textContent.includes('選択後に共有'),'Consent explanation absent');
  });
  await test('Connection center covers all apps and labels unconnected services',()=>{
   A.open('settings');A.actions.connectionCenter();assert(d.querySelectorAll('#overlay [data-app]').length===30,'Missing app capability');assert(d.querySelector('#overlay').textContent.includes('実決済未接続'),'Payments misrepresented');assert(A.mailUnread()===0&&A.messageUnread()===0,'Fake native unread badges');
+ });
+ // Settings diagnostics must remain opt-in, bounded, private and recoverable.
+ const stToggle=key=>click(`[data-action="stToggle"][data-key="${key}"]`);
+ const stSelect=(key,value)=>{const el=d.querySelector(`[data-st-select="${key}"]`);el.value=value;el.dispatchEvent(new w.Event('change',{bubbles:true}));};
+ const diagnosticReport=async()=>{const download=A.download;let blob;A.download=b=>blob=b;try{A.actions.stExportDiagnostics();return JSON.parse(await blob.text());}finally{A.download=download;}};
+ await test('Settings search and home navigation',()=>{
+  A.open('settings');assert(d.querySelectorAll('#st-results .list-row').length===18,'Missing setting entries');
+  input('#st-search','ＦＰＳ');assert(d.querySelectorAll('#st-results .list-row').length===1,'Normalized search failed');
+  input('#st-search','<img src=x onerror=alert(1)>');assert(d.querySelector('#st-results .st-empty'),'No empty state');assert(!d.querySelector('#st-results img'),'Search injection');
+  input('#st-search','');click('#app-screen .app-nav [data-action="home"]');assert(A.current===null,'Settings back did not go home');
+ });
+ await test('Readability applies size, weight and contrast immediately',()=>{
+  A.open('settings');click('[data-action="stAccessibility"]');stSelect('textSize','largest');stToggle('boldText');stToggle('highContrast');stToggle('reduceTransparency');
+  const style=w.getComputedStyle(d.querySelector('.st-toggle strong'));assert(style.fontSize==='18px'&&style.fontWeight==='700','Text settings not applied');assert(style.color==='rgb(41, 33, 49)','Contrast not applied');
+  assert(A.load('settings',{}).textSize==='largest','Size not saved');
+  A.settings.dark=true;A.applySettings();assert(w.getComputedStyle(d.querySelector('.st-toggle strong')).color==='rgb(255, 255, 255)','Dark contrast incorrect');A.settings.dark=false;A.applySettings();
+ });
+ await test('Failed settings writes do not change state or controls',()=>{
+  const save=A.save,before=A.settings.boldText;A.save=()=>false;
+  try{stToggle('boldText');assert(A.settings.boldText===before,'Failed write applied');assert(d.querySelector('[data-key="boldText"]').getAttribute('aria-pressed')===String(before),'Failed write changed UI');stSelect('textSize','large');assert(d.querySelector('[data-st-select="textSize"]').value==='largest','Failed select not restored');}finally{A.save=save;}
+ });
+ await test('Home visibility preserves app accessibility labels',()=>{
+  A.actions.stHome();stToggle('hideLabels');stToggle('hideWidgets');A.home();
+  assert(w.getComputedStyle(d.querySelector('.home-widgets')).display==='none','Widgets still visible');
+  assert(w.getComputedStyle(d.querySelector('.app-name')).visibility==='hidden','App name still visible');
+  assert(d.querySelector('.app-launcher').getAttribute('aria-label'),'Accessible launcher label removed');
+ });
+ await test('Clock preferences survive live ticks',async()=>{
+  A.open('settings');A.actions.stHome();stToggle('clock12');stToggle('clockSeconds');
+  const before=d.querySelector('#status-time').textContent;await delay(1600);
+  const after=d.querySelector('#status-time').textContent;assert(after!==before,'Seconds not ticking');assert(/\d+:\d+:\d+/.test(after),'Seconds disappeared');assert(/午前|午後/.test(after),'12-hour format disappeared');
+ });
+ await test('Volume and browser preferences share existing app state',()=>{
+  A.actions.stSound();input('#st-volume','23');assert(A.settings.volume===23&&A.load('settings',{}).volume===23,'Volume not saved');
+  A.actions.stConnection();stSelect('webEngine','duck');assert(A.load('webEngine','')==='duck','Engine not saved');stToggle('airplane');assert(A.settings.airplane&&!A.settings.cellular,'Airplane demo did not disable cellular');A.save('webEngine','wiki');
+ });
+ await test('Developer tools require explicit confirmation',()=>{
+  A.actions.stDeveloper();assert(!A.settings.developerMode,'Developer default unsafe');assert(!d.querySelector('[data-key="devFps"]'),'Tools exposed before opt in');
+  A.actions.stToggle({dataset:{key:'devFps'}});assert(!A.settings.devFps,'Bypassed disabled tools');
+  click('[data-action="stDeveloperToggle"]');click('#overlay [data-action="closeOverlay"]');assert(!A.settings.developerMode,'Cancel enabled tools');
+  click('[data-action="stDeveloperToggle"]');click('#confirm-yes');assert(A.settings.developerMode&&!A.settings.devLog,'Opt in did not keep tools off');
+ });
+ await test('Developer overlays and switch scroll retention',async()=>{
+  stToggle('devFps');stToggle('devBounds');stToggle('devTouches');await delay(1200);assert(/\d+ FPS/.test(d.querySelector('#st-fps').textContent),'FPS not sampled');
+  assert(d.querySelector('#phone-screen').classList.contains('st-dev-bounds'),'Bounds not enabled');
+  const screen=d.querySelector('#phone-screen');screen.dispatchEvent(new w.PointerEvent('pointerdown',{bubbles:true,clientX:40,clientY:100}));assert(d.querySelector('.st-touch'),'Touch marker missing');
+  screen.dispatchEvent(new w.PointerEvent('pointerup',{bubbles:true,clientX:40,clientY:100}));await delay(650);assert(!d.querySelector('.st-touch'),'Touch marker retained');
+  d.querySelector('.st-settings').scrollTop=300;const before=d.querySelector('.st-settings').scrollTop;stToggle('devLog');assert(Math.abs(d.querySelector('.st-settings').scrollTop-before)<2,'Switch reset scroll');
+ });
+ await test('API diagnostics record only bounded sanitized metadata',async()=>{
+  w.fetch=()=>json({secret:'PRIVATE_RESPONSE'});
+  try{
+   for(let i=0;i<32;i++)await A.network.request('https://private-user.example.test/PRIVATE_PATH?token=PRIVATE_TOKEN');
+   const report=await diagnosticReport();assert(report.requests.length===30,'Log limit missing');const text=JSON.stringify(report);assert(!/PRIVATE|private-user|aura.notes/.test(text),'Private data leaked');assert(report.requests.every(r=>r.service==='その他のAPI'&&r.result==='成功'&&r.ms>=0),'Wrong metadata');
+  }finally{w.fetch=fixtureFetch;}
+ });
+ await test('API simulation prevents fetch and can be released globally',async()=>{
+  A.actions.stOffline();const before=requests.length;let message='';try{await A.network.request('https://api.open-meteo.com/v1/forecast');}catch(e){message=e.message;}
+  assert(message.includes('開発者設定')&&requests.length===before,'Simulated request sent');assert(d.querySelector('#st-offline-warning'),'No persistent warning');
+  A.home();click('#st-offline-warning');assert(!d.querySelector('#st-offline-warning'),'Warning not removed');await A.network.request('https://api.open-meteo.com/v1/forecast');assert(requests.length===before+1,'Request did not recover');
+ });
+ await test('Clearing logs discards in-flight records',async()=>{
+  let finish;w.fetch=()=>new Promise(resolve=>finish=()=>resolve(new w.Response('{}')));
+  try{const pending=A.network.request('https://example.test/');A.actions.stClearLogs();finish();await pending;assert((await diagnosticReport()).requests.length===0,'Cleared in-flight request returned to log');}finally{w.fetch=fixtureFetch;}
+ });
+ await test('Test notification and developer shutdown are safe',async()=>{
+  A.open('settings');A.actions.stDeveloper();A.actions.stTestNotice();assert(A.load('notifications',[]).some(n=>n.app==='settings'&&n.demo),'No labeled demo notification');
+  A.actions.stOffline();click('[data-action="stDeveloperToggle"]');assert(!A.settings.developerMode,'Mode did not turn off');assert(!d.querySelector('#st-fps,#st-offline-warning,.st-touch'),'Diagnostics survived shutdown');assert(!d.querySelector('#phone-screen').classList.contains('st-dev-bounds'),'Bounds survived shutdown');
+  for(const k of ['devFps','devBounds','devTouches','devLog'])assert(!A.settings[k],'Tool flag retained');
+  await A.network.request('https://api.open-meteo.com/v1/forecast');
+ });
+ await test('Additional settings reset preserves user records and existing preferences',()=>{
+  const notes=w.localStorage.getItem('aura.notes'),wallpaper=A.settings.wallpaper,brightness=A.settings.brightness;
+  A.actions.stReset();click('#overlay [data-action="closeOverlay"]');assert(A.settings.textSize==='largest','Cancel reset settings');
+  A.actions.stReset();click('#confirm-yes');assert(A.settings.textSize==='standard'&&!A.settings.hideWidgets&&!A.settings.clockSeconds,'Reset incomplete');assert(w.localStorage.getItem('aura.notes')===notes,'Reset deleted notes');assert(A.settings.wallpaper===wallpaper&&A.settings.brightness===brightness,'Reset affected prior settings');
  });
  await test('App lifecycle cleanup and no captured errors',()=>{A.home();assert(A.cleanups.length===0,'Cleanup callbacks not drained');assert(!errors.length,errors.join('; '));});
 
