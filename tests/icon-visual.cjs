@@ -21,6 +21,35 @@ const url = process.env.AURA_TEST_URL || 'http://127.0.0.1:8765/';
     await page.waitForFunction(() => window.Aura?.appIcon && document.querySelectorAll('#home-screen .app-artwork').length === 30);
     const apps = await page.evaluate(() => Object.values(Aura.apps).map(app => ({id:app.id,name:app.name,color:app.color,svg:Aura.appIcon(app.id,new Date(2026,8,19,10,9,30))})));
     assert.equal(apps.length,30);
+    if (label !== 'before') {
+      // All launcher contexts use the same artwork, including the new material pass.
+      assert.equal(await page.locator('#home-screen .app-material-detail').count(),30);
+      assert.ok(apps.every(app => app.svg.includes('app-material-detail')));
+      for (const action of ['spotlight','library']) {
+        await page.evaluate(action => { Aura.home(); Aura[action](); }, action);
+        assert.equal(await page.locator('#overlay .app-material-detail').count(),30);
+      }
+      await page.evaluate(() => { Aura.home(); Aura.actions.iconMotionGallery(); });
+      assert.equal(await page.locator('.motion-gallery .app-material-detail').count(),30);
+      await page.evaluate(() => { Aura.settings.iconMotion='fhd'; Aura.applySettings(); });
+      await page.waitForFunction(() => document.querySelector('#motion-detail .motion-aperture').getAnimations().length > 0);
+      await page.emulateMedia({reducedMotion:'reduce'});
+      assert.equal(await page.locator('.icon-motion').evaluateAll(els => els.reduce((n,el)=>n+el.getAnimations().length,0)),0);
+      await page.emulateMedia({reducedMotion:'no-preference'});
+      await page.evaluate(() => { Aura.settings.iconMotion='static'; Aura.applySettings(); Aura.home(); });
+      const hours = await page.evaluate(() => {
+        const results=[];
+        for (const date of [new Date(2026,8,19,10,9,30),new Date(2026,8,20,23,58,59)]) {
+          const svg=new DOMParser().parseFromString(Aura.appIcon('clock',date),'image/svg+xml');
+          results.push([...svg.querySelectorAll('.app-clock-hour')].map(el=>el.getAttribute('transform')));
+        }
+        Aura.updateAppClock(new Date(2026,8,19,3,30));
+        results.push([...document.querySelectorAll('#home-screen .app-clock-hour')].map(el=>el.getAttribute('transform')));
+        return results;
+      });
+      assert.deepEqual(hours,[['rotate(304.5 40 40)','rotate(304.5 40 40)'],['rotate(359 40 40)','rotate(359 40 40)'],['rotate(105 40 40)','rotate(105 40 40)']]);
+      console.log('PASS: 30 refined identities in home, search, library and gallery; live clock; FHD and reduced motion');
+    }
     for (const viewport of [{width:390,height:844},{width:320,height:568},{width:844,height:390}]) {
       await page.setViewportSize(viewport);
       await page.screenshot({path:path.join(out,`home-${viewport.width}.png`)});
@@ -32,7 +61,7 @@ const url = process.env.AURA_TEST_URL || 'http://127.0.0.1:8765/';
     const tile = app => `<span class="app-icon ${app.id}-icon" style="background:${app.color}">${app.svg}</span>`;
     const card = app => `<article><div class="app-launcher">${tile(app)}</div><h2>${app.name}</h2><p>${app.id}</p></article>`;
     const styles = `body{height:auto;overflow:auto;min-height:100vh;background:var(--proof-bg,#f2f0ec);color:var(--proof-ink,#263244);padding:56px;font-family:Arial,sans-serif}*{animation:none!important;transition:none!important}header{margin:0 0 42px;border-bottom:1px solid #8893a433;padding-bottom:28px}header p{font-size:12px;letter-spacing:3px;color:#7b8795}h1{font-size:38px;letter-spacing:-1px;line-height:1.2;margin:12px 0}header small{font-size:14px;color:#8b94a0}main{display:grid;grid-template-columns:repeat(6,1fr);gap:38px 24px}article{text-align:center;min-width:0}article .app-launcher{display:flex;align-items:center;pointer-events:none}article .app-icon{width:var(--tile,176px);height:var(--tile,176px);border-radius:26%;box-shadow:0 12px 24px -12px #14243c55,inset 0 1px 1px #ffffff70}article h2{font-size:14px;font-weight:500;margin:16px 0 6px}article p{font-size:10px;color:#8a94a0;letter-spacing:1px;margin:0}footer{margin-top:45px;font-size:11px;color:#8893a0;letter-spacing:2px}`;
-    const doc = (title, content, extra='', style='classic') => `<!doctype html><html lang="ja" data-icon-style="${style}"><head><meta charset="utf-8"><title>${title}</title><style>${css}\n${styles}\n${extra}</style></head><body><header><p>AURA / ICON ATELIER</p><h1>${title}</h1><small>30 vector identities · fixed time 10:09:30 · ${label} proof</small></header><main>${content}</main><footer>PRODUCTION SVG / BROWSER-RENDERED IMAGE PROOF</footer></body></html>`;
+    const doc = (title, content, extra='', style='standard') => `<!doctype html><html lang="ja" data-icon-style="${style}"><head><meta charset="utf-8"><title>${title}</title><style>${css}\n${styles}\n${extra}</style></head><body><header><p>AURA / ICON ATELIER</p><h1>${title}</h1><small>30 vector identities · fixed time 10:09:30 · ${label} proof</small></header><main>${content}</main><footer>PRODUCTION SVG / BROWSER-RENDERED IMAGE PROOF</footer></body></html>`;
     const render = async (name, html) => {
       fs.writeFileSync(path.join(out,name+'.html'),html);
       await proof.setContent(html);
@@ -43,7 +72,7 @@ const url = process.env.AURA_TEST_URL || 'http://127.0.0.1:8765/';
       await proof.screenshot({path:path.join(out,name+'.png'),fullPage:true});
     };
     for (const [theme,bg,ink] of [['light','#f2f0ec','#263244'],['dark','#151b28','#eef2f8']]) {
-      for (const style of ['classic','glass','tinted']) {
+      for (const style of ['standard','glass','tinted']) {
         await render(`${theme}-${style}`,doc(`${theme} / ${style}`,apps.map(card).join(''),`body{--proof-bg:${bg};--proof-ink:${ink}}`,style));
       }
     }
