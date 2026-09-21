@@ -19,7 +19,7 @@
   const tabs = (options, current, action) => `<div class="ev-chips">${options.map(([id,label])=>button(action,label,id,`aria-pressed="${id===current}"`)).join('')}</div>`;
   const page = (id, html, right = '', back = '') => A.view(A.nav(A.apps[id].name,right,back,back?'一覧':'')+`<div class="app-content everyday everyday-plus ev-${id}">${html}</div>`);
   const download = (name, text, type = 'text/plain') => A.download(new Blob([text],{type:type+';charset=utf-8'}),name);
-  const copy = async text => { try { await navigator.clipboard.writeText(text); A.toast('コピーしました'); } catch { A.form('コピーする内容',area('選択してコピー','copy',text,20000),()=>{},'閉じる'); $('#ep-copy').readOnly=true; $('#ep-copy').select(); } };
+  const copy = async text => { try { await navigator.clipboard.writeText(text); A.toast('コピー済み'); } catch { A.form('コピーする内容',area('選択してコピー','copy',text,20000),()=>{},'閉じる'); $('#ep-copy').readOnly=true; $('#ep-copy').select(); } };
   const save = (key, list, render) => { if(!A.save(key,list))return false; render?.(); return true; };
   const put = (key, record, render) => { const list=rows(key),index=list.findIndex(x=>x.id===record.id); if(index<0)list.unshift(record);else list[index]=record;return save(key,list,render); };
   const integer = (value, min, max) => Number.isSafeInteger(Number(value)) && Number(value)>=min && Number(value)<=max;
@@ -74,8 +74,8 @@
       field('グループ','group',x?.group||'','text','maxlength="40" list="ep-contact-groups" placeholder="家族・友人・仕事など"')+
       `<datalist id="ep-contact-groups">${contactGroups().map(group=>`<option value="${esc(group)}"></option>`).join('')}</datalist>`+area('メモ','note',x?.note||'',12000),v=>{
         if(!v.name.trim())return false;
-        if(v.phone&&!/^\+?[0-9]{3,15}$/.test(phoneKey(v.phone))){A.toast('電話番号を確認してください');return false;}
-        if(v.group.trim()==='*'){A.toast('別のグループ名を入力してください');return false;}
+        if(v.phone&&!/^\+?[0-9]{3,15}$/.test(phoneKey(v.phone))){A.toast('電話番号を確認');return false;}
+        if(v.group.trim()==='*'){A.toast('別のグループ名を入力');return false;}
         return put('contacts',{...x,...v,id:x?.id||A.id(),name:v.name.trim(),group:v.group.trim(),favorite:x?.favorite||false},renderContacts);
       });
   };
@@ -85,7 +85,7 @@
     page('contacts',`<div class="ev-contact-hero"><span class="ev-avatar">${esc(Array.from(x.name)[0])}</span><h1>${esc(x.name)}</h1><p class="ep-muted">${esc(x.group||'未分類')}</p>${button('evContactFavorite',x.favorite?'★ お気に入り':'☆ お気に入り',x.id,`aria-pressed="${!!x.favorite}"`)}</div>
       <div class="ev-contact-actions">${validPhone?`<a href="tel:${esc(phone)}">${A.icon('phone')}電話</a><a href="sms:${esc(phone)}">${A.icon('messages')}SMS</a>`:''}${x.email?`<a href="mailto:${esc(encodeURIComponent(x.email))}">${A.icon('mail')}メール</a>`:''}</div>
       <div class="ev-card ev-contact-info"><p>${esc(x.phone)}</p><p>${esc(x.email)}</p><p>${esc(x.note)}</p></div>
-      <p class="ev-caption">発信・送信は移動先のアプリで確認</p>${button('epContactCopy','連絡先をコピー',x.id)}
+      <p class="ev-caption">発信・送信は移動先で確認</p>${button('epContactCopy','連絡先をコピー',x.id)}
       ${details('管理',button('evContactDelete','連絡先を削除',x.id))}`,
       iconButton('evContactEdit','連絡先を編集','edit',x.id),'evContactsHome');
   };
@@ -149,12 +149,12 @@
   A.apps.converter.render=renderConverter;
   A.actions.evUnitCategory=el=>{const category=el.dataset.id;if(!units[category])return;const keys=Object.keys(units[category].units);conversion={category,from:keys[0],to:keys[1],value:conversion.value};renderConverter();};
   A.actions.evUnitSwap=()=>{[conversion.from,conversion.to]=[conversion.to,conversion.from];renderConverter();};
-  A.actions.evUnitCopy=()=>{if(conversionValue()!==null)copy(conversionText());else A.toast('数値を確認してください');};
+  A.actions.evUnitCopy=()=>{if(conversionValue()!==null)copy(conversionText());else A.toast('数値を確認');};
   function storeConversion(key, limit) {
-    if(conversionValue()===null)return A.toast('数値を確認してください');
+    if(conversionValue()===null)return A.toast('数値を確認');
     const list=savedConversions(key),same=x=>x.category===conversion.category&&x.from===conversion.from&&x.to===conversion.to&&x.value===conversion.value;
     if(key==='conversionPresets'&&list.length>=limit&&!list.some(same))return A.toast('登録は20件までです');
-    if(save(key,[{...conversion,id:A.id()},...list.filter(x=>!same(x))].slice(0,limit),renderConverter))A.toast('保存しました');
+    if(save(key,[{...conversion,id:A.id()},...list.filter(x=>!same(x))].slice(0,limit),renderConverter))A.toast('保存済み');
   }
   A.actions.epConversionRecord=()=>storeConversion('conversionHistory',30);
   A.actions.epConversionPreset=()=>storeConversion('conversionPresets',20);
@@ -216,7 +216,7 @@
   A.actions.epReminderComplete=el=>{if(A.reminderModel.replace(reminders().map(x=>x.id===el.dataset.id?{...x,done:!x.done}:x)))A.actions.epReminderOpen(el);};
   A.actions.epReminderStep=el=>{if(A.reminderModel.replace(reminders().map(x=>x.id===el.dataset.id?{...x,steps:(x.steps||[]).map(s=>s.id===el.dataset.step?{...s,done:!s.done}:s)}:x)))A.actions.epReminderOpen(el);};
   A.actions.epReminderPostpone=el=>{const x=reminders().find(x=>x.id===el.dataset.id);if(!x)return;const due=shiftDay(x.due&&x.due>=day()?x.due:day(),1);if(!validDay(due))return A.toast('これ以上期限を延ばせません');if(A.reminderModel.replace(reminders().map(r=>r.id===x.id?{...r,due}:r))){A.actions.epReminderOpen(el);A.toast('期限を'+due+'に変更しました');}};
-  A.actions.epReminderDuplicate=el=>{const x=reminders().find(x=>x.id===el.dataset.id);if(x&&replaceReminders([...reminders(),{...x,id:A.id(),text:(x.text+' コピー').slice(0,100),done:false,steps:(x.steps||[]).map(s=>({...s,id:A.id(),done:false}))}]))A.toast('未完了のタスクとして複製しました');};
+  A.actions.epReminderDuplicate=el=>{const x=reminders().find(x=>x.id===el.dataset.id);if(x&&replaceReminders([...reminders(),{...x,id:A.id(),text:(x.text+' コピー').slice(0,100),done:false,steps:(x.steps||[]).map(s=>({...s,id:A.id(),done:false}))}]))A.toast('未完了のタスクとして複製済み');};
 
   // 19–24: selected-day dashboard, seven-day outlook, shopping summary,
   // resume reading, daily intention and a shareable agenda text file.
@@ -230,14 +230,14 @@
       ${dashboardDay!==day()?button('epTodayReset','今日に戻る'):''}<div class="ev-heading"><span>${new Date(dashboardDay+'T12:00:00').toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'})}</span><h1>${dashboardDay===day()?'今日':'この日のまとめ'}</h1></div>
       <div class="ev-metrics"><button data-app="focus"><strong>${minutes}<small>分</small></strong><span>集中</span></button><button data-app="habits"><strong>${checked}<small>/${habits.length}</small></strong><span>習慣</span></button><button data-app="reminders"><strong>${tasks.length}</strong><span>未完了タスク</span></button></div>
       <p class="ep-muted">タスクは現在の未完了から、表示日までの期限と期限なしを表示。</p>
-      <button class="ev-focus-link" data-app="focus">${A.icon('focus')}<span>集中をはじめる</span>${A.icon('arrow')}</button>
+      <button class="ev-focus-link" data-app="focus">${A.icon('focus')}<span>集中する</span>${A.icon('arrow')}</button>
       <button class="ep-intention" data-action="epTodayIntention"><small>この日のひとこと</small><strong>${esc(rows('dailyIntentions').find(x=>x.date===dashboardDay)?.text||'大切にしたいことを一つ書く')}</strong></button>
       ${section('予定',iconButton('evTodayEvent','予定を追加','plus')+`<div class="ev-card">${events.map(x=>`<button class="ev-timeline" data-action="epTodayEvent" data-id="${esc(x.id)}"><time>${esc(x.time)}</time><span><strong>${esc(x.title)}</strong><small>${esc(x.place)}</small></span>${A.icon('arrow')}</button>`).join('')||empty('予定はありません')}</div>`)}
       ${section('タスク',iconButton('evTodayTask','タスクを追加','plus')+`<div class="ev-card">${tasks.slice(0,8).map(x=>`<div class="ev-row"><button class="check-circle" data-action="evTodayCheck" data-id="${esc(x.id)}" aria-label="${esc(x.text)}を完了"></button><button class="ev-grow ev-plain" data-action="epTodayTask" data-id="${esc(x.id)}"><strong>${esc(x.text)}</strong><small>${esc(x.due||'期限なし')}${x.due&&x.due<dashboardDay?' · 期限超過':''}</small></button></div>`).join('')||empty('すべて完了')}</div>${tasks.length>8?'<button class="ep-button" data-app="reminders">すべてのタスクを見る</button>':''}`)}
       ${details('この日から7日間の予定',Array.from({length:7},(_,i)=>{const date=shiftDay(dashboardDay,i),items=A.todayEvents(date);return `<button class="ep-outlook" data-action="epTodaySelect" data-id="${date}"><time>${esc(date.slice(5))}</time><span>${items.length?esc(items[0].title):'予定なし'}</span><strong>${items.length}件</strong></button>`;}).join(''))}
       ${section('買い物の残り（現在）',`<button class="ep-summary" data-app="shopping"><strong>${shopping.length}品</strong><span>予定額 ${money(shopping.reduce((n,x)=>n+x.quantity*x.price,0))}</span><small>すべてのリストの未購入品</small></button>`)}
       ${section('読書の続き（現在）',books.slice(0,3).map(x=>`<button class="ep-summary" data-action="epTodayBook" data-id="${esc(x.id)}"><strong>${esc(x.title)}</strong><span>${x.page} / ${x.total}ページ · 残り${x.total-x.page}ページ</span></button>`).join('')||'<button class="ep-button" data-app="reading">本棚を開く</button>')}
-      ${section('クイックアクセス',`<div class="ev-quick-grid">${['journal','shopping','expenses','reading'].map(id=>`<button data-app="${id}">${A.icon(id)}<span>${A.apps[id].name}</span></button>`).join('')}</div>`)}`,
+      ${section('よく使う',`<div class="ev-quick-grid">${['journal','shopping','expenses','reading'].map(id=>`<button data-app="${id}">${A.icon(id)}<span>${A.apps[id].name}</span></button>`).join('')}</div>`)}`,
       iconButton('epTodayExport','この日のまとめを書き出す','download'));
     $('#ep-today-date').onchange=e=>{if(validDay(e.target.value)){dashboardDay=e.target.value;renderToday();}};
   }
@@ -331,7 +331,7 @@
   A.actions.epShoppingUndo=()=>{
     if(!shoppingUndo)return;const list=rows('shopping'),ids=new Set(list.map(x=>x.id)),lists=new Set(shoppingLists().map(x=>x.id));
     const restored=shoppingUndo.filter(x=>!ids.has(x.id)).map(x=>({...x,listId:lists.has(x.listId||'default')?(x.listId||'default'):'default'}));
-    if(A.save('shopping',[...list,...restored])){if(restored.length)shoppingList=restored[0].listId;shoppingQuery='';shoppingFilter='all';shoppingUndo=null;renderShopping();A.toast('元に戻しました');}
+    if(A.save('shopping',[...list,...restored])){if(restored.length)shoppingList=restored[0].listId;shoppingQuery='';shoppingFilter='all';shoppingUndo=null;renderShopping();A.toast('元に戻済み');}
   };
   A.actions.evShoppingShare=()=>download(listName().replace(/[\\/:*?"<>|]/g,'_')+'.txt',listItems().map(x=>`${x.done?'☑':'☐'} ${x.name} ×${x.quantity} ${money(x.price*x.quantity)}`).join('\n'));
   A.actions.epShoppingBudget=()=>A.form('このリストの予算',field('金額（円）・0で解除','amount',shoppingBudget(),'number','required min="0" max="999999999" step="1"'),v=>{

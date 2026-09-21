@@ -6,7 +6,7 @@
   A.escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   A.id = () => globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2);
   A.load = (key, fallback) => { try { const value = localStorage.getItem('aura.' + key); return value === null ? fallback : JSON.parse(value); } catch { return fallback; } };
-  A.save = (key, value) => { try { localStorage.setItem('aura.' + key, JSON.stringify(value)); return true; } catch { A.toast('保存容量が不足しています。不要な写真を削除してください。'); return false; } };
+  A.save = (key, value) => { try { localStorage.setItem('aura.' + key, JSON.stringify(value)); return true; } catch { A.toast('容量不足。不要な写真を削除'); return false; } };
   // Related writes use snapshots so a failed write does not report success.
   // localStorage has no transactions: rollback is best effort if storage itself
   // becomes unavailable or another tab consumes its capacity.
@@ -27,7 +27,7 @@
       let restored=true;
       for(const item of written)try{localStorage.removeItem(item.key);}catch{restored=false;}
       for(const item of written)if(item.previous!==null)try{localStorage.setItem(item.key,item.previous);}catch{restored=false;}
-      A.toast(restored?'保存できませんでした。変更は反映していません。':'保存と復元に失敗しました。データを書き出して保存状態を確認してください。');
+      A.toast(restored?'保存失敗。変更は未反映':'保存・復元失敗。データを書き出して確認');
       return false;
     }
   };
@@ -55,6 +55,9 @@
     wallet:'<rect x="1" y="4" width="22" height="16" rx="3" fill="#313942" stroke="none"/><path d="M4 4h16v3H4Z" fill="#dfa561" stroke="none"/><path d="M4 7h16v3H4Z" fill="#82b9ae" stroke="none"/><path d="M4 10h16v3H4Z" fill="#8caad5" stroke="none"/><path d="M1 13h7l2 3h4l2-3h7v6H1Z" fill="#525a65" stroke="none"/>',
     recorder:'<path d="M2 10v4M5 7v10M8 10v4M11 3v18M14 6v12M17 9v6M20 5v14M23 10v4" stroke="#f75864" stroke-width="1.4"/>',
     search:'<circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/>',
+    close:'<path d="m6 6 12 12M18 6 6 18"/>',
+    minus:'<path d="M4 12h16"/>',
+    info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/>',
     plus:'<path d="M12 4v16M4 12h16"/>',
     edit:'<path d="M14 5 19 10M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14Zm8 0h9"/>',
     trash:'<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
@@ -402,7 +405,15 @@
   A.renderHome = () => { A.$('#app-grid').innerHTML=appData.slice(0,-4).map(([id])=>A.launcher(A.apps[id])).join('');A.$('#home-dock').innerHTML=appData.slice(-4).map(([id])=>A.launcher(A.apps[id],true)).join(''); };
   A.haptic = () => { if(A.settings.sound && navigator.vibrate && navigator.userActivation?.hasBeenActive) navigator.vibrate(7); };
   let toastTimer;
-  A.toast = message => { const el=A.$('#toast');el.textContent=message;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),3200); };
+  A.toast = (message,options={}) => {
+    const el=A.$('#toast');clearTimeout(toastTimer);
+    const error=/不足|失敗|できません|未対応|エラー/.test(String(message));
+    el.innerHTML=`<span class="toast-symbol">${A.icon(error?'info':'check')}</span><span>${A.escape(message)}</span>`;
+    if(options.onAction){const button=document.createElement('button');button.textContent=options.label||'戻す';button.onclick=()=>{clearTimeout(toastTimer);el.classList.remove('visible');options.onAction();};el.appendChild(button);}
+    el.classList.toggle('toast-error',error);el.classList.add('visible');
+    const hide=()=>{toastTimer=setTimeout(()=>{el.classList.remove('visible');if(el.contains(document.activeElement))A.$('#status-time').focus({preventScroll:true});},options.onAction?10000:Math.max(3200,Math.min(10000,String(message).length*130)));};
+    el.onpointerenter=el.onfocusin=()=>clearTimeout(toastTimer);el.onpointerleave=hide;el.onfocusout=()=>{if(!el.contains(document.activeElement))hide();};hide();
+  };
   A.cleanup = () => { A.cleanups.splice(0).forEach(fn=>{try{fn();}catch(e){console.warn('App cleanup',e);}}); };
   A.statusTheme = dark => { A.$('#status-bar').classList.toggle('dark', !dark && !A.settings.dark);A.$('#phone-screen').classList.toggle('app-dark',dark); };
   A.open = (id, arg) => {
@@ -421,7 +432,55 @@
   A.search = (id,placeholder='検索') => `<label class="search-field">${A.icon('search')}<input id="${id}" placeholder="${placeholder}" autocomplete="off" aria-label="${placeholder}"></label>`;
   A.row = (icon,title,detail='',action='',value='',color='') => `<button class="list-row" ${action?`data-action="${action}"`:''}>${icon?`<span class="row-icon" ${color?`style="background:${color};color:white"`:''}>${A.icon(icon)}</span>`:''}<span class="row-main"><strong>${title}</strong>${detail?`<small>${detail}</small>`:''}</span>${value?`<span class="row-value">${value}</span>`:''}${action?'<span class="chevron">›</span>':''}</button>`;
   A.empty = (message,icon='document') => `<div class="empty-state">${A.icon(icon)}${message}</div>`;
-  A.view = html => { A.$('#app-screen').innerHTML=html; };
+  // Original, offline vector scenes. Each instance owns its paint IDs so that
+  // multiple cards and forecast symbols can safely coexist in the same document.
+  let sceneSerial = 0;
+  A.scene = kind => {
+    const id = `aura-scene-${++sceneSerial}`;
+    const paint = name => `url(#${id}-${name})`;
+    const gold = paint('gold'), mint = paint('mint'), plum = paint('plum'), paper = paint('paper');
+    const sun = `<circle cx="164" cy="56" r="42" fill="#ffe5a6" opacity=".14"/><circle cx="164" cy="56" r="31" fill="${gold}"/><path d="M146 44a23 23 0 0 1 24-10" fill="none" stroke="#fff9dc" stroke-width="3" stroke-linecap="round"/>`;
+    const cloud = `<path d="M61 111c-30 0-32-41-5-46 1-36 55-48 73-12 29-8 49 10 45 32 30 3 28 33 3 33H66Z" fill="${paper}" stroke="#ffffff8a" stroke-width="1.5"/><path d="M61 110h111" stroke="#a5b5c2" stroke-opacity=".2" stroke-width="3" stroke-linecap="round"/>`;
+    const leaf = `<path d="M118 120C78 116 64 86 72 52c36 2 58 25 46 68Z" fill="${mint}"/><path d="M120 112c-5-41 11-67 44-78 13 39-3 70-44 78Z" fill="${mint}"/><path d="M119 127c28 0 49-18 52-46-31-6-48 14-52 46Z" fill="#8cc2a4"/><path d="M121 145V92m-1 23L86 72m36 38 27-54m-27 69 34-29" fill="none" stroke="#356759" stroke-width="2.5" stroke-linecap="round" opacity=".6"/>`;
+    const book = `<path d="M53 64 115 52l74 24v66l-74-17-62 10Z" fill="${plum}"/><path d="m60 67 55-9 66 21v55l-66-16-55 9Z" fill="${paper}"/><path d="M115 60v59M67 78l36-6m-36 17 36-6m-36 17 36-6m22-15 44 13m-44-2 44 13m-44-2 32 10" fill="none" stroke="#ad9b91" stroke-width="2" opacity=".5"/><path d="m142 67 10 3v32l-5-6-5 3Z" fill="#d39479"/>`;
+    const scenes = {
+      today: `${sun}<path d="M18 139 83 63l51 76Z" fill="#b7c9c5"/><path d="m83 63 51 76H96L70 80Z" fill="#729c97"/><path d="m142 88 74 60H75Z" fill="${mint}"/><path d="M11 151c53-37 104 17 216-14v32H11Z" fill="#deceb8"/><path d="M42 163c52-33 93 8 157-7" fill="none" stroke="#fff5df" stroke-width="3"/><path d="m21 80 9-3 9 3m9-17 7-3 7 3" fill="none" stroke="#627e7c" stroke-width="2" stroke-linecap="round"/>`,
+      habits: `<circle cx="121" cy="90" r="70" fill="#a3cfaa" opacity=".13"/>${leaf}<ellipse cx="122" cy="159" rx="48" ry="8" fill="#345447" opacity=".14"/><path d="m92 123 8 33c3 12 41 12 44 0l8-33" fill="${paper}"/><ellipse cx="122" cy="123" rx="30" ry="8" fill="#c4d2c0"/><path d="M120 124v-17" stroke="#406e53" stroke-width="3"/><path d="m101 135 5 19" stroke="white" stroke-width="3" stroke-linecap="round"/><circle cx="52" cy="101" r="4" fill="#dcc184"/><path d="M181 54v12m-6-6h12" stroke="#c2a773" stroke-width="2"/>`,
+      expenses: `<circle cx="129" cy="91" r="64" fill="#6eae9b" opacity=".13"/><ellipse cx="125" cy="157" rx="82" ry="10" fill="#193c37" opacity=".13"/><g transform="rotate(-13 140 83)"><rect x="76" y="38" width="120" height="78" rx="13" fill="${mint}" stroke="#c6e5cd"/><rect x="90" y="55" width="23" height="18" rx="4" fill="${gold}"/><path d="M91 93h35m11 0h14" stroke="#e2f4e8" stroke-width="4" stroke-linecap="round"/><circle cx="171" cy="63" r="10" fill="#fff" opacity=".2"/></g><g fill="${gold}" stroke="#e3b963"><path d="M50 123v18c0 16 64 16 64 0v-18Z"/><ellipse cx="82" cy="122" rx="32" ry="12"/><path d="M130 139v12c0 13 49 13 49 0v-12Z"/><ellipse cx="154.5" cy="139" rx="24.5" ry="9"/></g><path d="M57 133c14 9 36 9 50 0m31 16c10 5 23 5 34 0" stroke="#9f7a3c" stroke-opacity=".4" fill="none"/><path d="m75 119 7 6 7-6m-7 6v8m-6-5h12" fill="none" stroke="#a17a39" stroke-width="2"/>`,
+      reading: `<circle cx="126" cy="85" r="66" fill="#d6bfa0" opacity=".17"/><ellipse cx="122" cy="161" rx="82" ry="10" fill="#695441" opacity=".14"/><path d="m52 143 119-16 31 14-114 23Z" fill="#91aca0"/><path d="m53 137 117-15 29 13-112 22Z" fill="${paper}"/><path d="m47 121 117-14 35 17-116 22Z" fill="#b78672"/>${book}<path d="M198 46v16m-8-8h16M46 36v10m-5-5h10" stroke="#bb9b62" stroke-width="2" stroke-linecap="round"/>`,
+      journal: `<circle cx="124" cy="88" r="68" fill="#dbafc4" opacity=".16"/><ellipse cx="118" cy="159" rx="67" ry="8" fill="#614557" opacity=".13"/><g transform="rotate(-12 117 97)"><rect x="65" y="35" width="104" height="119" rx="9" fill="${plum}"/><path d="M78 36v117" stroke="#edcee1" stroke-width="2" opacity=".6"/><rect x="94" y="59" width="54" height="39" rx="3" fill="${paper}"/><path d="M105 73h31m-26 10h21" stroke="#ba98aa" stroke-width="2" stroke-linecap="round"/><path d="M147 36v24l-5-4-5 4V36" fill="${gold}"/></g><g transform="rotate(28 177 109)"><rect x="172" y="61" width="10" height="88" rx="4" fill="${gold}"/><path d="m172 142 5 15 5-15" fill="#efe5d6"/><path d="m175 151 2 6 2-6" fill="#665568"/><path d="M174 71v65" stroke="#fff3ce" stroke-width="2"/></g>`,
+      shopping: `<circle cx="125" cy="88" r="67" fill="#e5ba8f" opacity=".16"/><ellipse cx="120" cy="160" rx="66" ry="8" fill="#755438" opacity=".14"/><path d="m74 67-6 83c0 16 106 16 106 0l-6-83Z" fill="${gold}" stroke="#f9d8a1"/><path d="m74 67 20 16h56l18-16" fill="#c99a5d"/><path d="M99 80V55a22 22 0 0 1 44 0v25" fill="none" stroke="#f9eed6" stroke-width="7" stroke-linecap="round"/><path d="M121 143c-38-17-31-49-5-42 28-14 44 21 5 42Z" fill="${mint}"/><path d="M121 103c-1-16 8-22 17-21-1 13-8 20-17 21Z" fill="#537966"/><path d="m82 91-5 52" stroke="#fff5d7" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>`,
+      music: `<ellipse cx="125" cy="160" rx="92" ry="10" fill="#241c37" opacity=".22"/><g transform="rotate(-12 100 92)"><rect x="32" y="28" width="132" height="130" rx="10" fill="${plum}"/><circle cx="98" cy="91" r="43" fill="#d7bba8" opacity=".35"/><path d="M33 132c54-74 69-56 130-91v116H33Z" fill="#6e8f88"/><path d="M33 149c48-33 68-4 130-64v72H33Z" fill="#d7b7a4"/><circle cx="91" cy="72" r="22" fill="${gold}"/></g><circle cx="153" cy="101" r="63" fill="#272b3d"/><g fill="none" stroke="#a5acbe" stroke-opacity=".15"><circle cx="153" cy="101" r="54"/><circle cx="153" cy="101" r="47"/><circle cx="153" cy="101" r="40"/><path d="M126 54a54 54 0 0 1 53 0M126 148a54 54 0 0 0 53 0" stroke="#fff" stroke-opacity=".25" stroke-width="4"/></g><circle cx="153" cy="101" r="22" fill="${gold}"/><circle cx="153" cy="101" r="5" fill="#252b3a"/>`,
+      clear: sun,
+      cloudy: `${sun}${cloud}`,
+      overcast: cloud,
+      rain: `${cloud}<path d="m76 132-8 14m43-14-8 14m43-14-8 14m43-14-8 14" fill="none" stroke="#8ad4fa" stroke-width="5" stroke-linecap="round"/>`,
+      snow: `${cloud}<g fill="#eaf8ff"><circle cx="77" cy="140" r="4"/><circle cx="108" cy="154" r="4"/><circle cx="140" cy="136" r="4"/><circle cx="174" cy="151" r="4"/></g>`,
+      thunder: `${cloud}<path d="m121 115-18 25h17l-7 22 32-33h-21l11-14Z" fill="${gold}"/>`,
+      fog: `${cloud}<path d="M57 130h120m-104 13h88m-103 13h118" stroke="#dce8ef" stroke-width="4" stroke-linecap="round"/>`
+    };
+    if (!Object.hasOwn(scenes, kind)) return '';
+    return `<svg class="scene-art scene-${kind}" viewBox="0 0 240 180" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="${id}-gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffedbd"/><stop offset=".48" stop-color="#e8bf7e"/><stop offset="1" stop-color="#c68c4c"/></linearGradient><linearGradient id="${id}-mint" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#c2e6b9"/><stop offset=".5" stop-color="#78ac94"/><stop offset="1" stop-color="#3c7166"/></linearGradient><linearGradient id="${id}-plum" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d6bfd9"/><stop offset=".5" stop-color="#a286b2"/><stop offset="1" stop-color="#6a537f"/></linearGradient><linearGradient id="${id}-paper" x1="0" y1="0" x2=".5" y2="1"><stop stop-color="#fffef8"/><stop offset=".6" stop-color="#f1ece5"/><stop offset="1" stop-color="#cdd6db"/></linearGradient></defs>${scenes[kind]}</svg>`;
+  };
+  A.view = html => {
+    const screen = A.$('#app-screen');
+    screen.dataset.visualApp = A.current || '';
+    screen.innerHTML = html;
+    const navTitle=screen.querySelector('.app-nav h2')?.textContent;
+    screen.querySelectorAll('.app-title').forEach(title=>{if(!title.id&&title.textContent===navTitle)title.classList.add('redundant-title');});
+    // Enhance existing content, never replace controls, data, or event targets.
+    if (A.current === 'journal' && screen.querySelector('#ev-journal-list')) {
+      screen.querySelector('.everyday').insertAdjacentHTML('afterbegin', '<div class="ev-heading"><span></span><h1>日々の記録</h1></div>');
+    }
+    const hero = screen.querySelector('.ev-hero, .ev-heading');
+    if (hero && ['today','habits','expenses','reading','journal','shopping'].includes(A.current)) {
+      hero.classList.add('illustrated-hero');
+      hero.insertAdjacentHTML('beforeend', A.scene(A.current));
+    }
+    if (A.current === 'music' && screen.querySelector('#music-search')) {
+      screen.querySelector('.app-title').insertAdjacentHTML('beforebegin', `<div class="music-discovery-art">${A.scene('music')}</div>`);
+    }
+  };
   A.overlay = (html, extra='') => { const el=A.$('#overlay');el.className='overlay '+extra;el.innerHTML=html;el.hidden=false;A.$('#phone-screen').classList.add('overlay-open'); };
   A.closeOverlay = () => { A.$('#overlay').hidden=true;A.$('#overlay').innerHTML='';A.$('#phone-screen').classList.remove('overlay-open'); };
   A.overlayTitle = title => `<header class="overlay-heading"><h2>${title}</h2><button class="close-button" data-action="closeOverlay" aria-label="閉じる">×</button></header>`;
@@ -432,20 +491,16 @@
   A.applySettings = () => { const s=A.settings; A.$('#wallpaper').className='wallpaper '+(s.wallpaper==='default'?'':s.wallpaper);A.$('#phone-screen').classList.toggle('screen-dark-mode',s.dark);A.$('#phone-screen').style.setProperty('--brightness',.4 + s.brightness*.006);A.save('settings',s); };
   A.controls = () => {
     const s=A.settings;
-    A.overlay(`${A.overlayTitle('コントロールセンター')}<div class="control-grid"><div class="control-connectivity">${[['airplane','airplane','機内モード','orange'],['cellular','signal','モバイル通信','green'],['wifi','wifi','Wi-Fi',''],['bluetooth','bluetooth','Bluetooth','']].map(([key,ic,label,color])=>`<button class="control-round ${color} ${s[key]?'on':''}" data-action="controlToggle" data-key="${key}" aria-label="${label}" aria-pressed="${s[key]}">${A.icon(ic)}</button>`).join('')}</div><div class="control-music"><strong>${A.music?.track?.title||'ひと息、つこう。'}</strong><small>${A.music?.playing?'aura originals':'音楽で、気分を変えて。'}</small><div><button data-action="musicPrevious" aria-label="前の曲">${A.icon('previous')}</button><button data-action="controlPlay" aria-label="再生・一時停止">${A.icon(A.music?.playing?'pause':'play')}</button><button data-action="musicNext" aria-label="次の曲">${A.icon('next')}</button></div></div><button class="control-tile ${s.focus?'on':''}" data-action="controlToggle" data-key="focus">${A.icon('moon')}集中モード</button><button class="control-tile ${s.dark?'on':''}" data-action="controlToggle" data-key="dark">${A.icon('sun')}ダークモード</button><label class="control-slider">${A.icon('sun')}<input aria-label="画面の明るさ" id="control-brightness" type="range" min="10" max="100" value="${s.brightness}"></label><label class="control-slider">${A.icon('volume')}<input aria-label="音量" id="control-volume" type="range" min="0" max="100" value="${s.volume}"></label><button class="control-single" data-action="flashlight" aria-label="画面ライト">${A.icon('flashlight')}</button><button class="control-single" data-app="clock" aria-label="時計">${A.icon('timer')}</button><button class="control-single" data-app="calculator" aria-label="計算機">${A.icon('calculator')}</button><button class="control-single" data-app="camera" aria-label="カメラ">${A.icon('camera')}</button><button class="control-tile" data-action="lock">${A.icon('lock')}画面をロック</button><button class="control-tile" data-action="about">${A.icon('globe')}auraについて</button></div><p class="control-footer">aura Network — 接続設定はシミュレーションです。<br>明るさ・音量は、この体験内で変更されます。</p>`);
+    A.overlay(`${A.overlayTitle('コントロールセンター')}<div class="control-grid"><div class="control-connectivity">${[['airplane','airplane','機内モード','orange'],['cellular','signal','モバイル通信','green'],['wifi','wifi','Wi-Fi',''],['bluetooth','bluetooth','Bluetooth','']].map(([key,ic,label,color])=>`<button class="control-round ${color} ${s[key]?'on':''}" data-action="controlToggle" data-key="${key}" aria-label="${label}" aria-pressed="${s[key]}">${A.icon(ic)}</button>`).join('')}</div><div class="control-music"><strong>${A.music?.track?.title||'ひと息、つこう。'}</strong><small>${A.music?.playing?'aura originals':'音楽'}</small><div><button data-action="musicPrevious" aria-label="前の曲">${A.icon('previous')}</button><button data-action="controlPlay" aria-label="再生・一時停止">${A.icon(A.music?.playing?'pause':'play')}</button><button data-action="musicNext" aria-label="次の曲">${A.icon('next')}</button></div></div><button class="control-tile ${s.focus?'on':''}" data-action="controlToggle" data-key="focus">${A.icon('moon')}集中モード</button><button class="control-tile ${s.dark?'on':''}" data-action="controlToggle" data-key="dark">${A.icon('sun')}ダークモード</button><label class="control-slider">${A.icon('sun')}<input aria-label="画面の明るさ" id="control-brightness" type="range" min="10" max="100" value="${s.brightness}"></label><label class="control-slider">${A.icon('volume')}<input aria-label="音量" id="control-volume" type="range" min="0" max="100" value="${s.volume}"></label><button class="control-single" data-action="flashlight" aria-label="画面ライト">${A.icon('flashlight')}</button><button class="control-single" data-app="clock" aria-label="時計">${A.icon('timer')}</button><button class="control-single" data-app="calculator" aria-label="計算機">${A.icon('calculator')}</button><button class="control-single" data-app="camera" aria-label="カメラ">${A.icon('camera')}</button><button class="control-tile" data-action="lock">${A.icon('lock')}画面をロック</button><button class="control-tile" data-action="about">${A.icon('globe')}auraについて</button></div><p class="control-footer">通信はデモ。明るさ・音量はaura内のみ</p>`);
     A.$('#control-brightness').oninput=e=>{s.brightness=+e.target.value;A.applySettings();};
     A.$('#control-volume').oninput=e=>{s.volume=+e.target.value;A.music?.setVolume();A.save('settings',s);};
   };
   A.actions.controlToggle=el=>{const key=el.dataset.key;A.settings[key]=!A.settings[key];if(key==='airplane' && A.settings.airplane)A.settings.cellular=false;A.applySettings();A.controls();};
   A.actions.lock=A.lock;
   A.actions.controlPlay=()=>{A.music?.toggle();A.controls();};
-  A.actions.flashlight=()=>{const el=document.createElement('div');el.className='flashlight-screen';el.innerHTML='<button>タップしてライトを消す</button>';el.onclick=()=>el.remove();A.$('#phone-screen').appendChild(el);};
-  A.actions.about=()=>A.overlay(`${A.overlayTitle('About this little world')}<div class="about-hero">aura.</div><p class="about-copy">手のひらに、もうひとつの世界。<br>いつもの日常に、少しの好奇心を。</p><div class="about-stats"><div><strong>30</strong><span>APPS</span></div><div><strong>08</strong><span>GAMES</span></div><div><strong>∞</strong><span>CURIOSITY</span></div></div><p class="about-note">auraは、ブラウザの中で動く架空のスマートフォンです。実際のOS、通信サービス、銀行・医療サービスではありません。<br><br>天気はOpen-Meteo、地図はOpenStreetMap、記事検索はWikipediaと接続します。電話・SMS・メールは端末の対応アプリで最終操作を行います。デモと実連携は区別されます。ヘルスケアの自動計測と実決済は未接続です。<br><br>メモ、設定、写真などはこのブラウザに保存されます。録音はアプリを閉じるまで保持されます。データは他の端末へ同期されません。カメラ・マイクの利用には許可が必要です。</p><p class="control-footer">auraOS 4.2 / EVERYDAY + ARCADE</p>`);
+  A.actions.flashlight=()=>{const el=document.createElement('div');el.className='flashlight-screen';el.innerHTML='<button>消灯</button>';el.onclick=()=>el.remove();A.$('#phone-screen').appendChild(el);};
+  A.actions.about=()=>A.overlay(`${A.overlayTitle('About this little world')}<div class="about-hero">aura.</div><p class="about-copy">手のひらに、もうひとつの世界。<br>いつもの日常に、少しの好奇心を。</p><div class="about-stats"><div><strong>30</strong><span>APPS</span></div><div><strong>08</strong><span>GAMES</span></div><div><strong>∞</strong><span>CURIOSITY</span></div></div><p class="about-note">auraは、ブラウザの中で動く架空のスマートフォンです。実際のOS、通信サービス、銀行・医療サービスではありません。<br><br>天気はOpen-Meteo、地図はOpenStreetMap、記事検索はWikipediaと接続します。電話・SMS・メールは端末の対応アプリで最終操作を行います。デモと実連携は区別されます。ヘルスケアの自動計測と実決済は未接続です。<br><br>メモ、設定、写真などはこのブラウザに保存されます。録音はアプリを閉じるまで保持されます。データは他の端末へ同期されません。カメラ・マイクの利用には許可が必要です。</p><p class="control-footer">auraOS 4.5 / NOTIFICATIONS</p>`);
   A.spotlight = () => { A.overlay(`${A.overlayTitle('見つけよう。')}<label class="spotlight-input">${A.icon('search')}<input id="spotlight-query" placeholder="アプリを検索" aria-label="アプリを検索" autocomplete="off"></label><p class="spotlight-label">あなたの小さな世界</p><div class="spotlight-results" id="spotlight-results"></div>`);const render=q=>{const matches=Object.values(A.apps).filter(a=>(a.name+a.id).toLowerCase().includes(q.toLowerCase()));A.$('#spotlight-results').innerHTML=matches.map(a=>A.launcher(a)).join('')||'<p style="grid-column:span 4;font-size:12px;opacity:.65">該当するアプリはありません。</p>';};render('');A.$('#spotlight-query').oninput=e=>render(e.target.value);setTimeout(()=>A.$('#spotlight-query')?.focus(),120); };
-  let notificationsCleared=false;
-  A.notifications = () => { if(notificationsCleared){A.actions.clearNotifications();return;} A.overlay(`${A.overlayTitle('通知センター')}<p style="font-size:12px;opacity:.6;margin-bottom:30px">${new Date().toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'})}</p><div class="group-card" style="background:#ffffff15">${A.row('messages','美咲','週末は、どこか出かけよう ☀','notificationChat','','#60b47b')}${A.row('mail','aura studio','あなたの小さな世界へ、ようこそ。','notificationMail','','#478cdb')}</div><p class="control-footer">デモ通知です。ここからアプリを開けます。</p><button class="primary-button" data-action="clearNotifications" style="background:#ffffff15;margin-top:25px">通知をクリア</button>`); };
-  A.actions.notificationChat=()=>A.open('messages','misaki');A.actions.notificationMail=()=>A.open('mail');
-  A.actions.clearNotifications=()=>{notificationsCleared=true;A.overlay(`${A.overlayTitle('通知センター')}<div class="empty-state" style="color:#fffa">新しい通知はありません。</div>`);};
   A.updateClock = () => {const d=new Date();const time=d.toLocaleTimeString('ja-JP',{hour:'numeric',minute:'2-digit',hour12:false});A.$('#status-time').textContent=time;A.$('#lock-time').textContent=time;const date=d.toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'});A.$('#home-date').textContent=date;A.$('#lock-date').textContent=date;A.$('#widget-day').textContent=d.getDate();A.$('#widget-weekday').textContent=['日','月','火','水','木','金','土'][d.getDay()]+'曜日';A.clockTick?.();A.music?.tick();A.updateWidgets?.();};
   document.addEventListener('click',e=>{const button=e.target.closest('[data-app], [data-action]');if(!button || button.disabled)return;if(button.dataset.app)A.open(button.dataset.app);else{const fn=A.actions[button.dataset.action];if(fn)fn(button,e);}});
   A.$('#status-controls').onclick=A.controls;A.$('#status-time').onclick=A.notifications;A.$('#dynamic-island').onclick=()=>A.open('music','player');A.$('#home-search').onclick=A.spotlight;A.$('#desktop-lock').onclick=A.lock;A.$('#desktop-reset').onclick=A.home;A.$('#power-button').onclick=()=>A.locked?A.home():A.lock();A.$('#unlock-button').onclick=A.home;A.$('#lock-flashlight').onclick=A.actions.flashlight;A.$('#about-button').onclick=A.actions.about;
@@ -467,9 +522,9 @@
     if(A.locked)return;
     const cards=A.recentApps.map(id=>{
       const app=A.apps[id];
-      return `<article class="recent-card"><button class="recent-open" data-action="recentOpen" data-id="${id}" aria-label="${app.name}に切り替える"><span class="app-icon ${id}-icon" style="background:${app.color}">${A.appIcon(id)}</span><strong>${app.name}</strong><small>${A.current===id?'使用中のアプリに戻る':'アプリを開く'}</small></button><button class="recent-remove" data-action="recentRemove" data-id="${id}" aria-label="${app.name}を履歴から除く">×</button></article>`;
+      return `<article class="recent-card"><button class="recent-open" data-action="recentOpen" data-id="${id}" aria-label="${app.name}に切り替える"><span class="app-icon ${id}-icon" style="background:${app.color}">${A.appIcon(id)}</span><strong>${app.name}</strong><small>${A.current===id?'使用中':'アプリを開く'}</small></button><button class="recent-remove" data-action="recentRemove" data-id="${id}" aria-label="${app.name}を履歴から除く">×</button></article>`;
     }).join('');
-    A.overlay(`${A.overlayTitle('最近使ったアプリ')}<p class="switcher-copy">いつもの場所へ、すぐに。<br>別のアプリは開始画面から開きます。録音は切替時に終了します。</p>${cards?`<div class="recent-list">${cards}</div><button class="switcher-clear" data-action="recentClear">履歴をクリア</button>`:`<div class="switcher-empty">${A.icon('grid')}まだ履歴がありません。<br>ホームからアプリを開いてみましょう。</div>`}`,'app-switcher');
+    A.overlay(`${A.overlayTitle('最近使ったアプリ')}<p class="switcher-copy">別アプリは開始画面へ。録音は切替で終了</p>${cards?`<div class="recent-list">${cards}</div><button class="switcher-clear" data-action="recentClear">履歴をクリア</button>`:`<div class="switcher-empty">${A.icon('grid')}履歴なし</div>`}`,'app-switcher');
   };
   A.actions.recents=A.recents;
   A.actions.homeCalendar=()=>{A.open('calendar');A.actions.calendarToday();};
@@ -587,18 +642,18 @@
   ['pointerup','pointercancel','pointerleave'].forEach(type=>homeScreen.addEventListener(type,()=>clearTimeout(pressTimer)));
   A.library=()=>{
     const groups=[['よく使う',A.recentApps.length?A.recentApps.slice(0,4):['today','focus','habits','journal']],['つながる',['phone','messages','mail','safari','contacts']],['毎日のこと',['calendar','notes','reminders','files','today']],['クリエイティブ',['photos','camera','music','recorder','sketch']],['暮らしと発見',['weather','maps','health','wallet','expenses','shopping']],['自分の時間',['focus','habits','journal','reading']],['ユーティリティ',['clock','calculator','settings','games','converter']]];
-    A.overlay(`${A.overlayTitle('アプリライブラリ')}<label class="spotlight-input">${A.icon('search')}<input id="library-query" aria-label="ライブラリを検索" placeholder="アプリを検索" autocomplete="off"></label><div class="library-groups" id="library-groups">${groups.map(([name,ids])=>`<section class="library-category"><div>${ids.map(id=>A.launcher(A.apps[id])).join('')}</div><h3>${name}</h3></section>`).join('')}</div><div class="spotlight-results" id="library-results" hidden></div><p class="control-footer">すべてのアプリが、ここに。</p>`,'library-overlay');
+    A.overlay(`${A.overlayTitle('アプリライブラリ')}<label class="spotlight-input">${A.icon('search')}<input id="library-query" aria-label="ライブラリを検索" placeholder="アプリを検索" autocomplete="off"></label><div class="library-groups" id="library-groups">${groups.map(([name,ids])=>`<section class="library-category"><div>${ids.map(id=>A.launcher(A.apps[id])).join('')}</div><h3>${name}</h3></section>`).join('')}</div><div class="spotlight-results" id="library-results" hidden></div><p class="control-footer"></p>`,'library-overlay');
     A.$('#library-query').oninput=e=>{const q=e.target.value.trim().toLowerCase();A.$('#library-groups').hidden=!!q;const results=A.$('#library-results');results.hidden=!q;results.innerHTML=Object.values(A.apps).filter(app=>(app.name+app.id).toLowerCase().includes(q)).map(app=>A.launcher(app)).join('')||'<p class="search-empty">アプリが見つかりません。</p>';};
   };
   A.actions.library=A.library;
   const wallpapers=[['default','Dusk','夕暮れの余韻'],['ocean','Ocean','静かな青'],['forest','Forest','深呼吸する緑'],['mono','Stone','モノクローム'],['aurora','Aurora','光のカーテン'],['sunrise','Sunrise','新しい朝']];
   A.actions.personalize=()=>{
-    A.overlay(`${A.overlayTitle('あなたらしいホーム。')}<p class="customize-subtitle">壁紙も、アイコンも。気分に合わせて。</p><div class="wallpaper-gallery">${wallpapers.map(([id,name,desc])=>`<button class="wallpaper-pick ${id} ${A.settings.wallpaper===id?'selected':''}" data-action="chooseWallpaper" data-value="${id}" aria-label="壁紙 ${name}" aria-pressed="${A.settings.wallpaper===id}"><span class="wallpaper-mini-clock">9:41</span><span class="wallpaper-pick-label"><strong>${name}</strong><small>${desc}</small></span>${A.settings.wallpaper===id?`<i>${A.icon('check')}</i>`:''}</button>`).join('')}</div><h3 class="customize-label">アイコンのスタイル</h3><div class="style-picker">${[['standard','オリジナル'],['glass','ガラス'],['tinted','単色']].map(([value,label])=>`<button class="${(A.settings.iconStyle||'standard')===value?'selected':''}" data-action="chooseIconStyle" data-value="${value}" aria-pressed="${(A.settings.iconStyle||'standard')===value}">${label}</button>`).join('')}</div><button class="appearance-link" data-action="appearance">${A.icon('layers')}<span><strong>光と奥行き</strong><small>影の深さと、動きの心地よさを調整</small></span><span class="chevron">›</span></button><h3 class="customize-label">ロック画面の時計</h3><div class="style-picker clock-style-picker">${[['classic','クラシック'],['light','ライト'],['rounded','ラウンド']].map(([value,label])=>`<button class="${(A.settings.clockStyle||'classic')===value?'selected':''}" data-action="chooseClockStyle" data-value="${value}" aria-pressed="${(A.settings.clockStyle||'classic')===value}"><span>9:41</span>${label}</button>`).join('')}</div><button class="preview-setting" data-action="toggleLockPreview" aria-pressed="${A.settings.lockPreview!==false}"><span>ロック画面に通知本文を表示<small>表示のみの設定です。パスコード保護ではありません。</small></span><span class="preview-switch ${A.settings.lockPreview!==false?'on':''}"></span></button><button class="reset-layout" data-action="previewLock">ロック画面をプレビュー</button><button class="reset-layout" data-action="resetLayout">ホームの並び順をリセット</button><p class="control-footer">このブラウザに自動保存されます。</p>`,'customize-overlay');
+    A.overlay(`${A.overlayTitle('ホームの外観')}<p class="customize-subtitle"></p><div class="wallpaper-gallery">${wallpapers.map(([id,name,desc])=>`<button class="wallpaper-pick ${id} ${A.settings.wallpaper===id?'selected':''}" data-action="chooseWallpaper" data-value="${id}" aria-label="壁紙 ${name}" aria-pressed="${A.settings.wallpaper===id}"><span class="wallpaper-mini-clock">9:41</span><span class="wallpaper-pick-label"><strong>${name}</strong><small>${desc}</small></span>${A.settings.wallpaper===id?`<i>${A.icon('check')}</i>`:''}</button>`).join('')}</div><h3 class="customize-label">アイコンのスタイル</h3><div class="style-picker">${[['standard','オリジナル'],['glass','ガラス'],['tinted','単色']].map(([value,label])=>`<button class="${(A.settings.iconStyle||'standard')===value?'selected':''}" data-action="chooseIconStyle" data-value="${value}" aria-pressed="${(A.settings.iconStyle||'standard')===value}">${label}</button>`).join('')}</div><button class="appearance-link" data-action="appearance">${A.icon('layers')}<span><strong>光と奥行き</strong><small>影・アニメーション</small></span><span class="chevron">›</span></button><h3 class="customize-label">時計スタイル</h3><div class="style-picker clock-style-picker">${[['classic','クラシック'],['light','ライト'],['rounded','ラウンド']].map(([value,label])=>`<button class="${(A.settings.clockStyle||'classic')===value?'selected':''}" data-action="chooseClockStyle" data-value="${value}" aria-pressed="${(A.settings.clockStyle||'classic')===value}"><span>9:41</span>${label}</button>`).join('')}</div><button class="preview-setting" data-action="toggleLockPreview" aria-pressed="${A.settings.lockPreview!==false}"><span>通知の本文を表示<small>表示設定のみ・端末保護なし</small></span><span class="preview-switch ${A.settings.lockPreview!==false?'on':''}"></span></button><button class="reset-layout" data-action="previewLock">ロック画面を見る</button><button class="reset-layout" data-action="resetLayout">配置をリセット</button><p class="control-footer">端末内に自動保存</p>`,'customize-overlay');
   };
   const depths=[['soft','やわらか','控えめな影'],['balanced','バランス','自然な立体感'],['deep','くっきり','深い落ち影']];
   const depthDescriptions={soft:'そっと浮かぶ、やわらかな影。',balanced:'縁の光と、自然に重なる影。',deep:'光を受けて、奥行きが際立つ。'};
-  A.appearancePanel=()=>`<div class="depth-preview" aria-label="現在の影の深さのプレビュー"><div class="depth-preview-scene" aria-hidden="true"><span class="depth-preview-icon">${A.icon('layers')}</span><span class="depth-preview-card"><strong>A little depth.</strong><i></i><i></i></span></div><p id="depth-description" role="status">${depthDescriptions[A.settings.depth]||depthDescriptions.balanced}</p></div><h3 class="customize-label">影の深さ</h3><div class="appearance-options" role="group" aria-label="影の深さ">${depths.map(([value,label,detail])=>`<button data-action="chooseDepth" data-value="${value}" aria-pressed="${(A.settings.depth||'balanced')===value}"><strong>${label}</strong><small>${detail}</small></button>`).join('')}</div><button class="appearance-toggle" data-action="toggleMotion" aria-pressed="${!!A.settings.reduceMotion}"><span><strong>動きを抑える</strong><small>浮き上がりや画面切替のアニメーションを停止。影の立体感はそのままに。</small></span><span class="preview-switch ${A.settings.reduceMotion?'on':''}" aria-hidden="true"></span></button><p class="appearance-help">アイコン・ウィジェット・アプリ内のカードにすぐ反映されます。<br>端末側で「動きを減らす」が有効な場合は、端末の設定を優先します。</p>`;
-  A.actions.appearance=()=>A.overlay(`${A.overlayTitle('光と奥行き')}<p class="customize-subtitle">触れたくなる質感を、あなたの好みで。</p>${A.appearancePanel()}<button class="reset-layout" data-action="personalize">壁紙とホーム画面に戻る</button><p class="control-footer">このブラウザに自動保存されます。</p>`,'customize-overlay');
+  A.appearancePanel=()=>`<div class="depth-preview" aria-label="現在の影の深さのプレビュー"><div class="depth-preview-scene" aria-hidden="true"><span class="depth-preview-icon">${A.icon('layers')}</span><span class="depth-preview-card"><strong>A little depth.</strong><i></i><i></i></span></div><p id="depth-description" role="status">${depthDescriptions[A.settings.depth]||depthDescriptions.balanced}</p></div><h3 class="customize-label">影の深さ</h3><div class="appearance-options" role="group" aria-label="影の深さ">${depths.map(([value,label,detail])=>`<button data-action="chooseDepth" data-value="${value}" aria-pressed="${(A.settings.depth||'balanced')===value}"><strong>${label}</strong><small>${detail}</small></button>`).join('')}</div><button class="appearance-toggle" data-action="toggleMotion" aria-pressed="${!!A.settings.reduceMotion}"><span><strong>動きを抑える</strong><small>アニメーションを停止</small></span><span class="preview-switch ${A.settings.reduceMotion?'on':''}" aria-hidden="true"></span></button><p class="appearance-help">端末の「動きを減らす」を優先</p>`;
+  A.actions.appearance=()=>A.overlay(`${A.overlayTitle('光と奥行き')}<p class="customize-subtitle"></p>${A.appearancePanel()}<button class="reset-layout" data-action="personalize">壁紙・ホーム</button><p class="control-footer">端末内に自動保存</p>`,'customize-overlay');
   A.actions.chooseDepth=el=>{
     const value=el.dataset.value;if(!depths.some(([id])=>id===value))return;
     A.settings.depth=value;A.applySettings();
@@ -612,10 +667,10 @@
   A.actions.chooseClockStyle=el=>{if(!['classic','light','rounded'].includes(el.dataset.value))return;A.settings.clockStyle=el.dataset.value;A.applySettings();A.actions.personalize();};
   A.actions.toggleLockPreview=()=>{A.settings.lockPreview=A.settings.lockPreview===false;A.applySettings();A.renderLockNotices();A.actions.personalize();};
   A.actions.previewLock=()=>A.lock();
-  A.actions.gestureGuide=()=>A.overlay(`${A.overlayTitle('小さな操作、大きな自由。')}<p class="customize-subtitle">いつものスマホのように、触れてみてください。</p><div class="gesture-guide">${[['grid','ホームを左へスワイプ','アプリライブラリで、すべてのアプリを。'],['search','ホームを下へスワイプ','アプリ・メモ・リマインダーを横断検索。'],['edit','アイコンを長押し','すぐに新規作成。編集では2つのアイコンを選んで入れ替え。PCはドラッグにも対応。'],['signal','画面右上をタップ・下へスワイプ','コントロールセンターで明るさや集中モードを変更。'],['messages','画面左上の時刻をタップ','通知センター。デモ返信もここに残ります。'],['arrow','下端のホームバー','タップでホーム。上スワイプ・長押しでアプリ切替。']].map(([icon,title,body])=>`<article>${A.icon(icon)}<div><strong>${title}</strong><p>${body}</p></div></article>`).join('')}</div><p class="control-footer">PC：Escで閉じる / Hでホーム / Alt+Tabでアプリ切替<br>データはこのブラウザ内に保存されます。</p>`,'guide-overlay');
+  A.actions.gestureGuide=()=>A.overlay(`${A.overlayTitle('操作ガイド')}<p class="customize-subtitle"></p><div class="gesture-guide">${[['grid','ホームを左へスワイプ','全アプリを表示'],['search','ホームを下へスワイプ','アプリ・記録を検索'],['edit','アイコンを長押し','新規作成 / 配置の入替'],['signal','画面右上をタップ・下へスワイプ','明るさ・集中モード'],['messages','画面左上の時刻をタップ','通知・未読・再通知'],['arrow','下端のホームバー','タップ：ホーム / 上：切替']].map(([icon,title,body])=>`<article>${A.icon(icon)}<div><strong>${title}</strong><p>${body}</p></div></article>`).join('')}</div><p class="control-footer">PC：Escで閉じる / Hでホーム / Alt+Tabでアプリ切替<br>データはこのブラウザ内に保存されます。</p>`,'guide-overlay');
   A.actions.chooseWallpaper=el=>{A.settings.wallpaper=el.dataset.value;A.applySettings();A.actions.personalize();};
   A.actions.chooseIconStyle=el=>{A.settings.iconStyle=el.dataset.value;A.applySettings();A.actions.personalize();};
-  A.actions.resetLayout=()=>A.confirm('ホームの配置をリセット','アイコンの並び順だけを元に戻します。アプリ内のデータは削除されません。',()=>{homeOrder=[...defaultOrder];A.save('homeOrder',homeOrder);A.actions.finishEditing();A.toast('ホームの配置をリセットしました');});
+  A.actions.resetLayout=()=>A.confirm('ホームの配置をリセット','配置のみ初期化。データは保持',()=>{homeOrder=[...defaultOrder];A.save('homeOrder',homeOrder);A.actions.finishEditing();A.toast('配置をリセット');});
   const baseApply=A.applySettings;
   A.applySettings=()=>{
     if(!depths.some(([id])=>id===A.settings.depth))A.settings.depth='balanced';
@@ -629,7 +684,7 @@
   A.open=(id,arg)=>{if(!A.apps[id]?.render)return;editing=false;selectedIcon=null;baseOpen(id,arg);};
   // Search uses local data only, and never injects user text as markup.
   A.spotlight=()=>{
-    A.overlay(`${A.overlayTitle('検索')}<label class="spotlight-input">${A.icon('search')}<input id="spotlight-query" placeholder="アプリ・記録を検索" aria-label="アプリと記録を検索" autocomplete="off"></label><p class="spotlight-label" id="spotlight-heading">アプリを見つける</p><div class="spotlight-results" id="spotlight-results"></div><div id="spotlight-content"></div><p class="control-footer">このaura内だけを検索します。</p>`,'spotlight-overlay');
+    A.overlay(`${A.overlayTitle('検索')}<label class="spotlight-input">${A.icon('search')}<input id="spotlight-query" placeholder="アプリ・記録を検索" aria-label="アプリと記録を検索" autocomplete="off"></label><p class="spotlight-label" id="spotlight-heading">アプリ</p><div class="spotlight-results" id="spotlight-results"></div><div id="spotlight-content"></div><p class="control-footer">端末内を検索</p>`,'spotlight-overlay');
     const render=value=>{
       const q=value.trim().toLowerCase();
       const apps=Object.values(A.apps).filter(app=>(app.name+app.id).toLowerCase().includes(q));
@@ -637,32 +692,132 @@
       const notes=q?(A.searchableNotes?.()||A.load('notes',[])).filter(n=>(n.title+n.body).toLowerCase().includes(q)).slice(0,5):[];
       const reminders=q?(A.searchableReminders?.()||A.load('reminders',[])).filter(r=>r.text.toLowerCase().includes(q)).slice(0,5):[];
       const extra=q?(A.searchAdditional?.(q)||''):'';
-      A.$('#spotlight-content').innerHTML=(notes.length?`<p class="spotlight-label">メモ</p><div class="search-content-group">${notes.map(n=>`<button data-action="searchNote" data-id="${A.escape(n.id)}">${smallIcon('notes')}<span><strong>${A.escape(n.title||'新しいメモ')}</strong><small>${A.escape(n.body.slice(0,65))}</small></span>${A.icon('arrow')}</button>`).join('')}</div>`:'')+(reminders.length?`<p class="spotlight-label">リマインダー</p><div class="search-content-group">${reminders.map(r=>`<button data-app="reminders">${smallIcon('reminders')}<span><strong>${A.escape(r.text)}</strong><small>${r.done?'完了済み':'未完了'}</small></span></button>`).join('')}</div>`:'')+extra+(!apps.length&&!notes.length&&!reminders.length&&!extra?'<div class="search-empty">見つかりませんでした。<br><small>別のキーワードで試してみてください。</small></div>':'');
+      A.$('#spotlight-content').innerHTML=(notes.length?`<p class="spotlight-label">メモ</p><div class="search-content-group">${notes.map(n=>`<button data-action="searchNote" data-id="${A.escape(n.id)}">${smallIcon('notes')}<span><strong>${A.escape(n.title||'新しいメモ')}</strong><small>${A.escape(n.body.slice(0,65))}</small></span>${A.icon('arrow')}</button>`).join('')}</div>`:'')+(reminders.length?`<p class="spotlight-label">リマインダー</p><div class="search-content-group">${reminders.map(r=>`<button data-app="reminders">${smallIcon('reminders')}<span><strong>${A.escape(r.text)}</strong><small>${r.done?'完了済み':'未完了'}</small></span></button>`).join('')}</div>`:'')+extra+(!apps.length&&!notes.length&&!reminders.length&&!extra?'<div class="search-empty">該当なし</div>':'');
     };
     render('');A.$('#spotlight-query').oninput=e=>render(e.target.value);setTimeout(()=>A.$('#spotlight-query')?.focus(),120);
   };
   A.actions.searchNote=el=>{A.open('notes');A.actions.noteOpen(el);};
-  // Persisted, bounded notification history; no browser notification permission required.
-  let noticeList=A.load('notifications',null);
-  if(!Array.isArray(noticeList))noticeList=[{id:'welcome',app:'messages',arg:'misaki',title:'美咲',body:'週末は、どこか出かけよう。',time:Date.now()-120000},{id:'studio',app:'mail',title:'aura studio',body:'あなたの小さな世界へ、ようこそ。',time:Date.now()-3600000}];
-  noticeList=noticeList.filter(n=>n&&A.apps[n.app]&&typeof n.title==='string'&&typeof n.body==='string').slice(0,40);
-  const relativeTime=t=>{const minutes=Math.max(0,Math.floor((Date.now()-t)/60000));return minutes<1?'今':minutes<60?`${minutes}分前`:minutes<1440?`${Math.floor(minutes/60)}時間前`:`${Math.floor(minutes/1440)}日前`;};
-  const noticeCard=n=>`<article class="system-notification"><button class="notification-open" data-action="openNotice" data-id="${A.escape(n.id)}">${smallIcon(n.app)}<span><span class="notification-meta">${A.apps[n.app].name} <time>${relativeTime(n.time)}</time></span><strong>${A.locked&&A.settings.lockPreview===false?'新しい通知':A.escape(n.title)}</strong><span class="notification-body">${A.locked&&A.settings.lockPreview===false?'開いて内容を確認':A.escape(n.body)}</span></span></button><button class="notification-dismiss" data-action="dismissNotice" data-id="${A.escape(n.id)}" aria-label="通知を削除">×</button></article>`;
-  let noticeTimer;
-  A.notify=({app,title,body,arg})=>{
-    if(!A.apps[app])return;
-    const notice={id:A.id(),app,title:String(title),body:String(body),arg,time:Date.now()};
-    noticeList.unshift(notice);noticeList=noticeList.slice(0,40);A.save('notifications',noticeList);A.renderLockNotices();
-    if(!A.$('#overlay').hidden&&A.$('#overlay').classList.contains('notifications-overlay'))A.notifications();
-    if(A.settings.focus)return;
-    A.$('#notification-banner')?.remove();clearTimeout(noticeTimer);
-    const banner=document.createElement('div');banner.id='notification-banner';banner.setAttribute('role','status');banner.innerHTML=noticeCard(notice);A.$('#phone-screen').appendChild(banner);noticeTimer=setTimeout(()=>banner.remove(),5500);
+  // Notification center: local history, explicit read state, snooze and per-app delivery.
+  const noticeLimit=100, noticeEsc=A.escape;
+  const normalizeNotices=value=>(Array.isArray(value)?value:[]).filter(n=>n&&A.apps[n.app]&&typeof n.title==='string'&&typeof n.body==='string').slice(0,noticeLimit).map(n=>({...n,id:String(n.id||A.id()),time:Number.isFinite(Number(n.time))&&Math.abs(Number(n.time))<8640000000000000?Number(n.time):Date.now(),read:!!n.read,pinned:!!n.pinned,snoozedUntil:Number(n.snoozedUntil)||0,demo:n.demo===true||['welcome','studio'].includes(n.id)||n.app==='messages'}));
+  let noticeList=normalizeNotices(A.load('notifications',[]));
+  const savedNoticePrefs=A.load('notificationPrefs',{})||{};
+  let noticePrefs={banners:savedNoticePrefs.banners!==false,compact:savedNoticePrefs.compact!==false,scheduled:!!savedNoticePrefs.scheduled,muted:Array.isArray(savedNoticePrefs.muted)?savedNoticePrefs.muted:[]};
+  let noticeFilter='all',noticeApp='all',noticeQuery='',noticeExpanded=new Set(),bannerQueue=[],bannerTimer,noticeSeenMinute=-1;
+  const noticeActive=n=>!n.snoozedUntil;
+  const noticeVisible=()=>!A.$('#overlay').hidden&&A.$('#overlay').classList.contains('notifications-overlay');
+  const relativeTime=t=>{const m=Math.max(0,Math.floor((Date.now()-t)/60000));return m<1?'今':m<60?`${m}分`:m<1440?`${Math.floor(m/60)}時間`:`${Math.floor(m/1440)}日`;};
+  const noticeButton=(action,icon,label,id='',extra='')=>`<button data-action="${action}" data-id="${noticeEsc(id)}" aria-label="${label}" title="${label}" ${extra}>${A.icon(icon)}</button>`;
+  const noticeBell=()=>`<svg viewBox="0 0 80 80" fill="none" aria-hidden="true"><circle cx="40" cy="40" r="36" stroke="currentColor" opacity=".12"/><circle cx="40" cy="40" r="29" stroke="currentColor" opacity=".18"/><path d="M23 49c5-6 4-11 4-17a13 13 0 0 1 26 0c0 6-1 11 4 17l2 4H21l2-4Z" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-width="2"/><path d="M34 59a6 6 0 0 0 12 0M40 14v5" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="57" cy="23" r="5" fill="currentColor"/></svg>`;
+  const noticeCard=(n,mini=false)=>{
+    const hidden=A.locked&&A.settings.lockPreview===false,expanded=noticeExpanded.has(n.id),waiting=!!n.snoozedUntil;
+    return `<article class="system-notification notice-card ${n.read?'is-read':'is-unread'} ${n.pinned?'is-pinned':''} ${mini?'is-mini':''} ${expanded?'is-expanded':''}" data-notice-id="${noticeEsc(n.id)}" style="--notice-accent:${n.app==='clock'?'#b07130':n.app==='focus'?'#8265c5':n.app==='messages'?'#318764':'#487faf'}">
+      <button class="notification-open" data-action="openNotice" data-id="${noticeEsc(n.id)}">${smallIcon(n.app)}<span><span class="notification-meta"><span>${noticeEsc(A.apps[n.app].name)}${n.demo?' · デモ':''}</span><time data-notice-time="${n.time}" datetime="${new Date(n.time).toISOString()}">${relativeTime(n.time)}</time></span><strong>${hidden?'新しい通知':noticeEsc(n.title)}</strong>${!hidden&&n.body?`<span class="notification-body">${noticeEsc(n.body)}</span>`:''}</span>${!n.read?'<i class="notice-unread-dot" aria-label="未読"></i>':''}</button>
+      ${mini?noticeButton('dismissNotice','close','削除',n.id,'class="notification-dismiss"'):`<div class="notice-actions">${noticeButton('noticeRead',n.read?'refresh':'check',n.read?'未読にする':'既読にする',n.id)}${noticeButton('noticePin','pin',n.pinned?'ピン解除':'ピン留め',n.id,`aria-pressed="${n.pinned}"`)}<button data-action="noticeSnooze" data-id="${noticeEsc(n.id)}" aria-label="${waiting?'再通知を取り消す':'10分後に再通知'}">${A.icon(waiting?'refresh':'clock')}${waiting?new Date(n.snoozedUntil).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'10分'}</button>${noticeButton('noticeExpand',expanded?'minus':'plus',expanded?'折りたたむ':'全文を表示',n.id,`aria-expanded="${expanded}"`)}${noticeButton('dismissNotice','trash','削除',n.id)}</div>`}</article>`;
   };
-  A.renderLockNotices=()=>{A.$('.lock-notifications').innerHTML=noticeList.slice(0,2).map(noticeCard).join('')||'<p class="lock-clear">新しい通知はありません</p>';};
-  A.notifications=()=>{A.overlay(`${A.overlayTitle('通知センター')}<div class="notification-date">${new Date().toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'})}<span>${A.settings.focus?'集中モード ON':'ローカル通知'}</span></div>${noticeList.length?`<div class="notification-stack">${noticeList.map(noticeCard).join('')}</div><button class="switcher-clear" data-action="clearNotifications">すべての通知をクリア</button>`:'<div class="notification-empty">'+A.icon('check')+'<h3>すべて確認しました</h3><p>新しい通知はありません。</p></div>'}<p class="control-footer">デモ返信など、aura内で届いたお知らせです。</p>`,'notifications-overlay');};
-  A.actions.openNotice=el=>{const n=noticeList.find(n=>n.id===el.dataset.id);if(!n)return;A.$('#notification-banner')?.remove();noticeList=noticeList.filter(item=>item.id!==n.id);A.save('notifications',noticeList);A.renderLockNotices();A.open(n.app,n.arg);};
-  A.actions.dismissNotice=el=>{noticeList=noticeList.filter(n=>n.id!==el.dataset.id);A.save('notifications',noticeList);A.renderLockNotices();A.$('#notification-banner')?.remove();if(A.$('#overlay').classList.contains('notifications-overlay')&&!A.$('#overlay').hidden)A.notifications();};
-  A.actions.clearNotifications=()=>{noticeList=[];A.save('notifications',noticeList);A.$('#notification-banner')?.remove();A.renderLockNotices();A.notifications();};
+  const refreshNotices=()=>{A.renderLockNotices();if(noticeVisible())renderNoticeFeed();};
+  const commitNotices=next=>{const bounded=next.slice(0,noticeLimit);if(!A.save('notifications',bounded))return false;noticeList=bounded;refreshNotices();return true;};
+  const removeBanner=()=>{clearTimeout(bannerTimer);A.$('#notification-banner')?.remove();};
+  const dropBanner=id=>{bannerQueue=bannerQueue.filter(x=>x!==id);if(A.$('#notification-banner')?.dataset.id===id)removeBanner();};
+  A.noticeMuted=app=>noticePrefs.muted.includes(app);
+  function presentBanner(){
+    if(A.$('#notification-banner')||A.locked||A.settings.focus||!noticePrefs.banners||document.hidden||noticeVisible())return;
+    let notice;
+    while(bannerQueue.length&&!notice){const id=bannerQueue.shift();notice=noticeList.find(n=>n.id===id&&noticeActive(n)&&!n.read&&!A.noticeMuted(n.app));}
+    if(!notice)return;
+    const banner=document.createElement('div');banner.id='notification-banner';banner.dataset.id=notice.id;banner.setAttribute('role','status');banner.innerHTML=noticeCard(notice,true)+'<span class="notice-lifetime" aria-hidden="true"></span>';A.$('#phone-screen').appendChild(banner);
+    const expire=()=>{clearTimeout(bannerTimer);bannerTimer=setTimeout(()=>{banner.classList.add('notice-exit');setTimeout(()=>{banner.remove();presentBanner();},240);},6500);};
+    const pause=()=>{clearTimeout(bannerTimer);banner.classList.add('is-paused');};
+    const resume=()=>{if(!banner.isConnected||banner.matches(':hover')||banner.contains(document.activeElement))return;banner.classList.remove('is-paused');const line=banner.querySelector('.notice-lifetime');line.style.animation='none';void line.offsetWidth;line.style.animation='';expire();};
+    banner.addEventListener('pointerenter',pause);banner.addEventListener('pointerleave',resume);banner.addEventListener('focusin',pause);banner.addEventListener('focusout',()=>setTimeout(resume,0));expire();
+  }
+  A.notify=({app,title,body='',arg,demo=false,key=''})=>{
+    if(!A.apps[app]||A.noticeMuted(app))return false;
+    if(key&&noticeList.some(n=>n.key===key))return true;
+    const n={id:A.id(),app,title:String(title||A.apps[app].name),body:String(body),arg,demo:demo||app==='messages',key,time:Date.now(),read:false,pinned:false,snoozedUntil:0};
+    if(!commitNotices([n,...noticeList]))return false;
+    // Focus mode keeps history without queuing a burst for later.
+    if(!A.settings.focus&&noticePrefs.banners&&!A.locked&&!noticeVisible()){bannerQueue.push(n.id);bannerQueue=bannerQueue.slice(-8);presentBanner();}
+    return true;
+  };
+  A.renderLockNotices=()=>{
+    const active=noticeList.filter(noticeActive),unread=active.filter(n=>!n.read).length;
+    A.$('.lock-notifications').innerHTML=active.filter(n=>!n.read).slice(0,2).map(n=>noticeCard(n,true)).join('')||'<p class="lock-clear">通知なし</p>';
+    const status=A.$('#status-time');status.dataset.unread=String(Math.min(99,unread));status.classList.toggle('has-notices',unread>0);status.setAttribute('aria-label',`通知を開く・未読${unread}件`);
+  };
+  function renderNoticeFeed(){
+    const root=A.$('#notice-feed');if(!root)return;
+    const focus=document.activeElement,identity=focus?.dataset,position=A.$('#overlay').scrollTop;
+    const active=noticeList.filter(noticeActive),unread=active.filter(n=>!n.read).length;
+    A.$('#notice-count').textContent=unread;A.$('#notice-summary').textContent=unread?'未読':'すべて確認済み';
+    A.$('#notice-focus').setAttribute('aria-pressed',String(!!A.settings.focus));
+    A.$('#notice-focus').innerHTML=A.icon('moon')+(A.settings.focus?'集中中':'集中');
+    A.$('#notice-tabs').innerHTML=[['all','すべて',active.length],['unread','未読',unread],['pinned','ピン',active.filter(n=>n.pinned).length],['later','あとで',noticeList.filter(n=>!noticeActive(n)).length]].map(([id,label,count])=>`<button data-action="noticeFilter" data-id="${id}" aria-pressed="${noticeFilter===id}">${label}<span>${count}</span></button>`).join('');
+    const apps=[...new Set(noticeList.map(n=>n.app))];if(noticeApp!=='all'&&!apps.includes(noticeApp))noticeApp='all';
+    A.$('#notice-app-filter').innerHTML=`<option value="all">全アプリ</option>`+apps.map(id=>`<option value="${id}" ${noticeApp===id?'selected':''}>${noticeEsc(A.apps[id].name)}</option>`).join('');
+    const q=noticeQuery.normalize('NFKC').toLowerCase();
+    const list=noticeList.filter(n=>(noticeFilter==='later'?!noticeActive(n):noticeActive(n)&&(noticeFilter==='all'||noticeFilter==='unread'&&!n.read||noticeFilter==='pinned'&&n.pinned))&&(noticeApp==='all'||n.app===noticeApp)&&(!q||(n.title+' '+n.body+' '+A.apps[n.app].name).normalize('NFKC').toLowerCase().includes(q))).sort((a,b)=>Number(b.pinned)-Number(a.pinned)||b.time-a.time);
+    const groups=new Map();for(const n of list){const label=n.pinned&&noticeActive(n)?'ピン留め':new Date(n.time).toLocaleDateString('ja-JP')===new Date().toLocaleDateString('ja-JP')?'今日':'以前';if(!groups.has(label))groups.set(label,[]);groups.get(label).push(n);}
+    root.classList.toggle('notice-compact',noticePrefs.compact);
+    root.innerHTML=list.length?[...groups].map(([label,items])=>`<section class="notice-group"><h3>${label}<span>${items.length}</span></h3><div class="notification-stack">${items.map(n=>noticeCard(n)).join('')}</div></section>`).join(''):`<div class="notification-empty"><div class="notice-empty-art">${noticeBell()}</div><h3>${q?'一致なし':noticeFilter==='later'?'あとで通知なし':noticeFilter==='pinned'?'ピン留めなし':'すっきり'}</h3><p>${q?'検索語を変更':noticeFilter==='all'?'新着はここに':'通知なし'}</p></div>`;
+    A.$('#notice-read-all').disabled=!active.some(n=>!n.read);A.$('#notice-clear-read').disabled=!noticeList.some(n=>n.read&&!n.pinned&&!n.snoozedUntil);
+    if(identity?.action){const target=Array.from(A.$('#overlay').querySelectorAll('[data-action]')).find(el=>el.dataset.action===identity.action&&el.dataset.id===identity.id);if(target)target.focus({preventScroll:true});else if(!focus?.isConnected)A.$('#notice-app-filter').focus({preventScroll:true});}
+    A.$('#overlay').scrollTop=position;
+  }
+  A.notifications=()=>{
+    removeBanner();bannerQueue=[];
+    A.overlay(`${A.overlayTitle('通知')}<div class="notice-hero"><div class="notice-orb">${noticeBell()}</div><div><strong id="notice-count">0</strong><span id="notice-summary">未読</span></div><button id="notice-focus" data-action="noticeFocus"></button></div><div class="notice-tabs" id="notice-tabs" aria-label="通知の絞り込み"></div><div class="notice-tools"><label>${A.icon('search')}<input id="notice-query" type="search" placeholder="検索" aria-label="通知を検索" maxlength="200" value="${noticeEsc(noticeQuery)}"></label><select id="notice-app-filter" aria-label="アプリで絞り込み"></select>${noticeButton('noticeSettings','settings','通知設定')}</div><div id="notice-feed"></div><div class="notice-bulk"><button id="notice-read-all" data-action="noticeReadAll">${A.icon('check')}すべて既読</button><button id="notice-clear-read" data-action="noticeClearRead">${A.icon('trash')}既読を削除</button></div><p class="notice-footnote">端末内 · 最大100件</p>`,'notifications-overlay');
+    renderNoticeFeed();A.$('#notice-query').oninput=e=>{noticeQuery=e.target.value;renderNoticeFeed();};A.$('#notice-app-filter').onchange=e=>{noticeApp=e.target.value;renderNoticeFeed();};
+  };
+  const changeNotice=(id,fn)=>commitNotices(noticeList.map(n=>n.id===id?fn(n):n));
+  A.actions.openNotice=el=>{const n=noticeList.find(n=>n.id===el.dataset.id);if(!n)return;if(!changeNotice(n.id,n=>({...n,read:true})))return;dropBanner(n.id);A.open(n.app,n.arg);if(n.app==='calendar')A.actions.calendarToday?.();};
+  A.actions.noticeRead=el=>{if(changeNotice(el.dataset.id,n=>({...n,read:!n.read})))dropBanner(el.dataset.id);};
+  A.actions.noticePin=el=>changeNotice(el.dataset.id,n=>({...n,pinned:!n.pinned}));
+  A.actions.noticeExpand=el=>{const id=el.dataset.id;noticeExpanded.has(id)?noticeExpanded.delete(id):noticeExpanded.add(id);renderNoticeFeed();};
+  A.actions.noticeSnooze=el=>{const n=noticeList.find(n=>n.id===el.dataset.id);if(!n)return;if(changeNotice(n.id,n=>({...n,snoozedUntil:n.snoozedUntil?0:Date.now()+600000,read:false}))){dropBanner(n.id);A.toast(n.snoozedUntil?'再通知を解除':'10分後に通知');}};
+  function deleteNotices(predicate){
+    const removed=noticeList.filter(predicate);if(!removed.length)return;
+    if(!commitNotices(noticeList.filter(n=>!predicate(n))))return;removed.forEach(n=>dropBanner(n.id));
+    A.toast(`${removed.length}件削除`,{label:'戻す',onAction:()=>{const ids=new Set(noticeList.map(n=>n.id));if(commitNotices([...removed.filter(n=>!ids.has(n.id)),...noticeList].sort((a,b)=>b.time-a.time)))A.toast('復元済み');}});
+  }
+  A.actions.dismissNotice=el=>deleteNotices(n=>n.id===el.dataset.id);
+  A.actions.noticeReadAll=()=>{if(commitNotices(noticeList.map(n=>noticeActive(n)?{...n,read:true}:n))){removeBanner();bannerQueue=[];}};
+  A.actions.noticeClearRead=()=>deleteNotices(n=>n.read&&!n.pinned&&!n.snoozedUntil);
+  A.actions.clearNotifications=()=>A.confirm('通知を全削除？','ピン・再通知も削除',()=>{deleteNotices(()=>true);A.notifications();});
+  A.actions.noticeFilter=el=>{noticeFilter=el.dataset.id;renderNoticeFeed();};
+  A.actions.noticeFocus=()=>{A.settings.focus=!A.settings.focus;A.applySettings();if(A.settings.focus){removeBanner();bannerQueue=[];}renderNoticeFeed();};
+  const saveNoticePrefs=next=>{if(!A.save('notificationPrefs',next))return false;noticePrefs=next;return true;};
+  A.actions.noticeSettings=()=>{
+    const toggle=(key,label,detail)=>`<button class="notice-setting" data-action="noticePreference" data-id="${key}" aria-pressed="${noticePrefs[key]}"><span><strong>${label}</strong><small>${detail}</small></span><i class="preview-switch ${noticePrefs[key]?'on':''}"></i></button>`;
+    A.overlay(`${A.overlayTitle('通知設定')}<button class="notice-back" data-action="showNotifications">‹ 通知</button><div class="notice-settings-card">${toggle('banners','バナー','画面上部に表示')}${toggle('compact','コンパクト','本文は1行。＋で全文')}${toggle('scheduled','予定・期限','予定の10分前 / 当日期限')}</div><p class="notice-footnote">ページ終了・スリープ中は通知保証なし</p><h3 class="notice-settings-label">アプリ別</h3><div class="notice-settings-card">${['clock','focus','calendar','reminders','messages'].map(app=>`<button class="notice-setting" data-action="noticeMute" data-id="${app}" aria-pressed="${!A.noticeMuted(app)}">${smallIcon(app)}<span><strong>${noticeEsc(A.apps[app].name)}${app==='messages'?' · デモ':''}</strong></span><i class="preview-switch ${!A.noticeMuted(app)?'on':''}"></i></button>`).join('')}</div><button class="notice-setting" data-action="noticePrivacy" aria-pressed="${A.settings.lockPreview!==false}"><span><strong>ロック画面の本文</strong><small>表示設定のみ・端末保護なし</small></span><i class="preview-switch ${A.settings.lockPreview!==false?'on':''}"></i></button><button class="notice-danger" data-action="clearNotifications">全削除</button>`,'notice-settings-overlay');
+  };
+  A.actions.showNotifications=()=>A.notifications();
+  A.actions.noticePreference=el=>{const key=el.dataset.id;if(!['banners','compact','scheduled'].includes(key))return;if(saveNoticePrefs({...noticePrefs,[key]:!noticePrefs[key]})){if(!noticePrefs.banners){removeBanner();bannerQueue=[];}noticeSeenMinute=-1;A.actions.noticeSettings();}};
+  A.actions.noticeMute=el=>{const app=el.dataset.id;if(!A.apps[app])return;if(saveNoticePrefs({...noticePrefs,muted:A.noticeMuted(app)?noticePrefs.muted.filter(x=>x!==app):[...noticePrefs.muted,app]})){if(A.noticeMuted(app)){noticeList.filter(n=>n.app===app).forEach(n=>dropBanner(n.id));}A.actions.noticeSettings();}};
+  A.actions.noticePrivacy=()=>{A.settings.lockPreview=A.settings.lockPreview===false;A.applySettings();A.renderLockNotices();A.actions.noticeSettings();};
+  // Horizontal dismissal never captures vertical scrolling; buttons remain a full alternative.
+  let noticeSwipe=null,noticeSwallowUntil=0;
+  document.addEventListener('pointerdown',e=>{const card=e.target.closest('.notice-card');if(!card||e.button!==0)return;noticeSwipe={card,x:e.clientX,y:e.clientY};},{passive:true});
+  document.addEventListener('pointerup',e=>{if(!noticeSwipe)return;const {card,x,y}=noticeSwipe;noticeSwipe=null;const dx=e.clientX-x,dy=e.clientY-y;if(dx<-75&&Math.abs(dx)>Math.abs(dy)*1.8&&card.isConnected){noticeSwallowUntil=Date.now()+350;card.classList.add('notice-exit');setTimeout(()=>{A.actions.dismissNotice({dataset:{id:card.dataset.noticeId}});if(card.isConnected)card.classList.remove('notice-exit');},220);}},{passive:true});
+  document.addEventListener('pointercancel',()=>noticeSwipe=null);
+  document.addEventListener('click',e=>{if(Date.now()<noticeSwallowUntil&&e.target.closest('.notice-card')){e.preventDefault();e.stopImmediatePropagation();}},true);
+  // Snoozes survive reload; one wake-up batch, no OS/background execution claims.
+  const scheduledHistory=A.load('noticeScheduleHistory',[]);
+  let scheduleHistory=Array.isArray(scheduledHistory)?scheduledHistory.slice(-200):[];
+  function noticeTick(){
+    const now=Date.now(),due=noticeList.filter(n=>n.snoozedUntil&&n.snoozedUntil<=now);
+    if(due.length&&commitNotices(noticeList.map(n=>due.some(d=>d.id===n.id)?{...n,snoozedUntil:0,time:now,read:false}:n))){if(!A.settings.focus)bannerQueue.push(...due.filter(n=>!A.noticeMuted(n.app)).map(n=>n.id));bannerQueue=bannerQueue.slice(-8);}
+    if(A.settings.focus||!noticePrefs.banners){removeBanner();bannerQueue=[];}else presentBanner();
+    const minute=Math.floor(now/60000);if(minute===noticeSeenMinute)return;noticeSeenMinute=minute;
+    A.$$('[data-notice-time]').forEach(el=>el.textContent=relativeTime(+el.dataset.noticeTime));
+    if(!noticePrefs.scheduled)return;
+    const date=new Date(),day=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+    const deliver=(key,data)=>{if(scheduleHistory.includes(key))return;if(A.notify({...data,key})){scheduleHistory=[...scheduleHistory,key].slice(-200);A.save('noticeScheduleHistory',scheduleHistory);}};
+    (A.allEvents?.()||[]).filter(e=>e.date===day).forEach(e=>{const delta=new Date(e.date+'T'+e.time).getTime()-now;if(delta>=0&&delta<=600000)deliver(`event:${e.id}:${e.date}:${e.time}`,{app:'calendar',title:e.title,body:`${e.time}${e.place?' · '+e.place:''}`});});
+    const tasks=(A.searchableReminders?.()||[]).filter(r=>!r.done&&r.due===day);if(tasks.length)deliver('tasks:'+day,{app:'reminders',title:`今日の期限 ${tasks.length}件`,body:tasks.slice(0,3).map(r=>r.text).join(' · ')});
+  }
+  setInterval(noticeTick,1000);
+  window.addEventListener('storage',e=>{if(e.key==='aura.notifications'){noticeList=normalizeNotices(A.load('notifications',[]));removeBanner();bannerQueue=[];refreshNotices();}if(e.key==='aura.notificationPrefs'){const p=A.load('notificationPrefs',{})||{};noticePrefs={...noticePrefs,...p,muted:Array.isArray(p.muted)?p.muted:[]};refreshNotices();}});
   A.$('.lock-top .lock-icon').innerHTML=A.icon('lock');
   A.$('#lock-flashlight').innerHTML=A.icon('flashlight');
   A.$('.lock-shortcuts [data-app="camera"]').innerHTML=A.icon('camera');
@@ -703,7 +858,7 @@
   A.overlay=(html,extra='')=>{if(A.$('#overlay').hidden)overlayReturnFocus=document.activeElement;baseOverlay(html,extra);const overlay=A.$('#overlay');overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label',overlay.querySelector('h2,h3')?.textContent||'メニュー');(overlay.querySelector('input:not([type=range]),.close-button,button'))?.focus({preventScroll:true});};
   A.closeOverlay=()=>{const wasOpen=!A.$('#overlay').hidden;baseCloseOverlay();if(wasOpen&&overlayReturnFocus?.isConnected)overlayReturnFocus.focus({preventScroll:true});};
   A.actions.closeOverlay=A.closeOverlay;
-  A.$('#overlay').addEventListener('keydown',e=>{if(e.key!=='Tab')return;const items=A.$$('button:not(:disabled),input,textarea,select,a[href]',e.currentTarget).filter(el=>el.getClientRects().length);const first=items[0],last=items.at(-1);if(!first)return;if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'||A.$('#overlay').hidden||!e.target.closest('#overlay,#toast'))return;const items=[...A.$$('button:not(:disabled),input,textarea,select,a[href]',A.$('#overlay')),...A.$$('#toast.visible button')].filter(el=>el.getClientRects().length);const first=items[0],last=items.at(-1);if(!first)return;if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}});
   A.$('#home-search').onclick=A.spotlight;A.$('#status-time').onclick=A.notifications;
   A.renderLockNotices();
   A.renderHome();A.applySettings();A.updateClock();setInterval(A.updateClock,1000);

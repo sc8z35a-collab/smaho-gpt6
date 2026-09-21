@@ -27,3 +27,245 @@
 .fr-count-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid var(--ev-border);font-size:12px}.fr-count-row>span{min-width:0;overflow-wrap:anywhere}.fr-count-row small{display:block;color:var(--ev-muted);font-size:10px;margin-top:6px}.fr-count-row>strong,.fr-count-row>button{flex-shrink:0}
 .fr-book,.fr-habit{padding:16px;margin:15px 0}.fr-book>.ep-summary{padding:0;margin:0 0 13px;border:0;border-radius:0;box-shadow:none;background:transparent}.fr-book>.ep-button{width:100%;text-align:left;font-size:11px}.fr-habit>strong{font-size:14px;overflow-wrap:anywhere}.fr-habit .ep-actions{margin-bottom:0}
 .fr-date-range,.fr-filters{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin:14px 0}.fr-date-range .form-label,.fr-filters .form-label{margin:0}.fr-date-range .text-input,.fr-filters .text-input{margin:0;min-width:0;width:100%}.reflections .ev-journal-entry small{font-size:10px;color:var(--ev-muted);overflow-wrap:anywhere}
+
+/* In-app visual atelier: semantic color, original vector art, tactile materials.
+   Loaded last so existing application layout and behavior stay intact. */
+#app-screen{--visual-accent:#76608f;--visual-soft:#ede6f4;--visual-tint:#f6f2f8;--visual-surface:#fffdfa;--visual-line:#75648320;--visual-shadow:0 8px 24px -12px #3b294630,0 1px 2px #3b29460a;--visual-muted:#756b80}
+#app-screen[data-visual-app=today]{--visual-accent:#556f69;--visual-soft:#e4ece7;--visual-tint:#f1f5f1}
+#app-screen[data-visual-app=habits],#app-screen[data-visual-app=health]{--visual-accent:#46725c;--visual-soft:#e1ede1;--visual-tint:#f1f6ef}
+#app-screen[data-visual-app=expenses]{--visual-accent:#326e64;--visual-soft:#deeee7;--visual-tint:#eef6f1}
+#app-screen[data-visual-app=shopping],#app-screen[data-visual-app=reading],#app-screen[data-visual-app=notes]{--visual-accent:#916840;--visual-soft:#f1e6d6;--visual-tint:#faf6ee}
+#app-screen[data-visual-app=journal],#app-screen[data-visual-app=sketch]{--visual-accent:#94627e;--visual-soft:#f0e2ea;--visual-tint:#faf3f6}
+#app-screen[data-visual-app=calendar],#app-screen[data-visual-app=reminders]{--visual-accent:#ad615e;--visual-soft:#f3e5df;--visual-tint:#fbf5f0}
+#app-screen[data-visual-app=contacts],#app-screen[data-visual-app=converter],#app-screen[data-visual-app=files],#app-screen[data-visual-app=mail],#app-screen[data-visual-app=safari]{--visual-accent:#4f7594;--visual-soft:#e2edf5;--visual-tint:#f2f6fa}
+#app-screen:not(.weather-app):not(.music-app):not(.maps-app):not(.calc-app):not(.camera-app){background:radial-gradient(ellipse at 100% 0,var(--visual-soft),transparent 48%),var(--visual-tint)}
+#app-screen .app-nav{height:54px;min-height:54px;padding-inline:20px;background:transparent;border-bottom:1px solid var(--visual-line)}
+#app-screen .app-nav h2{font-size:15px;letter-spacing:.04em;font-weight:600}
+#app-screen .app-nav>.nav-action:first-child{justify-content:center;border-radius:13px;min-width:36px;background:#8f819410}
+#app-screen .nav-action{color:var(--visual-accent)}
+#app-screen .app-content{padding-top:18px}
+#app-screen .app-title{font-size:30px;letter-spacing:-1.1px;margin-top:12px;margin-bottom:18px;font-weight:700}
+#app-screen .app-subtitle{line-height:1.9;color:var(--visual-muted)}
+#app-screen .section-label{letter-spacing:.09em;color:var(--visual-muted);margin-top:27px}
+#app-screen .group-card,#app-screen .connection-card,#app-screen .health-card,#app-screen .file-tile,#app-screen .storage-card,#app-screen .event-card{background:var(--visual-surface);border:1px solid var(--visual-line);border-radius:21px;box-shadow:var(--visual-shadow)}
+#app-screen .row-icon{width:34px;height:34px;border-radius:11px;box-shadow:inset 0 1px 1px #fff8,0 3px 7px #38364d12}
+#app-screen .list-row{min-height:61px;padding:15px}
+#app-screen .list-row+.list-row:before{background:var(--visual-line);left:16px;right:16px}
+#app-screen .row-main strong{font-size:14px;font-weight:500}
+#app-screen .row-main small{color:var(--visual-muted);line-height:1.7}
+#app-screen .search-field{min-height:46px;border:1px solid var(--visual-line);background:var(--visual-surface);border-radius:14px;box-shadow:0 2px 4px #39244203}
+#app-screen .search-field svg{color:var(--visual-accent)}
+#app-screen .text-input{border-radius:13px;border-color:var(--visual-line);background:var(--visual-surface);box-shadow:inset 0 2px 3px #443e4b04;min-height:44px}
+#app-screen .text-input:focus{outline:2px solid var(--visual-accent);outline-offset:2px}
+#app-screen .primary-button{background:var(--visual-accent);color:white;border:1px solid #ffffff25;border-radius:14px;box-shadow:0 5px 12px -6px var(--visual-accent),inset 0 1px 0 #ffffff25}
+#app-screen .secondary-button{background:var(--visual-soft);color:var(--visual-accent);border:1px solid var(--visual-line);border-radius:14px}
+#app-screen .app-tabs{background:var(--visual-surface);border-top:1px solid var(--visual-line)}
+#app-screen .tab-button.active{color:var(--visual-accent)}
+#app-screen .connection-link{border-radius:12px;min-height:36px}
+#app-screen .connection-badge{font-size:9px;letter-spacing:1.6px;color:var(--visual-accent);background:var(--visual-soft);border:1px solid var(--visual-line);padding:7px 10px}
+
+/* Shared everyday surfaces and data hierarchy. */
+#app-screen .everyday{--ev-accent:var(--visual-accent);--ev-muted:var(--visual-muted);--ev-surface:var(--visual-surface);--ev-border:var(--visual-line)}
+#app-screen .ev-section h3,#app-screen .ep-section>h3{font-size:15px;letter-spacing:.03em;font-weight:600}
+#app-screen .ev-card,#app-screen .ep-details,#app-screen .ep-summary,#app-screen .fr-entry{box-shadow:var(--visual-shadow);border-radius:21px}
+#app-screen .ev-icon-button{color:var(--visual-accent);background:var(--visual-soft);border:1px solid var(--visual-line);min-width:36px;min-height:36px;border-radius:12px}
+#app-screen .ev-icon-button svg{width:18px;height:18px}
+#app-screen .ev-row .ev-icon-button{background:transparent;border-color:transparent}
+#app-screen .ev-text-button{color:var(--visual-accent)}
+#app-screen .ev-chips{gap:7px}
+#app-screen .ev-chips button{background:transparent;border:1px solid var(--visual-line);border-radius:12px;color:var(--visual-muted);font-size:12px;padding:10px 14px;min-height:40px}
+#app-screen .ev-chips button.selected,#app-screen .ev-chips button[aria-pressed=true]{background:var(--visual-accent);border-color:transparent;color:#fff;box-shadow:0 4px 10px -5px var(--visual-accent)}
+#app-screen .ev-progress{height:7px;background:#768e831c;border:1px solid #73877b0c}
+#app-screen .ev-progress i{background:linear-gradient(90deg,var(--visual-accent),#b1c9a7);box-shadow:inset 0 1px 0 #fff4}
+#app-screen .ev-empty{grid-column:1/-1;padding:28px 18px;line-height:2;font-size:12px;color:var(--visual-muted)}
+#app-screen .ev-empty:before{content:'';display:block;width:40px;height:40px;margin:0 auto 14px;border-radius:14px;background:linear-gradient(135deg,#ffffff80,transparent),var(--visual-soft);border:1px solid var(--visual-line);box-shadow:0 5px 10px -6px #40374930,inset 0 1px 0 #fff9;transform:rotate(-8deg)}
+#app-screen .ep-details summary{padding:17px 18px;color:var(--visual-accent);font-size:12px}
+#app-screen .fr-entry{background:transparent;border-style:dashed;box-shadow:none;font-size:11px;min-height:42px;padding:10px 14px;margin-bottom:18px}
+#app-screen .ep-intention{background:linear-gradient(115deg,var(--visual-soft),var(--visual-surface));border-color:var(--visual-line);box-shadow:var(--visual-shadow);border-left:3px solid var(--visual-accent)}
+#app-screen .ep-intention strong{font-weight:500;font-size:14px}
+#app-screen .ev-metrics{gap:10px}
+#app-screen .ev-metrics button{padding:20px 6px 16px;border-radius:19px;box-shadow:var(--visual-shadow);position:relative;overflow:hidden}
+#app-screen .ev-metrics button:before{content:'';display:block;width:18px;height:3px;background:var(--visual-accent);border-radius:3px;margin:0 auto 12px;opacity:.7}
+#app-screen .ev-metrics strong{font-size:31px;font-weight:500;letter-spacing:-1px;color:var(--visual-accent)}
+#app-screen .ev-metrics strong small{letter-spacing:0;font-size:11px}
+#app-screen .ev-focus-link{background:linear-gradient(120deg,#546d66,#789082);color:#fff;border:1px solid #fff3;box-shadow:0 8px 20px -12px #35584980;border-radius:19px;padding:18px}
+#app-screen .ev-focus-link>svg:first-child{width:34px;height:34px;padding:6px;border-radius:11px;background:#ffffff18}
+#app-screen .ev-quick-grid button{box-shadow:var(--visual-shadow);font-size:12px;padding:17px 14px}
+#app-screen .ev-quick-grid svg{color:var(--visual-accent)}
+
+/* Illustrations are decoration only; real figures remain selectable and readable. */
+#app-screen .scene-art{width:100%;height:auto;pointer-events:none;flex-shrink:0;overflow:visible;animation:scene-arrive .65s ease-out both}
+#app-screen .illustrated-hero{position:relative;isolation:isolate;overflow:hidden;min-height:192px;padding:26px 22px;border:1px solid #fff9;border-radius:27px;box-shadow:0 12px 30px -20px #40324755,inset 0 1px 0 #fff9;margin:4px 0 24px;background:linear-gradient(125deg,#e3ddec,#f3eef4);color:#514660;display:grid;grid-template-columns:minmax(0,1fr) 105px;align-content:center;gap:0 8px}
+#app-screen .illustrated-hero:before{content:'';position:absolute;width:200px;height:200px;border:1px solid #ffffff50;border-radius:50%;top:-68px;right:-40px;box-shadow:0 0 0 22px #ffffff16,0 0 0 44px #ffffff10;pointer-events:none;z-index:-1}
+#app-screen .illustrated-hero>span,#app-screen .illustrated-hero>strong,#app-screen .illustrated-hero>h1,#app-screen .illustrated-hero>.ev-progress{grid-column:1;position:relative;z-index:1}
+#app-screen .illustrated-hero>span{font-size:11px;letter-spacing:.05em;line-height:1.8;color:inherit}
+#app-screen .illustrated-hero>strong{font-size:42px;line-height:1.25;letter-spacing:-1.5px;font-weight:500;margin:13px 0}
+#app-screen .illustrated-hero>strong small{font-size:15px;letter-spacing:0}
+#app-screen .illustrated-hero>h1{font-size:31px;line-height:1.4;margin:12px 0 0;letter-spacing:-1px}
+#app-screen .illustrated-hero>.scene-art{position:absolute;width:176px;height:132px;right:-12px;top:32px;z-index:0;filter:drop-shadow(0 10px 8px #4f3c5710)}
+#app-screen .illustrated-hero>.ev-hero-foot{grid-column:1/-1;position:relative;z-index:1;margin-top:12px;padding-top:13px;border-top:1px solid #37605020;font-size:10px}
+#app-screen .ev-today .illustrated-hero{background:linear-gradient(115deg,#e4ece5,#f5efdf);color:#405e56;min-height:164px}
+#app-screen .ev-today .illustrated-hero>.scene-art{top:16px}
+#app-screen .ev-habits .illustrated-hero{background:linear-gradient(120deg,#dfebd7,#f0f3e7);color:#405f49}
+#app-screen .ev-expenses .illustrated-hero{background:linear-gradient(120deg,#cee3dc,#e8f0e5);color:#285d54}
+#app-screen .ev-expenses .illustrated-hero>strong{font-size:34px;overflow-wrap:anywhere}
+#app-screen .ev-expenses .illustrated-hero>.scene-art{width:146px;right:-7px;top:15px}
+#app-screen .ev-shopping .illustrated-hero{background:linear-gradient(120deg,#efddc4,#faf0df);color:#795431}
+#app-screen .ev-reading .illustrated-hero{background:linear-gradient(120deg,#e4d7c5,#f5ecdd);color:#775b3e}
+#app-screen .ev-journal .illustrated-hero{background:linear-gradient(120deg,#efdee7,#f8edf0);color:#83586f;min-height:172px}
+#app-screen .ev-journal .illustrated-hero>.scene-art{top:20px}
+
+/* Focus instrument: layered bezel, minute marks, recessed face, live progress. */
+#app-screen .ev-focus-ring{position:relative;width:min(272px,86%);padding:7px;margin:40px auto;border:1px solid #fff8;background:conic-gradient(from 0deg,#9c80ba var(--progress),#b5a4c426 0);box-shadow:0 22px 45px -20px #69518155,0 0 0 8px #af9ac00a,0 0 0 9px #a392b01a,inset 0 1px 2px #fff9}
+#app-screen .ev-focus-ring:before{content:'';position:absolute;inset:15px;border-radius:50%;background:repeating-conic-gradient(from -1deg,#88719f55 0deg 1deg,transparent 1deg 6deg);mask:radial-gradient(transparent 65%,#000 66%);pointer-events:none}
+#app-screen .ev-focus-ring:after{content:'';position:absolute;width:7px;height:7px;border-radius:50%;background:#b094c7;left:calc(50% - 3.5px);top:-4px;border:2px solid #f7efff;box-shadow:0 0 0 4px #bfa7d12a;pointer-events:none}
+#app-screen .ev-focus-ring>div{background:radial-gradient(ellipse at 35% 25%,#fffefd,#ece6f2);border:1px solid #fff8;box-shadow:inset 0 4px 14px #7252890c}
+#app-screen .ev-focus-ring small{font-size:9px;letter-spacing:4px;color:#887297}
+#app-screen .ev-focus-ring strong{font-size:56px;font-weight:500;letter-spacing:-2.5px;color:#514361;margin:13px 0}
+#app-screen .ev-focus-ring span{font-size:11px}
+#app-screen .ev-week-chart{background:repeating-linear-gradient(0deg,transparent 0 34px,var(--visual-line) 34px 35px),var(--visual-surface);padding-top:23px}
+#app-screen .ev-week-chart i{background:linear-gradient(0deg,#8d70a9,#cbb6de);box-shadow:inset 1px 0 0 #fff4,0 3px 7px #6e4e8620;border-radius:6px 6px 3px 3px;max-width:22px}
+#app-screen .ev-heatmap{gap:7px;border:1px solid var(--visual-line);box-shadow:var(--visual-shadow)}
+#app-screen .ev-heatmap button.done,#app-screen .ev-week .done i{background:linear-gradient(145deg,#bad7ad,#7aa685);color:#234e32;box-shadow:inset 0 1px 0 #fff6,0 3px 6px #31553415}
+#app-screen .ev-breakdown b{background:linear-gradient(90deg,#4b8a7c,#a8cdb9)}
+#app-screen .ev-breakdown b.over{background:linear-gradient(90deg,#ae6075,#d69ba4)}
+
+/* Personal objects: stitched journals, cloth-bound books and paper notes. */
+#app-screen .ev-book{padding:21px 17px;gap:20px}
+#app-screen .ev-book-cover{position:relative;isolation:isolate;background:linear-gradient(90deg,#685039 0,#b99a78 7%,#a4896c 13%,#c1a585 100%);border-left:0;border-radius:3px 9px 9px 3px;box-shadow:5px 7px 10px -5px #55443570,inset -3px 0 0 #fff3;transform:rotate(-5deg)}
+#app-screen .ev-book-cover.tone-1{background:linear-gradient(90deg,#365d55,#7d9f91 7%,#638776 13%,#94b4a0)}
+#app-screen .ev-book-cover.tone-2{background:linear-gradient(90deg,#594c6e,#a797b9 7%,#897499 13%,#b2a0c3)}
+#app-screen .ev-book-cover:before{content:'';position:absolute;inset:8px 8px 10px 11px;border:1px solid #f9e1b765;border-radius:1px 4px 4px 1px;z-index:-1}
+#app-screen .ev-book-cover:after{content:'';position:absolute;height:4px;left:4px;right:3px;bottom:3px;border-radius:0 0 3px 0;background:repeating-linear-gradient(0deg,#efe7d5 0 1px,#bfb49d 1px 2px)}
+#app-screen .ev-book-cover svg{color:#f3e8ca;width:26px;height:26px;filter:drop-shadow(0 1px 1px #3e30293a)}
+#app-screen .ev-journal-entry{border-left:3px solid #c09caf;background:linear-gradient(90deg,#b991ad06,transparent 20%),var(--visual-surface);padding:22px}
+#app-screen .ev-journal-entry h3{font-weight:600;font-size:17px}
+#app-screen .ev-mood-strip{border:1px solid var(--visual-line);box-shadow:var(--visual-shadow)}
+#app-screen .ev-mood-strip button>span{width:31px;height:31px;display:grid;place-items:center;border-radius:50%;background:var(--visual-soft);font-size:18px;color:var(--visual-accent)}
+#app-screen .ev-avatar{background:linear-gradient(145deg,#afc5d8,#688aa9);border:2px solid #fff8;box-shadow:0 4px 9px #3a5a7e22;font-weight:500}
+#app-screen .ev-contact-hero{padding:25px 12px;border:1px solid var(--visual-line);background:linear-gradient(130deg,var(--visual-soft),var(--visual-surface));border-radius:25px;margin-top:0}
+#app-screen .ev-contact-hero .ev-avatar{box-shadow:0 0 0 7px #8aaac110,0 12px 18px -8px #30496150}
+#app-screen .ev-converter{background:var(--visual-surface);box-shadow:var(--visual-shadow);border-radius:23px}
+#app-screen #ev-unit-result{padding:20px 10px;background:linear-gradient(120deg,var(--visual-soft),var(--visual-tint));border:1px solid var(--visual-line);border-radius:17px;color:var(--visual-accent);font-size:30px}
+#app-screen .note-card{background:linear-gradient(transparent 27px,#b4935910 28px,transparent 29px) 0 46px/100% 29px,linear-gradient(145deg,#fffcf3,#faf4e6);border:1px solid #bca77b25;border-top:3px solid #cfaa63;border-radius:6px 17px 17px 6px;box-shadow:2px 5px 12px -7px #80622d65;min-height:173px;padding:20px 16px}
+#app-screen .note-card h3{font-size:15px;font-weight:600}
+#app-screen .note-card p{font-size:11px;color:#7b7264;line-height:1.9}
+#app-screen .note-card small{color:#82745a}
+#app-screen .calendar-month-head{margin:8px 0 22px}
+#app-screen .calendar-month-head h3{font-size:26px;letter-spacing:-.8px}
+#app-screen .month-grid{padding:19px 8px;background:var(--visual-surface);border:1px solid var(--visual-line);border-radius:23px;box-shadow:var(--visual-shadow);row-gap:9px}
+#app-screen .month-day.selected{background:linear-gradient(145deg,#ce8e7d,#a95755);box-shadow:0 4px 8px #a9575530;color:white}
+#app-screen .month-day.today:not(.selected){background:var(--visual-soft);color:var(--visual-accent)}
+#app-screen .calendar-agenda{border-top:0}
+#app-screen .event-card{border-left:3px solid #c89c7d}
+#app-screen .photo-featured{border-radius:24px;box-shadow:0 12px 25px -14px #29283d70}
+#app-screen .photo-grid{gap:5px}
+#app-screen .photo-tile{border-radius:7px}
+#app-screen .wallet-card{background:radial-gradient(ellipse at 90% 5%,#c3dabb99,transparent 50%),linear-gradient(115deg,#284e48,#6a9785 60%,#9bb1a0);border-radius:25px;border:1px solid #e2e9cba6;box-shadow:0 18px 25px -15px #244b4080,inset 0 1px 0 #fff5}
+#app-screen .wallet-card:before{content:'';position:absolute;left:24px;top:78px;width:32px;height:24px;border:1px solid #fce2a78c;border-radius:6px;background:linear-gradient(90deg,transparent 30%,#96744266 31% 34%,transparent 35% 65%,#96744266 66% 69%,transparent 70%),linear-gradient(0deg,#ecd2a2 45%,#b29565 46% 51%,#ecd2a2 52%);opacity:.8}
+#app-screen .health-hero{background:radial-gradient(ellipse at 100% 0,#638774,transparent 70%),#263f37;border:1px solid #a8c5ac44;border-radius:24px;box-shadow:0 12px 25px -16px #1e403c80}
+
+/* Music discovery and calculator keep their dark identities. */
+#app-screen.music-app{background:radial-gradient(ellipse at 80% 12%,#494051,transparent 55%),#1d202b;color:#f5efeb;--visual-surface:#292c39;--visual-soft:#3b3746;--visual-line:#ffffff18;--visual-accent:#d6b998;--visual-muted:#b4aebf}
+#app-screen.music-app .primary-button{color:#302a31}
+#app-screen.music-app .text-input{color:#f5f0ee}
+#app-screen.music-app .app-subtitle,#app-screen.music-app .connected-caption{color:#b8b1c1}
+#app-screen .music-discovery-art{height:205px;border-radius:25px;background:radial-gradient(ellipse at 50% 110%,#94705f66,transparent 65%),linear-gradient(125deg,#b7a0b019,#eed4b514);border:1px solid #ead9d223;margin:17px 0 26px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+#app-screen .music-discovery-art:before{content:'';position:absolute;width:240px;height:240px;border:1px solid #e5cec318;border-radius:50%;box-shadow:0 0 0 25px #e5cec305,0 0 0 50px #e5cec305}
+#app-screen .music-discovery-art .scene-art{width:245px;height:184px;filter:drop-shadow(0 15px 12px #13131d55)}
+#app-screen .music-hero{border:1px solid #ffffff20;background:radial-gradient(ellipse at 100% 10%,#a17e6f66,transparent 70%),linear-gradient(125deg,#544653,#292c3b);border-radius:23px}
+#app-screen .player-art{border-radius:23px;box-shadow:0 20px 38px -17px #0008,inset 0 0 0 1px #fff3}
+#app-screen.calc-app{background:radial-gradient(ellipse at 90% 0,#343044,transparent 65%),#171923;--visual-accent:#ecc69e;--visual-line:#ffffff13;color:#f6f0e8}
+#app-screen.calc-app .calc-display{margin: auto 18px 18px;padding:22px 15px 18px;border-bottom:1px solid #e6c7ae25;background:linear-gradient(120deg,transparent,#ffffff03);border-radius:18px 18px 0 0}
+#app-screen.calc-app .calc-result{font-size:clamp(46px,12vw,72px);font-weight:400;color:#f4eee6;text-shadow:0 2px 15px #ecd4ad18}
+#app-screen.calc-app .calc-key{border-radius:22px;background:linear-gradient(145deg,#3b3d4b,#292c38);border:1px solid #ffffff0d;box-shadow:0 5px 0 #11131c,0 8px 12px #0002,inset 0 1px 0 #fff1;font-size:26px}
+#app-screen.calc-app .calc-key.utility{background:linear-gradient(145deg,#c4bfcd,#9895a7);color:#252638}
+#app-screen.calc-app .calc-key.operator{background:linear-gradient(145deg,#efcd9e,#c99b70);color:#45342a;border-color:#fce5bd77}
+#app-screen.calc-app .calc-key:active{transform:translateY(3px);box-shadow:0 2px 0 #11131c}
+#app-screen.calc-app .calc-key.zero{border-radius:22px}
+
+/* Forecast scenes derive from WMO codes; unknown data gets no weather symbol. */
+#app-screen.weather-app{background:radial-gradient(ellipse at 100% 5%,#c5d5de55,transparent 45%),linear-gradient(160deg,#294c6b,#527a93 58%,#8ba9b2);--visual-accent:#eff7ff;--visual-line:#ffffff28;color:white}
+#app-screen.weather-app[data-weather-scene=rain],#app-screen.weather-app[data-weather-scene=thunder],#app-screen.weather-app[data-weather-scene=overcast]{background:radial-gradient(ellipse at 90% 0,#718799,transparent 60%),linear-gradient(160deg,#26364f,#536b7c 65%,#798996)}
+#app-screen.weather-app .app-nav,#app-screen.weather-app .nav-action{color:#fff}
+#app-screen.weather-app .connection-badge{color:#f4f8fb;background:#ffffff12;border-color:#ffffff22}
+#app-screen.weather-app .connection-link{color:white;background:#ffffff10;border-color:#ffffff26}
+#app-screen.weather-app .weather-summary{position:relative;padding:14px 0 22px}
+#app-screen.weather-app .weather-summary h2{font-size:27px;letter-spacing:1px;margin-top:9px}
+#app-screen.weather-app .weather-summary>.scene-art{display:block;width:190px;height:123px;margin:0 auto -10px;filter:drop-shadow(0 8px 10px #18354b30)}
+#app-screen.weather-app .big-temperature{font-size:89px;font-weight:400;letter-spacing:-5px;text-shadow:0 6px 25px #233c5b20}
+#app-screen.weather-app .weather-summary p{color:#fff;font-size:14px}
+#app-screen.weather-app .weather-card{border-radius:21px;background:linear-gradient(145deg,#f1f7ff16,#d5e5ee08);border:1px solid #ffffff30;box-shadow:0 9px 22px -15px #102b4b70,inset 0 1px 0 #ffffff12;padding:16px;backdrop-filter:blur(12px)}
+#app-screen.weather-app .weather-card h3{color:#ecf5f9;letter-spacing:.05em;font-size:10px}
+#app-screen.weather-app .hourly-forecast>div{min-width:72px;gap:10px;padding:8px 2px}
+#app-screen.weather-app .hourly-forecast .scene-art{width:53px;height:40px;margin:-6px 0}
+#app-screen.weather-app .hourly-forecast strong{font-size:20px;font-weight:500}
+#app-screen.weather-app .hourly-forecast small{font-size:9px;color:#e4eef6}
+#app-screen.weather-app .live-forecast-row{min-height:49px;border-bottom:1px solid #ffffff12;gap:7px;font-size:11px}
+#app-screen.weather-app .live-forecast-row .scene-art{width:38px;height:31px}
+#app-screen.weather-app .live-forecast-row>span:nth-of-type(2){flex:1;min-width:0;font-size:10px}
+#app-screen.weather-app .weather-stat{position:relative;overflow:hidden;min-height:115px}
+#app-screen.weather-app .weather-stat:after{content:'';position:absolute;width:78px;height:78px;border:1px solid #ffffff1c;border-radius:50%;right:-21px;bottom:-32px;box-shadow:0 0 0 12px #ffffff04,0 0 0 24px #ffffff03;pointer-events:none}
+#app-screen.weather-app .weather-stat strong{font-size:27px;letter-spacing:-.8px}
+#app-screen.weather-app .connected-caption{font-size:10px;color:#e3ecf2;line-height:1.9}
+
+/* Theme-aware materials: keep tinted hero art legible rather than dimming it. */
+.screen-dark-mode #app-screen{--visual-tint:#1e212a;--visual-surface:#282c36;--visual-soft:#363441;--visual-line:#ffffff13;--visual-accent:#c8b2de;--visual-muted:#b0a9bb}
+.screen-dark-mode #app-screen[data-visual-app=today],.screen-dark-mode #app-screen[data-visual-app=habits],.screen-dark-mode #app-screen[data-visual-app=health],.screen-dark-mode #app-screen[data-visual-app=expenses]{--visual-accent:#a5cbb6;--visual-soft:#2d403b;--visual-tint:#1d2927;--visual-surface:#273430}
+.screen-dark-mode #app-screen[data-visual-app=reading],.screen-dark-mode #app-screen[data-visual-app=shopping],.screen-dark-mode #app-screen[data-visual-app=notes]{--visual-accent:#dcc29d;--visual-soft:#41392e;--visual-tint:#27241f;--visual-surface:#322e28}
+.screen-dark-mode #app-screen[data-visual-app=journal],.screen-dark-mode #app-screen[data-visual-app=sketch]{--visual-accent:#ddb4cd;--visual-soft:#443342;--visual-tint:#2a222d;--visual-surface:#362b39}
+.screen-dark-mode #app-screen[data-visual-app=contacts],.screen-dark-mode #app-screen[data-visual-app=files],.screen-dark-mode #app-screen[data-visual-app=mail],.screen-dark-mode #app-screen[data-visual-app=converter]{--visual-accent:#aac9e5;--visual-soft:#2f3e50;--visual-tint:#202932;--visual-surface:#2a3442}
+.screen-dark-mode #app-screen .illustrated-hero{filter:none;background:linear-gradient(125deg,var(--visual-soft),var(--visual-surface));color:var(--visual-accent);border-color:#ffffff20}
+.screen-dark-mode #app-screen .illustrated-hero>.ev-hero-foot{border-color:#ffffff20}
+.screen-dark-mode #app-screen .primary-button{color:#28232e}
+.screen-dark-mode #app-screen .ev-chips button.selected,.screen-dark-mode #app-screen .ev-chips button[aria-pressed=true]{color:#28232e}
+.screen-dark-mode #app-screen .ev-focus-ring>div{background:radial-gradient(ellipse at 40% 20%,#3e344e,#24222f);border-color:#ffffff14}
+.screen-dark-mode #app-screen .ev-focus-ring{border-color:#ffffff14;box-shadow:0 22px 45px -20px #0009,0 0 0 8px #ffffff03,0 0 0 9px #ffffff08}
+.screen-dark-mode #app-screen .ev-focus-ring strong{color:#ede2f6}
+.screen-dark-mode #app-screen .ev-focus-ring small{color:#c5a9dd}
+.screen-dark-mode #app-screen .note-card{background:linear-gradient(transparent 27px,#ddcba710 28px,transparent 29px) 0 46px/100% 29px,var(--visual-surface);border-top-color:#bb9861}
+.screen-dark-mode #app-screen .note-card p,.screen-dark-mode #app-screen .note-card small{color:#bfb4a4}
+.screen-dark-mode #app-screen .ev-empty:before{background:linear-gradient(135deg,#ffffff0b,transparent),var(--visual-soft);box-shadow:0 5px 10px -6px #0005,inset 0 1px 0 #ffffff10}
+.screen-dark-mode #app-screen.music-app{--visual-accent:#d6b998;--visual-soft:#3b3746;--visual-surface:#292c39;--visual-muted:#b4aebf}
+.screen-dark-mode #app-screen.calc-app{--visual-accent:#ecc69e}
+.screen-dark-mode #app-screen.weather-app{--visual-accent:#eff7ff}
+
+@keyframes scene-arrive{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+@media(hover:hover) and (pointer:fine){
+  #app-screen .ev-card,#app-screen .ev-quick-grid button,#app-screen .ev-metrics button{transition:box-shadow .2s,border-color .2s}
+  #app-screen button.ev-card:hover,#app-screen .ev-quick-grid button:hover,#app-screen .ev-metrics button:hover{border-color:var(--visual-accent);box-shadow:0 8px 25px -14px var(--visual-accent)}
+}
+@media(max-width:360px){
+  #app-screen .app-nav{padding-inline:14px;gap:5px}
+  #app-screen .app-content{padding-left:16px;padding-right:16px}
+  #app-screen .illustrated-hero{padding:22px 18px;grid-template-columns:minmax(0,1fr) 85px;min-height:171px}
+  #app-screen .illustrated-hero>.scene-art{width:146px;right:-14px;top:23px}
+  #app-screen .illustrated-hero>strong{font-size:36px}
+  #app-screen .illustrated-hero>h1{font-size:26px}
+  #app-screen .ev-expenses .illustrated-hero>strong{font-size:27px}
+  #app-screen .ev-expenses .illustrated-hero>.scene-art{width:125px}
+  #app-screen .ev-focus-ring{width:228px;margin:28px auto}
+  #app-screen .ev-focus-ring strong{font-size:47px}
+  #app-screen .ev-chips button{padding:9px 11px}
+  #app-screen .music-discovery-art{height:168px}
+  #app-screen .music-discovery-art .scene-art{width:207px;height:155px}
+  #app-screen .month-grid{padding-inline:2px}
+  #app-screen .month-day{width:31px;height:31px}
+}
+@media(max-height:560px){
+  #app-screen .illustrated-hero{min-height:145px;margin-bottom:18px}
+  #app-screen .illustrated-hero>.scene-art{top:6px}
+  #app-screen .music-discovery-art{height:140px}
+  #app-screen .music-discovery-art .scene-art{height:130px}
+  #app-screen .ev-focus-ring{width:205px;margin:22px auto}
+  #app-screen .ev-focus-ring strong{font-size:44px}
+  #app-screen.calc-app .calc-display{padding:0 10px;margin:0 18px 10px}
+  #app-screen.calc-app .calc-result{font-size:38px;line-height:1.2}
+  #app-screen.calc-app .calc-key{height:35px;font-size:21px;border-radius:14px}
+  #app-screen.calc-app .calc-keypad{gap:9px;padding-bottom:32px}
+}
+[data-reduce-motion=true] #app-screen .scene-art{animation:none;transform:none}
+[data-reduce-motion=true] #app-screen .calc-key:active{transform:none}
+@media(prefers-reduced-motion:reduce){#app-screen .scene-art{animation:none;transform:none}#app-screen .calc-key:active{transform:none}}
+@media(forced-colors:active){#app-screen .scene-art{display:none}#app-screen .ev-card,#app-screen .illustrated-hero,#app-screen .calc-key{border:1px solid CanvasText}#app-screen .ev-focus-ring{border:3px solid Highlight}}
+

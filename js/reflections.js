@@ -21,7 +21,7 @@
   const save=(key,list,render)=>{if(!A.save(key,list))return false;render?.();return true;};
   const csv=(name,data)=>{const cell=value=>'"'+String(value??'').replace(/^[=+@\-\t\r]/,"'$&").replace(/"/g,'""')+'"';A.download(new Blob(['\ufeff'+data.map(row=>row.map(cell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}),name);};
   A.actions.frReturn=()=>A.open($('.reflections')?.dataset.reflectionApp||A.current);
-  const entries={journal:['#ev-journal-list','frJournal','月・タグで探す / 振り返り'],reading:['.ev-book-list','frReading','本を探す / 読書の計画'],habits:['.ev-hero','frHabits','習慣の整理 / 月のまとめ'],focus:['.ev-focus-ring','frFocus','集中の履歴 / 振り返り']};
+  const entries={journal:['#ev-journal-list','frJournal','振り返り'],reading:['.ev-book-list','frReading','計画・検索'],habits:['.ev-hero','frHabits','月のまとめ'],focus:['.ev-focus-ring','frFocus','履歴・分析']};
   A.decorateEveryday=id=>{const entry=entries[id];if(entry&&$(entry[0]))$('.everyday').insertAdjacentHTML('afterbegin',`<button class="fr-entry" data-action="${entry[1]}"><span>${esc(entry[2])}</span><span aria-hidden="true">›</span></button>`);};
 
   // 31–35: month filter, exact tag filter, random past entry, anniversaries,
@@ -144,5 +144,5 @@
   A.actions.frFocus=renderFocus;A.actions.frFocusAdd=()=>focusEditor();A.actions.frFocusEdit=el=>focusEditor(el.dataset.id);
   A.actions.frFocusAll=()=>{focusFrom='';focusTo='';focusQuery='';renderFocus();};
   A.actions.frFocusDelete=el=>{if(!focusEditable(el.dataset.id))return;A.confirm('集中記録を削除？','集中時間の集計からも除かれます。',()=>save('focusHistory',rows('focusHistory').filter(x=>x.id!==el.dataset.id),renderFocus));};
-  A.actions.frFocusExport=()=>{if(!focusRangeValid())return A.toast('日付の範囲を確認してください');csv('aura-focus-history.csv',[['日付','分','内容','記録方法','修正'],...focusRows().map(x=>[x.date,x.minutes,x.label||'',x.source==='manual'?'手入力':'タイマー',x.edited?'修正済み':''])]);};
+  A.actions.frFocusExport=()=>{if(!focusRangeValid())return A.toast('日付の範囲を確認');csv('aura-focus-history.csv',[['日付','分','内容','記録方法','修正'],...focusRows().map(x=>[x.date,x.minutes,x.label||'',x.source==='manual'?'手入力':'タイマー',x.edited?'修正済み':''])]);};
 })();

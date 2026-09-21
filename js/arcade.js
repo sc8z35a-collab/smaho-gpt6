@@ -2,8 +2,8 @@
 (() => {
  const A=window.Aura,$=A.$,esc=A.escape;
  const catalog=[
-  ['2048','2048','数字を重ねる','amber','2048best'],['snake','Little Snake','庭を駆ける','sage','snakeBest'],['memory','Memory Garden','絵柄をそろえる','rose','memoryBest'],
-  ['blocks','Block Atelier','ラインをつくる','iris','blocksBest'],['mines','Crystal Field','鉱石を探す','aqua','minesWins'],['reversi','Reversi','石を返す','jade','reversiWins'],['breaker','Orbit Breaker','軌道を描く','night','breakerBest'],['sudoku','Sudoku','数字を解く','paper','sudokuWins']
+  ['2048','2048','合体','amber','2048best'],['snake','Little Snake','スネーク','sage','snakeBest'],['memory','Memory Garden','ペア','rose','memoryBest'],
+  ['blocks','Block Atelier','ブロック','iris','blocksBest'],['mines','Crystal Field','探索','aqua','minesWins'],['reversi','Reversi','対戦','jade','reversiWins'],['breaker','Orbit Breaker','反射','night','breakerBest'],['sudoku','Sudoku','数独','paper','sudokuWins']
  ];
  const legacy=A.apps.games.render;
  let current='library',disposers=[],generation=0;

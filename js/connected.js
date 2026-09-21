@@ -15,7 +15,7 @@
   };
   N.errorText = error => error.name === 'AbortError' ? '通信を中断しました。' : error.message || '接続できませんでした。';
   N.request = async (url, {signal, timeout = 15000} = {}) => {
-    if (!navigator.onLine) throw new Error('オフラインです。ネットワーク接続を確認して再試行してください。');
+    if (!navigator.onLine) throw new Error('オフライン。通信を確認して再試行');
     const controller = new AbortController();
     const abort = () => controller.abort();
     if (signal?.aborted) controller.abort();
@@ -24,13 +24,13 @@
     const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeout);
     try {
       const response = await fetch(url, {signal: controller.signal, credentials: 'omit', referrerPolicy: 'strict-origin-when-cross-origin'});
-      if (!response.ok) throw new Error(response.status === 429 ? 'アクセスが集中しています。少し待ってから再試行してください。' : `外部サービスが応答できませんでした（HTTP ${response.status}）。`);
+      if (!response.ok) throw new Error(response.status === 429 ? '混雑中。時間をおいて再試行' : `外部サービスが応答できませんでした（HTTP ${response.status}）。`);
       const data = await response.json();
       if (data.error) throw new Error('外部サービスからエラーが返されました。検索条件を確認してください。');
       return data;
     } catch (error) {
-      if (timedOut) throw new Error('通信がタイムアウトしました。再試行してください。');
-      if (error.name === 'TypeError') throw new Error('接続できませんでした。通信状態、サービスの稼働状況、ブラウザの接続制限を確認してください。');
+      if (timedOut) throw new Error('通信時間切れ。再試行');
+      if (error.name === 'TypeError') throw new Error('接続失敗。通信・サービス・ブラウザ制限を確認');
       throw error;
     } finally {
       clearTimeout(timer);
@@ -38,8 +38,8 @@
     }
   };
   N.location = () => new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error('このブラウザは位置情報に対応していません。場所を検索してください。'));
-    navigator.geolocation.getCurrentPosition(position => resolve({latitude: position.coords.latitude, longitude: position.coords.longitude, name: '現在地'}), error => reject(new Error(error.code === 1 ? '位置情報が許可されていません。ブラウザの権限設定を確認するか、場所を検索してください。' : '現在地を取得できません。場所を検索してください。')), {timeout: 10000, maximumAge: 60000, enableHighAccuracy: false});
+    if (!navigator.geolocation) return reject(new Error('位置情報非対応。場所を検索'));
+    navigator.geolocation.getCurrentPosition(position => resolve({latitude: position.coords.latitude, longitude: position.coords.longitude, name: '現在地'}), error => reject(new Error(error.code === 1 ? '位置情報未許可。権限を確認、または場所を検索' : '現在地取得失敗。場所を検索')), {timeout: 10000, maximumAge: 60000, enableHighAccuracy: false});
   });
   N.share = async (title, text, url) => {
     const safe=N.safeURL(url),content=[title,text,safe].filter(Boolean).join('\n');
@@ -48,11 +48,11 @@
       catch(error){if(error.name==='AbortError')return;}
     }
     if(navigator.clipboard){
-      try{await navigator.clipboard.writeText(content);A.toast('共有できないため、内容をコピーしました');return;}
+      try{await navigator.clipboard.writeText(content);A.toast('共有非対応・コピー済み');return;}
       catch{/* Permission denial must not prevent the explicit export fallback. */}
     }
-    try{A.download(new Blob([content],{type:'text/plain;charset=utf-8'}),'aura-share.txt');A.toast('共有・コピーできないため、テキストを保存します');}
-    catch{A.toast('共有できませんでした。権限を確認してください。');}
+    try{A.download(new Blob([content],{type:'text/plain;charset=utf-8'}),'aura-share.txt');A.toast('共有非対応・テキストを保存');}
+    catch{A.toast('共有できません。権限を確認。');}
   };
   const stateBox = (message, retry = '') => `<div class="connection-state" role="status"><p>${esc(message)}</p>${retry ? `<button class="secondary-button" data-action="${retry}">再試行</button>` : ''}</div>`;
   const button = (action, label) => `<button class="connection-link" data-action="${action}">${esc(label)}</button>`;
@@ -83,16 +83,29 @@
     const d = cache.data;
     return {name: weatherPlace.name, temp: number(d.current.temperature_2m), high: number(d.daily.temperature_2m_max[0]), low: number(d.daily.temperature_2m_min?.[0]), desc: weatherLabel(d.current.weather_code), condition: '', source: `${weatherError || Date.now() - cache.savedAt > 900000 ? '保存データ' : '予報データ'} ${stamp(cache.savedAt)}更新`};
   };
+  // Explicit WMO codes only: no sunny illustration for missing/unknown forecasts.
+  A.weatherScene = code => {
+    if (code === 0) return 'clear';
+    if (code === 1 || code === 2) return 'cloudy';
+    if (code === 3) return 'overcast';
+    if ([45,48].includes(code)) return 'fog';
+    if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) return 'rain';
+    if ([71,73,75,77,85,86].includes(code)) return 'snow';
+    if ([95,96,99].includes(code)) return 'thunder';
+    return '';
+  };
+  const weatherArt = code => A.scene(A.weatherScene(code));
   function weatherPanel() {
     const root = $('#live-weather');
     if (!root) return;
     const cache = currentWeather(), snapshot = A.weatherSnapshot();
-    root.innerHTML = `<section class="weather-summary"><span class="connection-badge">OPEN-METEO</span><h2>${esc(weatherPlace.name)}</h2><div class="big-temperature">${snapshot.temp}°</div><p>${esc(snapshot.desc)}</p><small>最高 ${snapshot.high}°　最低 ${snapshot.low}°</small></section>${weatherBusy ? stateBox('天気を取得しています…') : ''}${weatherError ? stateBox(weatherError + (cache ? ' 最後に取得したデータを表示しています。' : ''), 'weatherRefresh') : ''}`;
+    $('#app-screen').dataset.weatherScene = A.weatherScene(cache?.data.current.weather_code);
+    root.innerHTML = `<section class="weather-summary"><span class="connection-badge">OPEN-METEO</span><h2>${esc(weatherPlace.name)}</h2>${cache ? weatherArt(cache.data.current.weather_code) : ''}<div class="big-temperature">${snapshot.temp}°</div><p>${esc(snapshot.desc)}</p><small>最高 ${snapshot.high}°　最低 ${snapshot.low}°</small></section>${weatherBusy ? stateBox('天気を取得しています…') : ''}${weatherError ? stateBox(weatherError + (cache ? ' 最後に取得したデータを表示しています。' : ''), 'weatherRefresh') : ''}`;
     if (cache) {
       const d = cache.data, h = d.hourly, daily = d.daily;
       // Both timestamps are in the provider's location timezone, not the device timezone.
       const start = Math.max(0, h.time.findIndex(t => t >= d.current.time.slice(0, 13) + ':00'));
-      root.innerHTML += `<p class="connected-caption">取得 ${stamp(cache.savedAt)} · 対象時刻 ${esc(d.current.time.replace('T', ' '))}<br>${esc(d.timezone)} · モデルに基づく予報（観測実況ではありません）</p><div class="weather-card"><h3>時間別予報 · 現地時間</h3><div class="hourly-forecast">${h.time.slice(start, start + 24).map((t, i) => `<div><span>${esc(t.slice(11, 16))}</span><strong>${number(h.temperature_2m?.[start + i])}°</strong><small>${esc(weatherLabel(h.weather_code?.[start + i]))}</small><small>降水 ${number(h.precipitation_probability?.[start + i])}%</small></div>`).join('')}</div></div><div class="weather-card"><h3>7日間の天気予報</h3>${daily.time.map((t, i) => `<div class="live-forecast-row"><span>${esc(t.slice(5).replace('-', '/'))}</span><span>${esc(weatherLabel(daily.weather_code?.[i]))}</span><span>${number(daily.temperature_2m_min?.[i])}° / ${number(daily.temperature_2m_max?.[i])}°</span></div>`).join('')}</div><div class="weather-stats">${[['湿度', `${number(d.current.relative_humidity_2m)}%`], ['風速', `${d.current.wind_speed_10m ?? '—'} m/s`], ['UV指数（今日の最大）', daily.uv_index_max?.[0] ?? '—'], ['日の入り（現地）', daily.sunset?.[0]?.slice(11, 16) || '—']].map(([label, value]) => `<div class="weather-card weather-stat"><h3>${label}</h3><strong>${esc(value)}</strong></div>`).join('')}</div>`;
+      root.innerHTML += `<p class="connected-caption">取得 ${stamp(cache.savedAt)} · 対象時刻 ${esc(d.current.time.replace('T', ' '))}<br>${esc(d.timezone)} · モデルに基づく予報（観測実況ではありません）</p><div class="weather-card"><h3>時間別予報 · 現地時間</h3><div class="hourly-forecast">${h.time.slice(start, start + 24).map((t, i) => `<div><span>${esc(t.slice(11, 16))}</span>${weatherArt(h.weather_code?.[start + i])}<strong>${number(h.temperature_2m?.[start + i])}°</strong><small>${esc(weatherLabel(h.weather_code?.[start + i]))}</small><small>降水 ${number(h.precipitation_probability?.[start + i])}%</small></div>`).join('')}</div></div><div class="weather-card"><h3>7日間の天気予報</h3>${daily.time.map((t, i) => `<div class="live-forecast-row"><span>${esc(t.slice(5).replace('-', '/'))}</span>${weatherArt(daily.weather_code?.[i])}<span>${esc(weatherLabel(daily.weather_code?.[i]))}</span><span>${number(daily.temperature_2m_min?.[i])}° / ${number(daily.temperature_2m_max?.[i])}°</span></div>`).join('')}</div><div class="weather-stats">${[['湿度', `${number(d.current.relative_humidity_2m)}%`], ['風速', `${d.current.wind_speed_10m ?? '—'} m/s`], ['UV指数（今日の最大）', daily.uv_index_max?.[0] ?? '—'], ['日の入り（現地）', daily.sunset?.[0]?.slice(11, 16) || '—']].map(([label, value]) => `<div class="weather-card weather-stat"><h3>${label}</h3><strong>${esc(value)}</strong></div>`).join('')}</div>`;
     }
     root.innerHTML += `<p class="connected-caption">${N.link('https://open-meteo.com/', '天気データ：Open-Meteo（CC BY 4.0）')}<br>位置情報はボタンを押した場合だけ取得し、予報の取得先に座標を送信します。防災情報は ${N.link('https://www.jma.go.jp/bosai/', '気象庁')} を確認してください。</p>`;
     A.updateWidgets();
@@ -120,13 +133,13 @@
   }
   function selectWeather(place) { if (!validPlace(place)) return; weatherPlace = place; A.save('weatherLocation', place); weatherError = ''; A.closeOverlay(); weather(); }
   A.apps.weather.render = weather;
-  A.actions.weatherSaveCity = () => { const saved=A.load('weatherFavorites',[]); if(!saved.some(p=>placeKey(p)===placeKey(weatherPlace))) { if(!A.save('weatherFavorites',[{...weatherPlace},...saved].slice(0,20)))return; } A.actions.weatherCities(); A.toast('都市を保存しました'); };
+  A.actions.weatherSaveCity = () => { const saved=A.load('weatherFavorites',[]); if(!saved.some(p=>placeKey(p)===placeKey(weatherPlace))) { if(!A.save('weatherFavorites',[{...weatherPlace},...saved].slice(0,20)))return; } A.actions.weatherCities(); A.toast('都市を保存済み'); };
   A.actions.weatherSavedCity = el => { const p=A.load('weatherFavorites',[]).find(p=>placeKey(p)===el.dataset.id);if(p)selectWeather(p); };
   A.actions.weatherRemoveCity = el => { if(A.save('weatherFavorites',A.load('weatherFavorites',[]).filter(p=>placeKey(p)!==el.dataset.id)))A.actions.weatherCities(); };
   A.actions.weatherRefresh = () => refreshWeather(true);
   A.actions.weatherSelect = el => selectWeather(presets[Number(el.dataset.value)]);
   A.actions.weatherLocate = async () => {
-    const root = $('#live-weather'); A.toast('現在地の許可を確認しています…');
+    const root = $('#live-weather'); A.toast('現在地の許可を確認中…');
     try { const place = await N.location(); if (A.current === 'weather' && root?.isConnected) selectWeather(place); } catch (e) { if (A.current === 'weather' && root?.isConnected) A.toast(N.errorText(e)); }
   };
   A.actions.weatherCities = () => {
@@ -175,12 +188,12 @@
       selectedPlace={lat,lon,display_name:p.display_name};
       marker?.remove(); marker = window.L.circleMarker([lat, lon], {radius: 10, color: '#fff', weight: 3, fillColor: '#477cc6', fillOpacity: 1, bubblingMouseEvents:false}).addTo(map);
       marker.bindPopup(document.createTextNode(p.display_name)).openPopup(); map.setView([lat, lon], 16);
-      results.innerHTML = `<strong>${esc(p.display_name)}</strong><p>${lat.toFixed(5)}, ${lon.toFixed(5)}</p><div class="connection-toolbar">${N.link(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`, 'ここへの経路案内')}${N.link(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`, '地図を開く')}<button class="connection-link" id="share-place">場所を共有</button></div><p class="connected-caption">経路はGoogle マップで計算します。アプリ内に架空のルートは表示しません。</p>`;
+      results.innerHTML = `<strong>${esc(p.display_name)}</strong><p>${lat.toFixed(5)}, ${lon.toFixed(5)}</p><div class="connection-toolbar">${N.link(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`, 'ここへの経路案内')}${N.link(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`, '地図を開く')}<button class="connection-link" id="share-place">場所を共有</button></div><p class="connected-caption">経路案内：Google マップ</p>`;
       $('#share-place').onclick = () => N.share('場所を共有', p.display_name, `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`);
       $('#share-place').insertAdjacentHTML('afterend','<button class="connection-link" data-action="mapSavePlace">場所を保存</button>');
     };
     $('.connected-map-tools .connection-toolbar').insertAdjacentHTML('afterbegin','<button class="connection-link" data-action="mapSaved">保存した場所</button>');
-    A.actions.mapSavePlace=()=>{if(!selectedPlace)return;const current=selectedPlace,saved=A.load('mapSavedPlaces',[]),existing=saved.find(p=>p.lat===current.lat&&p.lon===current.lon);A.form('場所を保存',`<label class="form-label">名前</label><input class="text-input" name="name" required maxlength="100" value="${esc(existing?.name||current.display_name.split(',')[0])}"><label class="form-label">分類</label><select class="text-input" name="category">${['お気に入り','行きたい','仕事'].map(c=>`<option ${existing?.category===c?'selected':''}>${c}</option>`).join('')}</select><label class="form-label">メモ</label><textarea class="text-input" name="note" rows="3" maxlength="400">${esc(existing?.note||'')}</textarea>`,v=>{if(!v.name.trim())return false;const item={...current,...v,name:v.name.trim(),id:existing?.id||A.id()},rows=existing?saved.map(p=>p.id===existing.id?item:p):[item,...saved];if(!A.save('mapSavedPlaces',rows))return false;A.toast('場所を保存しました');});};
+    A.actions.mapSavePlace=()=>{if(!selectedPlace)return;const current=selectedPlace,saved=A.load('mapSavedPlaces',[]),existing=saved.find(p=>p.lat===current.lat&&p.lon===current.lon);A.form('場所を保存',`<label class="form-label">名前</label><input class="text-input" name="name" required maxlength="100" value="${esc(existing?.name||current.display_name.split(',')[0])}"><label class="form-label">分類</label><select class="text-input" name="category">${['お気に入り','行きたい','仕事'].map(c=>`<option ${existing?.category===c?'selected':''}>${c}</option>`).join('')}</select><label class="form-label">メモ</label><textarea class="text-input" name="note" rows="3" maxlength="400">${esc(existing?.note||'')}</textarea>`,v=>{if(!v.name.trim())return false;const item={...current,...v,name:v.name.trim(),id:existing?.id||A.id()},rows=existing?saved.map(p=>p.id===existing.id?item:p):[item,...saved];if(!A.save('mapSavedPlaces',rows))return false;A.toast('場所を保存済み');});};
     A.actions.mapSaved=()=>A.overlay(`${A.overlayTitle('保存した場所')}<div class="pd-menu">${A.load('mapSavedPlaces',[]).map(p=>`<div class="pd-saved-place"><button data-action="mapSavedOpen" data-id="${esc(p.id)}"><strong>${esc(p.name)}</strong><small>${esc(p.category||'')}${p.note?' · '+esc(p.note):''}</small></button><button data-action="mapSavedDelete" data-id="${esc(p.id)}" aria-label="${esc(p.name)}を削除">×</button></div>`).join('')||'<p>場所を選んで保存できます</p>'}</div>`);
     A.actions.mapSavedOpen=el=>{if(!map||!canvas.isConnected)return A.toast('地図の読み込みを待ってください');const p=A.load('mapSavedPlaces',[]).find(x=>x.id===el.dataset.id);if(p){A.closeOverlay();showPlace(p);}};
     A.actions.mapSavedDelete=el=>A.confirm('保存した場所を削除？','',()=>{if(A.save('mapSavedPlaces',A.load('mapSavedPlaces',[]).filter(p=>p.id!==el.dataset.id)))A.actions.mapSaved();});
@@ -207,7 +220,7 @@
       finally { form.dataset.busy = 'false'; form.querySelector('button').disabled = false; }
     };
     A.actions.mapLocate = async () => {
-      A.toast('現在地を取得しています…');
+      A.toast('現在地を取得中…');
       try {
         const p = await N.location(); if (A.current !== 'maps' || controller.signal.aborted || !canvas.isConnected || !map) return;
         userMarker?.remove(); userMarker = window.L.circleMarker([p.latitude, p.longitude], {radius: 8, color: '#fff', fillColor: '#337def', fillOpacity: 1}).addTo(map).bindPopup('現在地');
@@ -221,7 +234,7 @@
       const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'}).addTo(map);
       let failed = false;
       tiles.on('tileerror', () => { if (!failed && results.isConnected) { failed = true; results.innerHTML = stateBox('地図タイルを取得できません。通信を確認して再読み込みしてください。', 'mapRetry') + N.link('https://www.openstreetmap.org/', 'OpenStreetMapを開く'); } });
-      results.innerHTML = `<p>地図をドラッグ・ピンチして探索。地名や住所を入力すると実在する場所を検索できます。</p><p class="connected-caption">検索語はNominatimに、表示範囲はOpenStreetMapに送信されます。現在地は許可した場合のみ使用します。</p>`;
+      results.innerHTML = `<p>地図をドラッグ・ピンチして探索。地名や住所を入力すると実在する場所を検索できます。</p><p class="connected-caption">検索：Nominatim / 地図：OpenStreetMap。現在地は許可時のみ</p>`;
       resize = new ResizeObserver(() => map.invalidateSize()); resize.observe(canvas); map.invalidateSize();
     } catch (error) { if (results.isConnected) results.innerHTML = stateBox(N.errorText(error), 'mapRetry'); }
   }
@@ -258,10 +271,10 @@
     };
     const root = $('#web-content');
     if (state.type === 'home') {
-      root.innerHTML = `<span class="connection-badge">CONNECTED BROWSER</span><h1 class="app-title">世界と、つながる。</h1><p class="app-subtitle">調べる。読む。新しい場所へ。</p><div class="connection-card"><h3>検索先を選んで、検索。</h3><p>Wikipediaの検索結果・記事はこの画面で表示。一般のWeb検索はGoogle・Bing・DuckDuckGoを選ぶと実際の検索ページを別タブで開きます。</p></div><div class="connection-grid">${N.link('https://www.google.com/', 'Google')}${N.link('https://www.youtube.com/', 'YouTube')}${N.link('https://www3.nhk.or.jp/news/', 'NHK NEWS')}${N.link('https://ja.wikipedia.org/', 'Wikipedia')}</div><h3>このセッションの履歴</h3>${browserHistory.filter(s => s.type !== 'home').slice(-10).reverse().map((s, i) => `<button class="list-row" data-history-item="${i}">${esc(s.title || s.query || s.url)}</button>`).join('') || '<p class="connected-caption">まだ履歴はありません。</p>'}${button('webClearHistory', '履歴を消去')}<p class="connected-caption">検索語・URLは選択した外部サービスに送信されます。履歴はこのセッションのみ、保存済みページはこのブラウザ内に保持します。</p>`;
+      root.innerHTML = `<span class="connection-badge">CONNECTED BROWSER</span><h1 class="app-title">ブラウザ</h1><p class="app-subtitle"></p><div class="connection-card"><h3>検索先を選んで、検索。</h3><p>Wikipediaの検索結果・記事はこの画面で表示。一般のWeb検索はGoogle・Bing・DuckDuckGoを選ぶと実際の検索ページを別タブで開きます。</p></div><div class="connection-grid">${N.link('https://www.google.com/', 'Google')}${N.link('https://www.youtube.com/', 'YouTube')}${N.link('https://www3.nhk.or.jp/news/', 'NHK NEWS')}${N.link('https://ja.wikipedia.org/', 'Wikipedia')}</div><h3>このセッションの履歴</h3>${browserHistory.filter(s => s.type !== 'home').slice(-10).reverse().map((s, i) => `<button class="list-row" data-history-item="${i}">${esc(s.title || s.query || s.url)}</button>`).join('') || '<p class="connected-caption">まだ履歴はありません。</p>'}${button('webClearHistory', '履歴を消去')}<p class="connected-caption">検索語・URLは選択先に送信。履歴は一時保存、ブックマークは端末内</p>`;
       const history = browserHistory.filter(s => s.type !== 'home').slice(-10).reverse(); root.querySelectorAll('[data-history-item]').forEach(el => el.onclick = () => browserNavigate(history[Number(el.dataset.historyItem)]));
     } else if (state.type === 'url') {
-      root.innerHTML = `<span class="connection-badge">EXTERNAL WEBSITE</span><h2>${esc(new URL(state.url).hostname)}</h2><p class="web-url">${esc(state.url)}</p><div class="connection-toolbar">${N.link(state.url, '実際のサイトを開く', 'primary-button')}${button('webBookmark', '保存')}${button('webShare', '共有')}</div><div class="connection-card"><h3>安全に外部ブラウザで開く</h3><p>サイト側のCSP / X-Frame-Optionsにより、ログイン画面や検索サイトなどはアプリ内表示できません。上のリンクなら実際のサイトをそのまま使えます。</p>${button('webPreview', '制限付きプレビューを試す')}</div><div id="web-preview"></div>`;
+      root.innerHTML = `<span class="connection-badge">EXTERNAL WEBSITE</span><h2>${esc(new URL(state.url).hostname)}</h2><p class="web-url">${esc(state.url)}</p><div class="connection-toolbar">${N.link(state.url, '外部で開く', 'primary-button')}${button('webBookmark', '保存')}${button('webShare', '共有')}</div><div class="connection-card"><h3>安全に外部ブラウザで開く</h3><p>サイト側のCSP / X-Frame-Optionsにより、ログイン画面や検索サイトなどはアプリ内表示できません。上のリンクなら実際のサイトをそのまま使えます。</p>${button('webPreview', '制限付きプレビューを試す')}</div><div id="web-preview"></div>`;
     } else if (state.type === 'saved') {
       root.innerHTML = `<h1 class="app-title">保存したページ</h1>${webBookmarks.map((b, i) => `<div class="web-bookmark"><button class="list-row" data-bookmark-index="${i}"><span class="row-main"><strong>${esc(b.title)}</strong><small>${esc(b.url)}</small></span></button><button data-remove-bookmark="${i}" aria-label="保存を削除">×</button></div>`).join('') || stateBox('サイトや記事の「保存」から追加できます。')}`;
       root.querySelectorAll('[data-bookmark-index]').forEach(el => el.onclick = () => browserNavigate({type: 'url', ...webBookmarks[Number(el.dataset.bookmarkIndex)]}));
@@ -282,7 +295,7 @@
         state.url = N.safeURL(page.fullurl) || `https://ja.wikipedia.org/?curid=${page.pageid}`; state.title = page.title;
         root.innerHTML = `<div class="connection-toolbar">${button('webBookmark', '保存')}${button('webShare', '共有')}${N.link(state.url, '原文を開く')}</div><h1>${esc(page.title)}</h1><article class="live-reader">${esc(page.extract || '本文を取得できませんでした。原文を開いてください。')}</article><p class="connected-caption">出典：${N.link(state.url, 'Wikipedia')} · ${N.link('https://creativecommons.org/licenses/by-sa/4.0/', 'CC BY-SA 4.0')} · 取得 ${stamp(Date.now())}</p>`;
       } else {
-        root.innerHTML = `<span class="connection-badge">WIKIPEDIA SEARCH</span><h2>「${esc(state.query)}」の検索結果</h2><p class="connected-caption">百科事典の検索です。Web全体の検索は上の検索先を変更してください。</p>${pages.map((p, i) => `<button class="web-result" data-wiki-result="${i}"><small>ja.wikipedia.org</small><h3>${esc(p.title)}</h3><p>${esc(p.extract || 'タップして記事を読む')}</p></button>`).join('') || stateBox('記事が見つかりません。検索語を変えるか、Web検索を利用してください。')}${N.link('https://www.google.com/search?q=' + encodeURIComponent(state.query), 'Googleでも検索')}`;
+        root.innerHTML = `<span class="connection-badge">WIKIPEDIA SEARCH</span><h2>「${esc(state.query)}」の検索結果</h2><p class="connected-caption">Wikipedia検索。Web検索は検索先を変更</p>${pages.map((p, i) => `<button class="web-result" data-wiki-result="${i}"><small>ja.wikipedia.org</small><h3>${esc(p.title)}</h3><p>${esc(p.extract || 'タップして記事を読む')}</p></button>`).join('') || stateBox('記事が見つかりません。検索語を変えるか、Web検索を利用してください。')}${N.link('https://www.google.com/search?q=' + encodeURIComponent(state.query), 'Googleでも検索')}`;
         root.querySelectorAll('[data-wiki-result]').forEach(el => el.onclick = () => { const page = pages[Number(el.dataset.wikiResult)]; browserNavigate({type: 'article', pageid: page.pageid, title: page.title, url: N.safeURL(page.fullurl) || `https://ja.wikipedia.org/?curid=${page.pageid}`}); });
       }
     } catch (error) { if (root.isConnected && !controller.signal.aborted) root.innerHTML = stateBox(N.errorText(error), 'webReload') + N.link('https://www.google.com/search?q=' + encodeURIComponent(state.query || state.title || ''), 'Googleで検索'); }
@@ -298,12 +311,12 @@
     const state = browserHistory[browserIndex]; if (!N.safeURL(state.url)) return;
     if (webBookmarks.some(b => b.url === state.url)) return A.toast('すでに保存されています');
     const next = [{title: state.title || state.query || new URL(state.url).hostname, url: state.url}, ...webBookmarks].slice(0, 100);
-    if (A.save('webBookmarks', next)) { webBookmarks = next; A.toast('ページを保存しました'); }
+    if (A.save('webBookmarks', next)) { webBookmarks = next; A.toast('ページを保存済み'); }
   };
   A.actions.webShare = () => { const s = browserHistory[browserIndex]; N.share(s.title || 'Webページ', '', s.url); };
   A.actions.webPreview = () => {
     const s = browserHistory[browserIndex]; if (!N.safeURL(s.url) || !$('#web-preview')) return;
-    $('#web-preview').innerHTML = `<p class="connected-caption">空白・拒否画面の場合は「実際のサイトを開く」を使ってください。ログインや決済は外部ブラウザで行ってください。</p><iframe class="web-frame" title="外部サイトの制限付きプレビュー" sandbox="allow-scripts allow-forms allow-popups" referrerpolicy="no-referrer" src="${esc(s.url)}"></iframe>`;
+    $('#web-preview').innerHTML = `<p class="connected-caption">表示不可・ログイン・決済は外部サイトへ</p><iframe class="web-frame" title="外部サイトの制限付きプレビュー" sandbox="allow-scripts allow-forms allow-popups" referrerpolicy="no-referrer" src="${esc(s.url)}"></iframe>`;
   };
   A.updateWidgets();
 })();
