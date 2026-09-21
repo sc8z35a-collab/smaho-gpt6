@@ -45,3 +45,9 @@
 .screen-dark-mode .ev-sketch{--sk-accent:#dcc0cf;--sk-tint:#bd90ae1b}.screen-dark-mode .sk-hero{background:linear-gradient(135deg,#44313e,#35343a);color:#eedee7}.screen-dark-mode .sk-hero>span{color:#d2a7bd}.screen-dark-mode .ev-sketch button[aria-pressed=true]:not(.ev-swatch){background:#533f50;color:#efd4e5}.screen-dark-mode .sk-help p{color:#c4b9c6}
 @media(max-width:360px){.sk-hero{padding:19px}.sk-hero h1{font-size:23px}.sk-palette.ev-drawing-tools{gap:8px}.sk-palette .ev-swatch{width:25px;height:25px}.sk-viewport{padding:8px}.sk-settings{gap:12px}.sk-gallery-tools{gap:5px}.sk-gallery-tools button{padding-inline:8px}}
 @media(max-height:500px){.sk-viewport{max-height:70vh}}
+
+/* Canvas navigation and reversible object transforms. */
+.sk-focused .sk-title-row,.sk-focused .sk-meta,.sk-focused .sk-palette,.sk-focused .sk-settings,.sk-focused .sk-options{display:none}
+.sk-focused .sk-viewport{max-height:68vh}.sk-focused .sk-command-bar{position:sticky;top:0;z-index:2;background:var(--app-bg,#f8f7fa);padding:6px 0}
+.sk-viewport #ev-canvas[data-tool=pan]{cursor:grab}.sk-viewport #ev-canvas[data-tool=pan]:active{cursor:grabbing}.sk-viewport #ev-canvas[data-tool=select]{cursor:move}
+.sk-selection>span{flex-basis:100%}.sk-selection button{font-size:10px;min-height:38px}
