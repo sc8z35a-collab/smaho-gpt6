@@ -500,8 +500,8 @@
   else r.frames=[rvSnapshot(r)];
  }
  function rvSave(){
-  rvSaveOK=A.save('reversiState',reversi);const el=$('#reversi-save');
-  if(el){el.textContent=rvSaveOK?'この端末に保存済み':'保存できませんでした。棋譜を書き出して保管してください';el.classList.toggle('save-failed',!rvSaveOK);}
+  rvSaveOK=A.save('reversiState',reversi)&&!(reversi.over&&reversi.mode==='cpu'&&!reversi.counted);const el=$('#reversi-save');
+  if(el){el.textContent=rvSaveOK?'この端末に保存済み':'一部を保存できませんでした。棋譜を書き出して保管してください';el.classList.toggle('save-failed',!rvSaveOK);}
   return rvSaveOK;
  }
  function rvStats(){
@@ -517,7 +517,7 @@
    stats[diff>0?'wins':diff<0?'losses':'draws']++;if(diff>0)stats.legacyWins++;
    stats.ids=[...stats.ids,r.id].slice(-100);if(!A.save('reversiStats',stats))return;
   }
-  A.save('reversiWins',stats.legacyWins);r.counted=true;
+  if(A.save('reversiWins',stats.legacyWins))r.counted=true;
  }
  function rvUndoIndex(){
   if(!reversi||reversi.over)return -1;
@@ -575,18 +575,20 @@
  }
  function renderReversi(before=null){
   const root=$('#reversi-board');if(!root)return;
-  const r=reversi,view=rvReview>=0?r.frames[rvReview]:r,legal=rvEngine.moves(view.board,view.turn),canPlay=rvCanPlay(),animate=before&&!rvReduced();
+  const r=reversi,view=rvReview>=0?r.frames[rvReview]:r,legal=rvEngine.moves(view.board,view.turn),canPlay=rvCanPlay(),animate=before&&!rvReduced(),updateMotion=before||!rvAnimating||rvReduced();
   $('.rv-studio').dataset.theme=r.theme;
-  root.classList.toggle('rv-instant',!animate);root.setAttribute('aria-busy',String(rvBusy));
+  if(updateMotion)root.classList.toggle('rv-instant',!animate);root.setAttribute('aria-busy',String(rvBusy));
   const preview=rvPreview>=0&&canPlay?rvEngine.flips(view.board,rvPreview,view.turn):[];
   $('#reversi-preview').textContent=preview.length?`${rvCoordinate(rvPreview)} · ${preview.length}枚を裏返せます`:'座標を選んで着手。矢印キーでも移動できます';
   [...root.children].forEach((cell,i)=>{
    const v=view.board[i],was=before?.[i],isLegal=canPlay&&legal.includes(i),disc=cell.querySelector('.reversi-disc');
    cell.dataset.value=v;cell.classList.toggle('rv-legal',isLegal&&r.showLegal);cell.classList.toggle('rv-last',view.last===i);cell.classList.toggle('rv-best',rvHint===i);cell.classList.toggle('rv-preview',preview.includes(i));
-   cell.classList.toggle('rv-new',!!animate&&!was&&!!v);cell.classList.toggle('rv-turning',!!animate&&!!was&&was!==v);
-   const distance=r.last<0?0:Math.max(Math.abs(i%8-r.last%8),Math.abs((i/8|0)-(r.last/8|0)));
-   disc.style.transitionDelay=animate&&was&&was!==v?`${distance*24}ms`:'0ms';
-   disc.style.transform=v===2?'rotateY(180deg)':'rotateY(0deg)';
+   if(updateMotion){
+    cell.classList.toggle('rv-new',!!animate&&!was&&!!v);cell.classList.toggle('rv-turning',!!animate&&!!was&&was!==v);
+    const distance=r.last<0?0:Math.max(Math.abs(i%8-r.last%8),Math.abs((i/8|0)-(r.last/8|0)));
+    disc.style.transitionDelay=animate&&was&&was!==v?`${distance*24}ms`:'0ms';
+    disc.style.transform=v===2?'rotateY(180deg)':'rotateY(0deg)';
+   }
    cell.querySelector('.rv-flip-count').textContent=(isLegal&&r.showLegal)||rvHint===i?rvEngine.flips(view.board,i,view.turn).length:'';
    cell.setAttribute('aria-disabled',String(!isLegal));cell.tabIndex=i===rvFocus?0:-1;
    cell.setAttribute('aria-label',`${rvCoordinate(i)} ${v?rvColor(v):isLegal?'着手可能、'+rvEngine.flips(view.board,i,view.turn).length+'枚返せます':'空'}${view.last===i?'、直前の着手':''}${rvHint===i?'、推奨手':''}`);
@@ -601,10 +603,11 @@
   $('#reversi-legal').textContent=view.over?'対局終了':`合法手 ${legal.length}`;
   $('#reversi-status').textContent=rvReview>=0?`棋譜 ${rvReview} / ${r.frames.length-1}${rvBusy?' · 分析中':''}`:r.paused&&!r.over?'一時停止中 · 再開で続きから':view.over?(black===white?'引き分け':`${black>white?'黒':'白'}の勝ち · ${Math.abs(black-white)}枚差`):`${view.pass?rvColor(view.pass)+'は置けずパス · ':''}${rvColor(view.turn)}${rvBusy?'が思考中':rvAnimating?'の番へ':'の番'}`;
   $('#reversi-status').classList.toggle('thinking',rvBusy);
-  $('#reversi-engine').textContent=rvReview>=0?'振り返り中は着手・NPC思考を停止':rvInfo||'端末内で思考 · 対局は自動保存';
+  $('#reversi-engine').textContent=rvInfo||(rvReview>=0?'振り返り中は着手・NPC思考を停止':'端末内で思考 · 対局は自動保存');
   $('#reversi-last').textContent=view.last>=0?`直前 ${rvColor(view.mover||view.board[view.last])} ${rvCoordinate(view.last)} · ${view.flipped}枚反転`:'黒から開始 · 四隅と置ける場所を大切に';
   $('#reversi-undo').disabled=rvReview>=0||rvUndoIndex()<0;
-  $('#reversi-hint').disabled=!rvCanAnalyze();$('#reversi-hint').textContent=rvReview>=0?'局面分析':'ヒント';$('#reversi-review').disabled=r.frames.length<2;
+  const analyzing=rvBusy&&(rvReview>=0||r.mode==='local'||r.turn===r.human);
+  $('#reversi-hint').disabled=!rvCanAnalyze()&&!analyzing;$('#reversi-hint').textContent=analyzing?'分析を中止':rvReview>=0?'局面分析':'ヒント';$('#reversi-review').disabled=r.frames.length<2;
   $('#reversi-guides').setAttribute('aria-pressed',String(r.showLegal));
   $('#reversi-guides').textContent=r.showLegal?'候補 ON':'候補 OFF';
   $('#reversi-review-tools').hidden=rvReview<0;$('#reversi-replay-back').disabled=rvReview<=0;$('#reversi-replay-next').disabled=rvReview>=r.frames.length-1;
@@ -614,7 +617,7 @@
   $('#reversi-coach').hidden=!rvCoach;$('#reversi-coach').textContent=rvCoach;
   $('#reversi-pause').textContent=r.paused?'対局を再開':'一時停止';$('#reversi-pause').disabled=r.over||rvReview>=0;$('#reversi-pause').setAttribute('aria-pressed',String(r.paused));
   $('#reversi-theme').textContent=r.theme==='midnight'?'盤色：深藍':'盤色：翡翠';
-  $('#reversi-save').textContent=rvSaveOK?'この端末に保存済み':'保存できませんでした。棋譜を書き出して保管してください';$('#reversi-save').classList.toggle('save-failed',!rvSaveOK);
+  $('#reversi-save').textContent=rvSaveOK?'この端末に保存済み':'一部を保存できませんでした。棋譜を書き出して保管してください';$('#reversi-save').classList.toggle('save-failed',!rvSaveOK);
   const range=$('#reversi-timeline');range.max=r.frames.length-1;range.value=rvReview>=0?rvReview:r.frames.length-1;range.disabled=r.frames.length<2;range.setAttribute('aria-valuetext',`${range.value}手目 / ${r.frames.length-1}手`);
   const list=$('#reversi-moves'),signature=r.frames.map(f=>f.last).join(',');
   if(list.dataset.signature!==signature){list.dataset.signature=signature;list.innerHTML=r.frames.map((f,i)=>`<li><button data-action="reversiJump" data-frame="${i}" aria-label="${i===0?'開始局面':i+'手目 '+rvColor(f.mover)+' '+rvCoordinate(f.last)+(f.pass?'、'+rvColor(f.pass)+'パス':'')}">${i===0?'開始':`${i}. ${rvColor(f.mover)} ${rvCoordinate(f.last)}${f.pass?' / パス':''}`}</button></li>`).join('');}
@@ -659,8 +662,9 @@
  A.actions.reversiMove=el=>{if(!rvCanPlay())return;rvMove(Number(el.dataset.index));};
  A.actions.reversiUndo=()=>{const index=rvUndoIndex();if(index<0||rvReview>=0)return;rvCancel();reversi.frames=reversi.frames.slice(0,index+1);Object.assign(reversi,rvSnapshot(reversi.frames[index]));reversi.assisted=true;rvInfo='あなたの着手前まで戻しました';rvSave();renderReversi();scheduleAI();};
  A.actions.reversiHint=()=>{
+  if(rvBusy&&(rvReview>=0||reversi.mode==='local'||reversi.turn===reversi.human)){rvCancel();rvInfo='分析を中止しました';renderReversi();return;}
   if(!rvCanAnalyze())return;const view=rvReview>=0?reversi.frames[rvReview]:reversi;
-  rvBusy=true;rvHint=-1;rvCoach='';if(rvReview<0){reversi.assisted=true;rvSave();}rvInfo='おすすめの一手を探索中';renderReversi();
+  rvBusy=true;rvHint=-1;rvCoach='';if(!reversi.over){reversi.assisted=true;rvSave();}rvInfo='おすすめの一手を探索中';renderReversi();
   rvSearch(view.board.slice(),view.turn,reversi.level==='expert'?'expert':'hard',result=>rvWaitForBoard(()=>{
    rvBusy=false;const legal=rvEngine.moves(view.board,view.turn);rvHint=legal.includes(result.index)?result.index:-1;
    if(rvHint<0){rvInfo='置ける場所がありません';renderReversi();return;}
