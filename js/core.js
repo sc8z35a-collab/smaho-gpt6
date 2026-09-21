@@ -625,17 +625,144 @@
   A.form = (title,html,onSubmit,button='保存') => { A.overlay(`<div class="modal-sheet" style="margin-top:20px"><h3>${title}</h3><form id="modal-form">${html}<div class="modal-actions"><button type="button" class="secondary-button" data-action="closeOverlay">キャンセル</button><button class="primary-button" type="submit">${button}</button></div></form></div>`,'sheet-overlay'); A.$('#modal-form').onsubmit=e=>{e.preventDefault(); const values=Object.fromEntries(new FormData(e.currentTarget)); if(onSubmit(values)!==false)A.closeOverlay();}; };
   A.download = (blob, name) => { const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000); };
   A.actions.home=A.home;A.actions.closeOverlay=A.closeOverlay;
-  A.applySettings = () => { const s=A.settings; A.$('#wallpaper').className='wallpaper '+(s.wallpaper==='default'?'':s.wallpaper);A.$('#phone-screen').classList.toggle('screen-dark-mode',s.dark);A.$('#phone-screen').style.setProperty('--brightness',.4 + s.brightness*.006);A.save('settings',s); };
-  A.controls = () => {
-    const s=A.settings;
-    A.overlay(`${A.overlayTitle('コントロールセンター')}<div class="control-grid"><div class="control-connectivity">${[['airplane','airplane','機内モード','orange'],['cellular','signal','モバイル通信','green'],['wifi','wifi','Wi-Fi',''],['bluetooth','bluetooth','Bluetooth','']].map(([key,ic,label,color])=>`<button class="control-round ${color} ${s[key]?'on':''}" data-action="controlToggle" data-key="${key}" aria-label="${label}" aria-pressed="${s[key]}">${A.icon(ic)}</button>`).join('')}</div><div class="control-music"><strong>${A.music?.track?.title||'ひと息、つこう。'}</strong><small>${A.music?.playing?'aura originals':'音楽'}</small><div><button data-action="musicPrevious" aria-label="前の曲">${A.icon('previous')}</button><button data-action="controlPlay" aria-label="再生・一時停止">${A.icon(A.music?.playing?'pause':'play')}</button><button data-action="musicNext" aria-label="次の曲">${A.icon('next')}</button></div></div><button class="control-tile ${s.focus?'on':''}" data-action="controlToggle" data-key="focus">${A.icon('moon')}集中モード</button><button class="control-tile ${s.dark?'on':''}" data-action="controlToggle" data-key="dark">${A.icon('sun')}ダークモード</button><label class="control-slider">${A.icon('sun')}<input aria-label="画面の明るさ" id="control-brightness" type="range" min="10" max="100" value="${s.brightness}"></label><label class="control-slider">${A.icon('volume')}<input aria-label="音量" id="control-volume" type="range" min="0" max="100" value="${s.volume}"></label><button class="control-single" data-action="flashlight" aria-label="画面ライト">${A.icon('flashlight')}</button><button class="control-single" data-app="clock" aria-label="時計">${A.icon('timer')}</button><button class="control-single" data-app="calculator" aria-label="計算機">${A.icon('calculator')}</button><button class="control-single" data-app="camera" aria-label="カメラ">${A.icon('camera')}</button><button class="control-tile" data-action="lock">${A.icon('lock')}画面をロック</button><button class="control-tile" data-action="about">${A.icon('globe')}auraについて</button></div><p class="control-footer">通信はデモ。明るさ・音量はaura内のみ</p>`);
-    A.$('#control-brightness').oninput=e=>{s.brightness=+e.target.value;A.applySettings();};
-    A.$('#control-volume').oninput=e=>{s.volume=+e.target.value;A.music?.setVolume();A.save('settings',s);};
+  A.applySettings = () => { const s=A.settings; A.$('#wallpaper').className='wallpaper '+(s.wallpaper==='default'?'':s.wallpaper);A.$('#phone-screen').classList.toggle('screen-dark-mode',s.dark);A.$('#phone-screen').style.setProperty('--brightness',.4 + s.brightness*.006);A.$('#phone-screen').style.setProperty('--warmth',s.warm?'.3':'0');A.save('settings',s); };
+  // Control desk: all settings are local to aura, never native device controls.
+  const controlScenes = {
+    daily:{label:'日常',icon:'sun',values:{brightness:100,volume:60,dark:false,focus:false,warm:false}},
+    focus:{label:'集中',icon:'moon',values:{brightness:80,volume:25,dark:false,focus:true,warm:false}},
+    night:{label:'ナイト',icon:'moon',values:{brightness:45,volume:15,dark:true,focus:true,warm:true}}
   };
-  A.actions.controlToggle=el=>{const key=el.dataset.key;A.settings[key]=!A.settings[key];if(key==='airplane' && A.settings.airplane)A.settings.cellular=false;A.applySettings();A.controls();};
+  const controlShortcuts = [
+    ['flashlight','flashlight','画面ライト'],['clock','timer','時計'],['calculator','calculator','計算機'],['camera','camera','カメラ'],
+    ['notes','document','メモ'],['recorder','mic','録音'],['focus','moon','集中'],['settings','settings','設定']
+  ];
+  const controlSelection=()=>{
+    const saved=Array.isArray(A.settings.controlShortcuts)?[...new Set(A.settings.controlShortcuts)].filter(id=>controlShortcuts.some(([key])=>key===id)):[];
+    return saved.length?saved:controlShortcuts.slice(0,4).map(([id])=>id);
+  };
+  const currentControlScene=()=>Object.keys(controlScenes).find(id=>Object.entries(controlScenes[id].values).every(([key,value])=>(key==='warm'?!!A.settings[key]:A.settings[key])===value));
+  const controlVisible=()=>!A.$('#overlay').hidden&&A.$('#overlay').classList.contains('controls-overlay');
+  const controlFormat=seconds=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
+  const controlPatch=values=>{
+    const next={...A.settings,...values};
+    if(!A.save('settings',next))return false;
+    Object.assign(A.settings,values);A.applySettings();
+    if(Object.hasOwn(values,'volume')&&A.music?.playing)A.music.setVolume();
+    return true;
+  };
+  // The small timer is independent of the Clock and Focus app timers.
+  const storedControlTimer=A.load('controlTimer',null);
+  const normalizeControlTimer=value=>value&&typeof value.id==='string'&&Number.isInteger(value.duration)&&value.duration>0&&value.duration<=3600&&Number.isInteger(value.remaining)&&value.remaining>0&&value.remaining<=value.duration&&Number.isFinite(value.end)&&value.end>=0&&value.end<=Date.now()+3600000?value:null;
+  let controlTimer=normalizeControlTimer(storedControlTimer);
+  window.addEventListener('storage',e=>{
+    if(e.key!=='aura.controlTimer')return;
+    controlTimer=normalizeControlTimer(A.load('controlTimer',null));
+    if(controlVisible())A.controls();
+  });
+  const controlRemaining=()=>controlTimer?Math.max(0,controlTimer.end?Math.ceil((controlTimer.end-Date.now())/1000):controlTimer.remaining):0;
+  const storeControlTimer=next=>{if(!A.save('controlTimer',next))return false;controlTimer=next;return true;};
+  const controlQuickMarkup=()=>controlSelection().map(id=>{
+    const [,icon,label]=controlShortcuts.find(([key])=>key===id);
+    return `<button class="cc-shortcut" ${id==='flashlight'?'data-action="flashlight"':`data-app="${id}"`} aria-label="${label}"><span>${A.icon(icon)}</span><small>${label}</small></button>`;
+  }).join('');
+  A.controls = () => {
+    const root=A.$('#overlay'),refresh=controlVisible(),position=refresh?root.scrollTop:0;
+    const active=refresh?document.activeElement:null,identity=active?.dataset,activeId=active?.id;
+    const editing=refresh&&A.$('#cc-customize')?.open;
+    const s=A.settings,music=A.music,selection=controlSelection();
+    const scene=currentControlScene();
+    const toggle=(key,icon,label,detail)=>`<button class="cc-tile ${s[key]?'on':''}" data-action="controlToggle" data-key="${key}" aria-pressed="${!!s[key]}"><span class="cc-tile-icon">${A.icon(icon)}</span><span><strong>${label}</strong><small>${detail}</small></span><i class="cc-led" aria-hidden="true"></i></button>`;
+    A.overlay(`<div class="cc-heading"><div><span class="cc-eyebrow">AURA / CONTROL DESK</span><h2>コントロールセンター</h2></div><button class="close-button" data-action="closeOverlay" aria-label="閉じる">${A.icon('close')}</button></div>
+      <div class="cc-caption"><span><i></i>あなたのペースに。</span><span id="cc-time"></span></div>
+      <div class="cc-scenes" role="group" aria-label="一括設定">${Object.entries(controlScenes).map(([id,preset])=>`<button data-action="controlScene" data-id="${id}" aria-pressed="${scene===id}">${A.icon(preset.icon)}${preset.label}</button>`).join('')}</div>
+      <div class="cc-dashboard">
+        <section class="cc-surface cc-connections" aria-label="通信シミュレーション"><div class="cc-card-label">接続<span>DEMO</span></div><div class="cc-connection-grid">${[['airplane','airplane','機内モード','amber'],['cellular','signal','モバイル通信','mint'],['wifi','wifi','Wi-Fi','blue'],['bluetooth','bluetooth','Bluetooth','blue']].map(([key,icon,label,color])=>`<button class="cc-connection ${color} ${s[key]?'on':''}" data-action="controlToggle" data-key="${key}" aria-label="${label}" aria-pressed="${!!s[key]}"><span class="cc-knob">${A.icon(icon)}</span><strong>${label}</strong><small>${s[key]?'オン':'オフ'}</small></button>`).join('')}</div></section>
+        <section class="cc-surface cc-player ${music?.playing?'is-playing':''}" aria-label="auraオリジナル音源"><div class="cc-card-label">音源<span>ON DEVICE</span></div><div class="cc-record-scene" aria-hidden="true"><div class="cc-album"><i></i><span>slow<br>moments.</span></div><div class="cc-record"><i></i></div><div class="cc-tonearm"></div></div><strong id="cc-track">${A.escape(music?.track?.title||'Golden Hour')}</strong><small class="cc-artist">aura originals · 生成音楽</small><div class="cc-transport"><button data-action="musicPrevious" aria-label="前の曲">${A.icon('previous')}</button><button data-action="controlPlay" aria-label="${music?.playing?'一時停止':'再生'}">${A.icon(music?.playing?'pause':'play')}</button><button data-action="musicNext" aria-label="次の曲">${A.icon('next')}</button></div><input id="control-seek" class="cc-seek" type="range" min="0" max="${music?.track?.length||192}" value="${Math.floor(music?.elapsed?.()||0)}" aria-label="音源の再生位置"><div class="cc-track-time"><span id="cc-elapsed">0:00</span><span>${controlFormat(music?.track?.length||192)}</span></div></section>
+        ${toggle('focus','moon','集中モード',s.focus?'バナーを抑制中':'通知を受け取る')}${toggle('dark','layers','ダーク',s.dark?'ダーク表示':'ライト表示')}
+        <section class="cc-surface cc-levels" aria-label="表示と音源音量">${[['brightness','sun','明るさ',10],['volume','volume','音源音量',0]].map(([key,icon,label,min])=>`<div class="cc-level"><div class="cc-level-head"><label for="control-${key}">${A.icon(icon)}${label}</label><output id="cc-${key}-value" for="control-${key}">${s[key]}%</output></div><input id="control-${key}" type="range" min="${min}" max="100" value="${s[key]}" aria-label="${key==='brightness'?'画面の明るさ':'音量'}" style="--level:${s[key]}%"></div>`).join('')}<div class="cc-level-tools"><button data-action="controlToggle" data-key="warm" aria-pressed="${!!s.warm}">${A.icon('sun')}暖色</button><button data-action="controlMute" aria-pressed="${s.volume===0}">${A.icon('volume')}${s.volume===0?'解除':'ミュート'}</button></div></section>
+        <section class="cc-surface cc-timer" aria-label="クイックタイマー"><div class="cc-card-label">クイックタイマー${A.icon('timer')}</div><div class="cc-timer-face"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="43"/><circle id="cc-timer-ring" cx="50" cy="50" r="43" pathLength="100"/></svg><div><strong id="cc-timer-time">05:00</strong><small id="cc-timer-status">時間を選択</small></div></div><div class="cc-timer-presets">${[1,5,15].map(minutes=>`<button data-action="controlTimerStart" data-minutes="${minutes}" ${controlTimer?'disabled':''}>${minutes}分</button>`).join('')}</div><div class="cc-timer-actions"><button id="cc-timer-pause" data-action="controlTimerPause" ${controlTimer?'':'disabled'}>${controlTimer?.end?'一時停止':'再開'}</button><button data-action="controlTimerReset" aria-label="タイマーをリセット" ${controlTimer?'':'disabled'}>${A.icon('refresh')}</button></div></section>
+      </div>
+      <div class="cc-section-heading"><h3>クイックアクセス</h3><span>自分だけの道具箱</span></div><div class="cc-shortcuts" id="cc-shortcuts">${controlQuickMarkup()}</div>
+      <details class="cc-customize" id="cc-customize" ${editing?'open':''}><summary>${A.icon('edit')}ショートカットを編集<span>1〜8個</span></summary><div class="cc-choices">${controlShortcuts.map(([id,icon,label])=>`<label><input type="checkbox" value="${id}" ${selection.includes(id)?'checked':''}>${A.icon(icon)}${label}</label>`).join('')}</div></details>
+      <div class="cc-bottom-tools"><button data-action="controlToggle" data-key="reduceMotion" aria-pressed="${!!s.reduceMotion}">${A.icon('layers')}動きを抑える</button><button data-action="lock">${A.icon('lock')}ロック</button></div>
+      <p class="cc-footnote">通信はシミュレーション。表示・音源音量はaura内のみ。<br>タイマーはページ終了・スリープ中の通知を保証しません。</p>`,'controls-overlay');
+    for(const key of ['brightness','volume'])A.$('#control-'+key).oninput=e=>{
+      const value=Number(e.target.value);
+      if(!controlPatch({[key]:value})){e.target.value=s[key];return;}
+      e.target.style.setProperty('--level',value+'%');A.$('#cc-'+key+'-value').textContent=value+'%';
+      A.$$('.cc-scenes button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.id===currentControlScene())));
+      if(key==='volume'){const mute=A.$('[data-action="controlMute"]');mute.setAttribute('aria-pressed',String(value===0));mute.innerHTML=A.icon('volume')+(value===0?'解除':'ミュート');}
+    };
+    A.$('#control-seek').oninput=e=>{
+      if(!A.music)return;const playing=A.music.playing;
+      if(playing)A.music.pause();A.music.position=Number(e.target.value);if(playing)A.music.start();A.controlTick();
+    };
+    A.$$('.cc-choices input').forEach(input=>input.onchange=()=>{
+      const chosen=A.$$('.cc-choices input:checked').map(el=>el.value);
+      if(!chosen.length){input.checked=true;A.toast('ショートカットを1個以上選んでください');return;}
+      if(!controlPatch({controlShortcuts:chosen})){input.checked=!input.checked;return;}
+      A.$('#cc-shortcuts').innerHTML=controlQuickMarkup();
+    });
+    A.controlTick();
+    if(refresh){
+      const target=activeId?A.$('#'+activeId):identity?.action?A.$$('[data-action]',root).find(el=>el.dataset.action===identity.action&&el.dataset.key===identity.key&&el.dataset.id===identity.id&&el.dataset.minutes===identity.minutes):null;
+      (target&&!target.disabled?target:A.$('.close-button',root))?.focus({preventScroll:true});
+    }
+    root.scrollTop=position;
+  };
+  A.actions.controlToggle=el=>{
+    const key=el.dataset.key;
+    if(!['airplane','cellular','wifi','bluetooth','focus','dark','warm','reduceMotion'].includes(key))return;
+    const values={[key]:!A.settings[key]};
+    if(key==='airplane'&&values.airplane)values.cellular=false;
+    if(key==='cellular'&&values.cellular)values.airplane=false;
+    if(controlPatch(values))A.controls();
+  };
+  A.actions.controlScene=el=>{
+    const preset=controlScenes[el.dataset.id];if(!preset)return;
+    const before=Object.fromEntries(Object.keys(preset.values).map(key=>[key,A.settings[key]??false]));
+    if(!controlPatch(preset.values))return;A.controls();
+    A.toast(`${preset.label}に設定 · 明るさ${preset.values.brightness}% / 音源${preset.values.volume}%`,{label:'戻す',onAction:()=>{if(controlPatch(before)&&controlVisible())A.controls();}});
+  };
+  A.actions.controlMute=()=>{const volume=A.settings.volume;if(controlPatch(volume?{controlPreviousVolume:volume,volume:0}:{volume:Math.max(1,Math.min(100,Number(A.settings.controlPreviousVolume)||60))}))A.controls();};
+  A.actions.controlTimerStart=el=>{
+    const minutes=Number(el.dataset.minutes);if(controlTimer||![1,5,15].includes(minutes))return;
+    if(storeControlTimer({id:A.id(),duration:minutes*60,remaining:minutes*60,end:Date.now()+minutes*60000}))A.controls();
+  };
+  A.actions.controlTimerPause=()=>{
+    if(!controlTimer)return;
+    const remaining=controlRemaining();if(!remaining){A.controlTick();return;}
+    if(storeControlTimer({...controlTimer,remaining,end:controlTimer.end?0:Date.now()+remaining*1000}))A.controls();
+  };
+  A.actions.controlTimerReset=()=>{if(storeControlTimer(null))A.controls();};
+  A.controlTick=()=>{
+    if(controlTimer?.end&&controlRemaining()===0){
+      const finished=controlTimer;
+      if(storeControlTimer(null)){
+        A.notify?.({app:'clock',title:'クイックタイマー終了',body:`${finished.duration/60}分が経過しました`,key:'control-timer:'+finished.id});
+        A.toast('クイックタイマーが終了しました');
+        if(controlVisible()){A.controls();return;}
+      }
+    }
+    if(!controlVisible())return;
+    A.$('#cc-time').textContent=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+    A.$('#cc-timer-time').textContent=controlTimer?controlFormat(controlRemaining()):'05:00';
+    A.$('#cc-timer-status').textContent=controlTimer?(controlTimer.end?'カウント中':'一時停止中'):'時間を選択';
+    A.$('#cc-timer-ring').style.strokeDashoffset=controlTimer?100-controlRemaining()/controlTimer.duration*100:0;
+    const music=A.music,seek=A.$('#control-seek');
+    if(music){const elapsed=Math.floor(music.elapsed());if(document.activeElement!==seek)seek.value=elapsed;A.$('#cc-elapsed').textContent=controlFormat(elapsed);}
+  };
   A.actions.lock=A.lock;
   A.actions.controlPlay=()=>{A.music?.toggle();A.controls();};
-  A.actions.flashlight=()=>{const el=document.createElement('div');el.className='flashlight-screen';el.innerHTML='<button>消灯</button>';el.onclick=()=>el.remove();A.$('#phone-screen').appendChild(el);};
+  A.actions.flashlight=()=>{
+    if(A.$('.flashlight-screen'))return;
+    const returnFocus=document.activeElement,el=document.createElement('div');
+    el.className='flashlight-screen';el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');el.setAttribute('aria-label','画面ライト');el.innerHTML='<button>消灯</button>';
+    const close=()=>{el.remove();if(returnFocus?.isConnected)returnFocus.focus({preventScroll:true});};
+    el.onclick=close;
+    el.onkeydown=e=>{if(e.key==='Escape'){e.stopPropagation();close();}if(e.key==='Tab'){e.preventDefault();el.querySelector('button').focus();}};
+    A.$('#phone-screen').appendChild(el);el.querySelector('button').focus();
+  };
   A.actions.about=()=>A.overlay(`${A.overlayTitle('About this little world')}<div class="about-hero">aura.</div><p class="about-copy">手のひらに、もうひとつの世界。<br>いつもの日常に、少しの好奇心を。</p><div class="about-stats"><div><strong>30</strong><span>APPS</span></div><div><strong>08</strong><span>GAMES</span></div><div><strong>∞</strong><span>CURIOSITY</span></div></div><p class="about-note">auraは、ブラウザの中で動く架空のスマートフォンです。実際のOS、通信サービス、銀行・医療サービスではありません。<br><br>天気はOpen-Meteo、地図はOpenStreetMap、記事検索はWikipediaと接続します。電話・SMS・メールは端末の対応アプリで最終操作を行います。デモと実連携は区別されます。ヘルスケアの自動計測と実決済は未接続です。<br><br>メモ、設定、写真などはこのブラウザに保存されます。録音はアプリを閉じるまで保持されます。データは他の端末へ同期されません。カメラ・マイクの利用には許可が必要です。</p><p class="control-footer">auraOS 4.5 / NOTIFICATIONS</p>`);
   A.spotlight = () => { A.overlay(`${A.overlayTitle('見つけよう。')}<label class="spotlight-input">${A.icon('search')}<input id="spotlight-query" placeholder="アプリを検索" aria-label="アプリを検索" autocomplete="off"></label><p class="spotlight-label">あなたの小さな世界</p><div class="spotlight-results" id="spotlight-results"></div>`);const render=q=>{const matches=Object.values(A.apps).filter(a=>(a.name+a.id).toLowerCase().includes(q.toLowerCase()));A.$('#spotlight-results').innerHTML=matches.map(a=>A.launcher(a)).join('')||'<p style="grid-column:span 4;font-size:12px;opacity:.65">該当するアプリはありません。</p>';};render('');A.$('#spotlight-query').oninput=e=>render(e.target.value);setTimeout(()=>A.$('#spotlight-query')?.focus(),120); };
   A.updateClock = () => {const d=new Date();const time=d.toLocaleTimeString('ja-JP',{hour:'numeric',minute:'2-digit',hour12:false});A.$('#status-time').textContent=time;A.$('#lock-time').textContent=time;const date=d.toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'});A.$('#home-date').textContent=date;A.$('#lock-date').textContent=date;A.$('#widget-day').textContent=d.getDate();A.$('#widget-weekday').textContent=['日','月','火','水','木','金','土'][d.getDay()]+'曜日';A.clockTick?.();A.music?.tick();A.updateWidgets?.();};
@@ -975,7 +1102,7 @@
     if(music?.track){A.$('#lock-track-title').textContent=music.track.title;const play=A.$('#lock-play');if(play.dataset.playing!==String(music.playing)){play.innerHTML=A.icon(music.playing?'pause':'play');play.dataset.playing=String(music.playing);}player.classList.toggle('is-playing',!!music.playing);}
   };
   const updateClock=A.updateClock;
-  A.updateClock=()=>{updateClock();A.updateSystem();};
+  A.updateClock=()=>{updateClock();A.updateSystem();A.controlTick();};
   // Directional gestures begin outside inputs and do not steal normal vertical scrolling.
   let swipe=null;
   const screen=A.$('#phone-screen');
@@ -995,7 +1122,7 @@
   A.overlay=(html,extra='')=>{if(A.$('#overlay').hidden)overlayReturnFocus=document.activeElement;baseOverlay(html,extra);const overlay=A.$('#overlay');overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label',overlay.querySelector('h2,h3')?.textContent||'メニュー');(overlay.querySelector('input:not([type=range]),.close-button,button'))?.focus({preventScroll:true});};
   A.closeOverlay=()=>{const wasOpen=!A.$('#overlay').hidden;baseCloseOverlay();if(wasOpen&&overlayReturnFocus?.isConnected)overlayReturnFocus.focus({preventScroll:true});};
   A.actions.closeOverlay=A.closeOverlay;
-  document.addEventListener('keydown',e=>{if(e.key!=='Tab'||A.$('#overlay').hidden||!e.target.closest('#overlay,#toast'))return;const items=[...A.$$('button:not(:disabled),input,textarea,select,a[href]',A.$('#overlay')),...A.$$('#toast.visible button')].filter(el=>el.getClientRects().length);const first=items[0],last=items.at(-1);if(!first)return;if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'||A.$('#overlay').hidden||!e.target.closest('#overlay,#toast'))return;const items=[...A.$$('button:not(:disabled),input,textarea,select,a[href],summary',A.$('#overlay')),...A.$$('#toast.visible button')].filter(el=>el.getClientRects().length);const first=items[0],last=items.at(-1);if(!first)return;if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}});
   A.$('#home-search').onclick=A.spotlight;A.$('#status-time').onclick=A.notifications;
   A.renderLockNotices();
   A.renderHome();A.applySettings();A.updateClock();setInterval(()=>A.updateClock(),1000);
