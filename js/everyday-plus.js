@@ -166,6 +166,7 @@
   // Reminder studio: keep one canonical model for Today, search and exports.
   let reminderFilter='pending',reminderSort='priority',reminderQuery='',reminderList='*';
   let reminderDraft='',reminderDraftDue='',reminderUndo=null;
+  let reminderSelecting=false,reminderSelected=new Set(),reminderCompact=A.load('reminderCompact',false)===true;
   const reminders=()=>A.reminderModel.get();
   const reminderLists=()=>[...new Set(reminders().map(x=>x.list).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
   const repeatLabel=x=>x.repeat==='daily'?'毎日':x.repeat==='weekly'?'毎週':'';
@@ -182,6 +183,7 @@
     const before=JSON.stringify(reminders());
     if(!A.reminderModel.replace(list))return false;
     reminderUndo={before,after:JSON.stringify(list),label};
+    reminderSelecting=false;reminderSelected.clear();
     const content=$('.ev-reminders'),scroll=content?.scrollTop||0,active=document.activeElement;
     const focus=active?.dataset?{action:active.dataset.action,id:active.dataset.id,step:active.dataset.step}:{};
     render();
@@ -191,7 +193,6 @@
     else if(focus.action)$('#rm-list-heading')?.focus({preventScroll:true});
     return true;
   }
-  const replaceReminders=list=>changeReminders(list,'変更を保存しました');
   function matchesReminder(x,filter) {
     if(filter==='all')return true;
     if(filter==='done')return !!x.done;
@@ -207,16 +208,20 @@
   }
   function reminderRow(x) {
     const steps=x.steps||[],count=steps.filter(s=>s.done).length,overdue=x.due&&x.due<day()&&!x.done;
-    return `<article class="rm-task ${x.done?'is-done':''} ${overdue?'is-overdue':''}">${reminderCheck('reminderToggle',x)}<button class="rm-task-main" data-action="epReminderOpen" data-id="${esc(x.id)}"><strong>${esc(x.text)}</strong><span class="rm-meta"><span class="${overdue?'rm-late':''}">${overdue?'期限超過 · ':''}${esc(dueLabel(x.due))}</span>${x.list?`<span class="rm-list-tag">${esc(x.list)}</span>`:''}${repeatLabel(x)?`<span>↻ ${repeatLabel(x)}</span>`:''}</span>${x.note?`<span class="rm-note-preview">${esc(x.note)}</span>`:''}${steps.length?`<span class="rm-step-meter"><i><b style="width:${count/steps.length*100}%"></b></i><span>手順 ${count}/${steps.length}</span></span>`:''}</button><button class="rm-priority ${x.priority?'is-priority':''}" data-action="rmPriority" data-id="${esc(x.id)}" aria-label="${esc(x.text)}の優先${x.priority?'を解除':'に設定'}" aria-pressed="${!!x.priority}"><svg viewBox="0 0 24 24" fill="${x.priority?'currentColor':'none'}" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1 6.2-5.6-3-5.6 3 1-6.2L3 9.6l6.2-.9Z"/></svg></button></article>`;
+    const selected=reminderSelected.has(x.id);
+    return `<article class="rm-task ${reminderSelecting&&selected?'is-selected':''} ${x.done?'is-done':''} ${overdue?'is-overdue':''}">${reminderSelecting?`<button class="rm-check rm-select ${selected?'is-done':''}" data-action="rmSelect" data-id="${esc(x.id)}" aria-label="${esc(x.text)}を選択" aria-pressed="${selected}"><span>${selected?A.icon('check'):''}</span></button>`:reminderCheck('reminderToggle',x)}<button class="rm-task-main" data-action="${reminderSelecting?'rmSelect':'epReminderOpen'}" data-id="${esc(x.id)}"><strong>${esc(x.text)}</strong><span class="rm-meta"><span class="${overdue?'rm-late':''}">${overdue?'期限超過 · ':''}${esc(dueLabel(x.due))}</span>${x.list?`<span class="rm-list-tag">${esc(x.list)}</span>`:''}${repeatLabel(x)?`<span>↻ ${repeatLabel(x)}</span>`:''}</span>${x.note?`<span class="rm-note-preview">${esc(x.note)}</span>`:''}${steps.length?`<span class="rm-step-meter"><i><b style="width:${count/steps.length*100}%"></b></i><span>手順 ${count}/${steps.length}</span></span>`:''}</button><button ${reminderSelecting?'hidden':''} class="rm-priority ${x.priority?'is-priority':''}" data-action="rmPriority" data-id="${esc(x.id)}" aria-label="${esc(x.text)}の優先${x.priority?'を解除':'に設定'}" aria-pressed="${!!x.priority}"><svg viewBox="0 0 24 24" fill="${x.priority?'currentColor':'none'}" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1 6.2-5.6-3-5.6 3 1-6.2L3 9.6l6.2-.9Z"/></svg></button></article>`;
   }
   function renderReminderResults() {
     const list=visibleReminders(),groups=[['overdue','期限を過ぎています'],['today','今日'],['later','これから'],['none','期限なし'],['done','完了済み']];
+    const visibleIds=new Set(list.map(x=>x.id));
+    reminderSelected=new Set([...reminderSelected].filter(id=>visibleIds.has(id)));
+    renderReminderBatch();
     const group=x=>x.done?'done':!x.due?'none':x.due<day()?'overdue':x.due===day()?'today':'later';
     $('#rm-result-count').textContent=`${list.length}件`;
     $('#ep-reminder-results').innerHTML=list.length?groups.map(([key,label])=>{
       const items=list.filter(x=>group(x)===key);
       return items.length?`<section class="rm-group"><h3 class="${key==='overdue'?'rm-late':''}">${label}<span>${items.length}</span></h3><div class="rm-task-list">${items.map(reminderRow).join('')}</div></section>`:'';
-    }).join(''):`<div class="rm-empty">${A.icon('check')}<h3>${reminderQuery?'見つかりませんでした':reminderFilter==='today'?'今日までのタスクは完了':reminderFilter==='done'?'これから、ひとつずつ':'すっきり、何もありません'}</h3><p>${reminderQuery?'別の言葉で検索するか、条件をリセット。':'新しいタスクは上の入力欄から追加できます。'}</p>${button('rmResetFilters','すべてのタスクを見る')}</div>`;
+    }).join(''):`<div class="rm-empty">${A.icon('check')}<h3>${reminderQuery?'見つかりませんでした':reminderList!=='*'?'このリストに該当するタスクはありません':reminderFilter==='today'?'今日までのタスクは完了':reminderFilter==='done'?'これから、ひとつずつ':'すっきり、何もありません'}</h3><p>${reminderQuery?'別の言葉で検索するか、条件をリセット。':'新しいタスクは上の入力欄から追加できます。'}</p>${button('rmResetFilters','すべてのタスクを見る')}</div>`;
   }
   function renderReminders() {
     const list=reminders(),done=list.filter(x=>x.done).length,todayCount=list.filter(x=>matchesReminder(x,'today')).length,percent=list.length?Math.round(done/list.length*100):0;
@@ -229,13 +234,19 @@
       ${A.search('ep-reminder-query','タスク・メモ・手順を検索')}
       <div class="rm-toolbar"><div class="rm-tabs" aria-label="表示するタスク">${filters.map(([id,label])=>`<button data-action="reminderFilter" data-id="${id}" aria-pressed="${reminderFilter===id}">${label}</button>`).join('')}</div><label class="rm-sort"><span class="rm-sr">グループ内の並び順</span><select id="ep-reminder-sort" aria-label="グループ内の並び順">${[['priority','優先度順'],['due','期限順'],['name','名前順']].map(([id,label])=>`<option value="${id}" ${reminderSort===id?'selected':''}>${label}</option>`).join('')}</select></label></div>
       <div class="rm-list-heading"><h2 id="rm-list-heading" tabindex="-1">${[...filters,...smart].find(x=>x[0]===reminderFilter)?.[1]||'タスク'} <span id="rm-result-count" aria-live="polite"></span></h2><label><span class="rm-sr">リストで絞り込み</span><select id="rm-list-filter" aria-label="リストで絞り込み">${[['*','全リスト'],['','未分類'],...lists.map(x=>[x,x])].map(([id,label])=>`<option value="${esc(id)}" ${reminderList===id?'selected':''}>${esc(label)}</option>`).join('')}</select></label></div>
-      <div id="ep-reminder-results"></div>
-      ${details('整理と共有',button('shareReminders','全タスクを共有')+button('exportReminders','全タスクを書き出す')+(done?button('reminderClearDone','完了済みを削除'):''))}
+      <div class="rm-selection-entry"><button type="button" data-action="rmSelectionMode" aria-pressed="${reminderSelecting}">${reminderSelecting?'選択を終了':'タスクを選択'}</button><span>${reminderSelecting?'表示中のタスクだけをまとめて操作':'選択して、まとめて整理'}</span></div>
+      <div id="rm-batch-tools"></div><div id="ep-reminder-results"></div>
+      ${details('整理と共有',button('rmBulkAdd','まとめて追加')+button('rmCompact',reminderCompact?'ゆったり表示にする':'コンパクト表示にする')+button('shareReminders','全タスクを共有')+button('exportReminders','全タスクを書き出す')+(done?button('reminderClearDone','完了済みを削除'):''))}
+      ${details('キーボード操作','<p class="rm-footnote">N：追加欄へ · /：検索へ<br>Ctrl / ⌘ + Enter：詳細を保存<br>Esc：選択を終了（選択中のみ）</p>')}
       <p class="rm-footnote">このブラウザに保存 · 通知はページが動作中のみ</p>${reminderUndoBar()}`,iconButton('reminderDetails','タスクを追加','plus'));
     $('#ep-reminder-query').value=reminderQuery;$('#ep-reminder-query').oninput=e=>{reminderQuery=e.target.value;renderReminderResults();};
     $('#ep-reminder-sort').onchange=e=>{reminderSort=e.target.value;renderReminderResults();};
     $('#rm-list-filter').onchange=e=>{reminderList=e.target.value;renderReminderResults();};
-    const form=$('#reminder-form');form.elements.text.oninput=e=>{reminderDraft=e.target.value;};
+    $('.ev-reminders').classList.toggle('rm-compact',reminderCompact);
+    bindReminderKeys();
+    const form=$('#reminder-form');
+    form.elements.text.addEventListener('paste',e=>{const text=e.clipboardData?.getData('text');if(text&&text.split(/\r?\n/).filter(x=>x.trim()).length>1){e.preventDefault();openReminderBulk(text);}});
+    form.elements.text.oninput=e=>{reminderDraft=e.target.value;};
     form.onsubmit=e=>{
       e.preventDefault();const text=form.elements.text.value.trim();if(!text)return;
       const next=[...reminders(),{id:A.id(),text,due:reminderDraftDue,list:reminderList==='*'?'':reminderList,done:false}];
@@ -249,22 +260,95 @@
   A.actions.rmQuickDue=el=>{reminderDraftDue=el.dataset.id;document.querySelectorAll('[data-action="rmQuickDue"]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.id===reminderDraftDue));};
   A.actions.rmUndo=()=>{
     if(!reminderUndo)return;
+    reminderSelecting=false;reminderSelected.clear();
     if(JSON.stringify(reminders())!==reminderUndo.after){reminderUndo=null;renderReminders();A.toast('別の変更があるため取り消せません');return;}
     if(A.reminderModel.replace(JSON.parse(reminderUndo.before))){reminderUndo=null;renderReminders();$('#rm-list-heading')?.focus({preventScroll:true});A.toast('取り消しました');}
   };
+  // Build completion and recurrence together; callers commit once, including bulk edits.
+  function reminderCompletion(list,id,done) {
+    const x=list.find(x=>x.id===id);if(!x||!!x.done===done)return list;
+    const next={...x,done,completedAt:done?new Date().toISOString():''},result=list.map(r=>r.id===id?next:r);
+    if(done&&repeatLabel(x)&&!x.repeatNextId){
+      const due=shiftDay(x.due&&x.due>=day()?x.due:day(),x.repeat==='daily'?1:7);
+      if(!validDay(due))throw Error('次回の期限を作成できません。繰り返しを解除してください');
+      const child={...x,id:A.id(),due,done:false,completedAt:'',repeatNextId:'',steps:(x.steps||[]).map(s=>({...s,id:A.id(),done:false}))};
+      next.repeatNextId=child.id;result.push(child);
+    }
+    return result;
+  }
   function toggleReminder(id,render=renderReminders) {
     const x=reminders().find(x=>x.id===id);if(!x)return false;
-    const next={...x,done:!x.done,completedAt:x.done?'':new Date().toISOString()},list=reminders().map(r=>r.id===id?next:r);
-    let generated=false;
-    if(next.done&&repeatLabel(x)&&!x.repeatNextId){
-      const due=shiftDay(x.due&&x.due>=day()?x.due:day(),x.repeat==='daily'?1:7);
-      if(!validDay(due)){A.toast('次回の期限を作成できません。繰り返しを解除してください');return false;}
-      const child={...x,id:A.id(),due,done:false,completedAt:'',repeatNextId:'',steps:(x.steps||[]).map(s=>({...s,id:A.id(),done:false}))};
-      next.repeatNextId=child.id;list.push(child);generated=true;
-    }
-    const ok=changeReminders(list,generated?'完了して次回を追加しました':next.done?'タスクを完了しました':'未完了に戻しました',render);
-    if(ok)A.haptic();return ok;
+    try{
+      const list=reminderCompletion(reminders(),id,!x.done),generated=list.length>reminders().length;
+      const ok=changeReminders(list,generated?'完了して次回を追加しました':!x.done?'タスクを完了しました':'未完了に戻しました',render);
+      if(ok)A.haptic();return ok;
+    }catch(error){A.toast(error.message);return false;}
   }
+  function renderReminderBatch() {
+    const host=$('#rm-batch-tools');if(!host)return;
+    const count=reminderSelected.size,disabled=count?'':'disabled';
+    host.innerHTML=reminderSelecting?`<div class="rm-batch"><div><strong role="status">${count}件を選択</strong>${button('rmSelectAll','表示中をすべて')}${button('rmSelectNone','解除')}</div><div class="rm-batch-actions">${button('rmBatchComplete','完了','',''+disabled)}${button('rmBatchTomorrow','明日へ','',disabled)}${button('rmBatchMove','移動','',disabled)}${button('rmBatchDelete','削除','',disabled)}</div></div>`:'';
+  }
+  A.actions.rmSelectionMode=()=>{reminderSelecting=!reminderSelecting;reminderSelected.clear();renderReminders();$('.rm-selection-entry button')?.focus({preventScroll:true});};
+  A.actions.rmSelect=el=>{
+    if(!reminderSelecting||!visibleReminders().some(x=>x.id===el.dataset.id))return;
+    const id=el.dataset.id;if(reminderSelected.has(id))reminderSelected.delete(id);else reminderSelected.add(id);
+    renderReminderResults();[...document.querySelectorAll('.rm-select')].find(x=>x.dataset.id===id)?.focus({preventScroll:true});
+  };
+  A.actions.rmSelectAll=()=>{reminderSelected=new Set(visibleReminders().map(x=>x.id));renderReminderResults();};
+  A.actions.rmSelectNone=()=>{reminderSelected.clear();renderReminderResults();};
+  function selectedReminderIds() {
+    const visible=new Set(visibleReminders().map(x=>x.id));
+    return new Set([...reminderSelected].filter(id=>visible.has(id)));
+  }
+  A.actions.rmBatchComplete=()=>{
+    const ids=selectedReminderIds();if(!ids.size)return;
+    try{let list=reminders();for(const id of ids)list=reminderCompletion(list,id,true);changeReminders(list,`${ids.size}件を完了しました`);}catch(error){A.toast(error.message);}
+  };
+  A.actions.rmBatchTomorrow=()=>{
+    const ids=selectedReminderIds();if(!ids.size)return;
+    changeReminders(reminders().map(x=>ids.has(x.id)?{...x,due:shiftDay(day(),1)}:x),`${ids.size}件の期限を明日にしました`);
+  };
+  A.actions.rmBatchMove=()=>{
+    const ids=selectedReminderIds();if(!ids.size)return;
+    A.form(`${ids.size}件をリストへ移動`,field('リスト名（空欄で未分類）','list','','text','maxlength="40" list="rm-batch-lists"')+`<datalist id="rm-batch-lists">${reminderLists().map(x=>`<option value="${esc(x)}"></option>`).join('')}</datalist>`,v=>{
+      if(v.list.trim()==='*'){A.toast('別のリスト名を入力してください');return false;}
+      return changeReminders(reminders().map(x=>ids.has(x.id)?{...x,list:v.list.trim()}:x),`${ids.size}件を移動しました`);
+    },'移動');styleReminderEditor();
+  };
+  A.actions.rmBatchDelete=()=>{
+    const ids=selectedReminderIds();if(!ids.size)return;
+    A.confirm(`${ids.size}件を削除？`,'選択したタスクのメモと手順も削除します。',()=>changeReminders(reminders().filter(x=>!ids.has(x.id)),`${ids.size}件を削除しました`));
+  };
+  A.actions.rmCompact=()=>{const next=!reminderCompact;if(A.save('reminderCompact',next)){reminderCompact=next;renderReminders();}};
+  function bindReminderKeys() {
+    $('.ev-reminders')?.addEventListener('keydown',e=>{
+      if(!$('#overlay').hidden||e.isComposing||e.ctrlKey||e.metaKey||e.altKey)return;
+      if(e.key==='Escape'&&reminderSelecting){e.preventDefault();e.stopPropagation();A.actions.rmSelectionMode();return;}
+      if(e.target.closest('input,textarea,select,[contenteditable]'))return;
+      const target=e.key.toLowerCase()==='n'?$('#reminder-form input'):e.key==='/'?$('#ep-reminder-query'):null;
+      if(target){e.preventDefault();target.focus();}
+    });
+  }
+  function styleReminderEditor() {
+    $('#overlay').classList.add('rm-editor');
+    $('#modal-form').addEventListener('keydown',e=>{
+      if(!e.isComposing&&e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();e.currentTarget.requestSubmit();}
+    });
+    $('#modal-form input, #modal-form textarea')?.focus();
+  }
+  function openReminderBulk(text='') {
+    A.form('まとめて追加',area('1行に1タスク・50件まで','bulk',text,5100)+field('共通の期限','due',reminderDraftDue,'date','min="0001-01-01" max="9999-12-31"')+field('リスト','list',reminderList==='*'?'':reminderList,'text','maxlength="40"')+'<p class="rm-form-hint" id="rm-bulk-count" role="status"></p>',v=>{
+      const lines=v.bulk.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+      if(!lines.length||lines.length>50||lines.some(x=>x.length>100)){A.toast('1〜50件、1行100文字以内で入力してください');return false;}
+      if((v.due&&!validDay(v.due))||v.list.trim()==='*'){A.toast('期限とリスト名を確認してください');return false;}
+      const added=lines.map(text=>({id:A.id(),text,done:false,due:v.due,list:v.list.trim()}));
+      return changeReminders([...reminders(),...added],`${added.length}件を追加しました`,()=>{reminderFilter='pending';reminderQuery='';reminderList=v.list.trim()||'*';renderReminders();});
+    },'まとめて追加');
+    const counter=()=>{const lines=$('#ep-bulk').value.split(/\r?\n/).filter(x=>x.trim());$('#rm-bulk-count').textContent=`${lines.length} / 50 件 · 空行は除外 · 1行100文字まで`;};
+    $('#ep-bulk').oninput=counter;counter();styleReminderEditor();$('#ep-bulk').focus();
+  }
+  A.actions.rmBulkAdd=()=>openReminderBulk();
   A.actions.reminderToggle=el=>toggleReminder(el.dataset.id);
   A.actions.rmPriority=el=>changeReminders(reminders().map(x=>x.id===el.dataset.id?{...x,priority:!x.priority}:x),'優先度を変更しました');
   A.actions.reminderDelete=el=>A.confirm('タスクを削除？','このタスクのメモと手順も削除します。',()=>changeReminders(reminders().filter(x=>x.id!==el.dataset.id),'タスクを削除しました'));
@@ -291,16 +375,22 @@
           else{reminderDraft='';reminderQuery='';reminderList=next.list||'*';reminderFilter='pending';renderReminders();}
         });
       });
-    $('#overlay').classList.add('rm-editor');$('#ep-text').focus();
+    styleReminderEditor();$('#ep-text').focus();
   };
   A.actions.epReminderOpen=el=>{
     const x=reminders().find(x=>x.id===el.dataset.id);if(!x)return;
     const steps=x.steps||[],count=steps.filter(s=>s.done).length;
     page('reminders',`<header class="rm-detail-hero"><span class="rm-detail-label">${esc(x.list||'未分類')} ${x.priority?'· 優先':''}</span><h1>${esc(x.text)}</h1><div class="rm-meta"><span class="${x.due&&x.due<day()&&!x.done?'rm-late':''}">${x.due&&x.due<day()&&!x.done?'期限超過 · ':''}${esc(dueLabel(x.due))}</span>${repeatLabel(x)?`<span>↻ ${repeatLabel(x)}</span>`:''}</div><button class="rm-complete ${x.done?'is-done':''}" data-action="epReminderComplete" data-id="${esc(x.id)}">${A.icon('check')}${x.done?'完了済み · 未完了に戻す':'タスクを完了'}</button></header>
       ${x.note?`<section class="rm-note-card"><h2>メモ</h2><p class="ep-note">${esc(x.note)}</p></section>`:''}
-      <section class="rm-steps"><div class="rm-list-heading"><h2>小さなステップ</h2><span>${count} / ${steps.length}</span></div><div class="rm-detail-progress" role="progressbar" aria-label="手順の完了数" aria-valuemin="0" aria-valuemax="${steps.length||1}" aria-valuenow="${count}"><i style="width:${steps.length?count/steps.length*100:0}%"></i></div><div class="rm-task-list">${steps.map(s=>`<div class="rm-step ${s.done?'is-done':''}">${reminderCheck('epReminderStep',{...s,id:x.id},`data-step="${esc(s.id)}"`)}<span>${esc(s.text)}</span></div>`).join('')||`<p class="rm-form-hint">大きなタスクは、小さな手順に分けて。</p>`}</div>${button('reminderDetails','メモ・手順を編集',x.id)}<p class="rm-footnote">手順とタスクの完了は別々に記録</p></section>
+      <section class="rm-steps"><div class="rm-list-heading"><h2>小さなステップ</h2><span>${count} / ${steps.length}</span></div><div class="rm-detail-progress" role="progressbar" aria-label="手順の完了数" aria-valuemin="0" aria-valuemax="${steps.length||1}" aria-valuenow="${count}"><i style="width:${steps.length?count/steps.length*100:0}%"></i></div><div class="rm-task-list">${steps.map(s=>`<div class="rm-step ${s.done?'is-done':''}">${reminderCheck('epReminderStep',{...s,id:x.id},`data-step="${esc(s.id)}"`)}<span>${esc(s.text)}</span></div>`).join('')||`<p class="rm-form-hint">大きなタスクは、小さな手順に分けて。</p>`}</div>${steps.length<30?`<form id="rm-step-form" class="rm-step-add"><input name="step" maxlength="160" required aria-label="手順を追加" placeholder="次のステップを追加"><button type="submit" aria-label="手順を追加">${A.icon('plus')}</button></form>`:''}${button('reminderDetails','メモ・手順を編集',x.id)}<p class="rm-footnote">手順とタスクの完了は別々に記録</p></section>
       <div class="rm-detail-actions">${button('epReminderPostpone','期限を1日延ばす',x.id)}${button('epReminderDuplicate','複製する',x.id)}</div>
       ${details('管理',button('reminderDelete','タスクを削除',x.id))}${reminderUndoBar()}`,iconButton('reminderDetails','タスクを編集','edit',x.id),'epRemindersHome');
+    const form=$('#rm-step-form');
+    if(form)form.onsubmit=e=>{
+      e.preventDefault();const text=form.elements.step.value.trim(),current=reminders().find(r=>r.id===x.id);
+      if(!text||!current||(current.steps||[]).length>=30)return;
+      if(changeReminders(reminders().map(r=>r.id===x.id?{...r,steps:[...(r.steps||[]),{id:A.id(),text,done:false}]}:r),'手順を追加しました',()=>A.actions.epReminderOpen(el)))$('#rm-step-form input')?.focus({preventScroll:true});
+    };
   };
   A.actions.epReminderComplete=el=>toggleReminder(el.dataset.id,()=>A.actions.epReminderOpen(el));
   A.actions.epReminderStep=el=>changeReminders(reminders().map(x=>x.id===el.dataset.id?{...x,steps:(x.steps||[]).map(s=>s.id===el.dataset.step?{...s,done:!s.done}:s)}:x),'手順を更新しました',()=>A.actions.epReminderOpen(el));
