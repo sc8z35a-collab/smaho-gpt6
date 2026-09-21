@@ -56,8 +56,12 @@ const assert=require('node:assert/strict');
   const box=await page.locator('#ev-canvas').boundingBox();
   await page.mouse.move(box.x+20,box.y+20);await page.mouse.down();await page.mouse.move(box.x+150,box.y+120,{steps:12});await page.mouse.up();
   assert.equal(await page.evaluate(()=>Aura.load('sketches',[])[0].strokes.length),1);
+  // Browsers may deliver an additional pointer sample. Verify exact persistence,
+  // rather than assuming the number of events dispatched for mouse.move steps.
+  const drawnPoints=await page.evaluate(()=>Aura.load('sketches',[])[0].strokes[0].points);
+  assert.ok(drawnPoints.length>=2,'Drawing must contain an actual stroke');
   await page.reload();await page.evaluate(()=>Aura.actions.evSketchOpen({dataset:{id:Aura.load('sketches',[])[0].id}}));
-  assert.equal(await page.evaluate(()=>Aura.load('sketches',[])[0].strokes[0].points.length),13);
+  assert.deepEqual(await page.evaluate(()=>Aura.load('sketches',[])[0].strokes[0].points),drawnPoints);
   console.log('PASS real pointer drawing survives reload');
   assert.deepEqual(errors,[]);
   console.log('PASS no uncaught browser errors');
