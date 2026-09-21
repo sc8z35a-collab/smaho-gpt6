@@ -103,12 +103,231 @@
 
  // An explicit local export complements per-app downloads without external uploads.
  const settings=A.apps.settings.render;
- const enhancedSettings=()=>{settings();$('.profile-card')?.insertAdjacentHTML('afterend',`<div class="group-card">${A.row('download','データを書き出す','','pdDataExport','','#809cae')}${A.row('files','保存容量','','pdStorage','','#a38eae')}</div>`);};
+ const enhancedSettings=()=>{if(A.renderSettingsHub)return A.renderSettingsHub();settings();$('.profile-card')?.insertAdjacentHTML('afterend',`<div class="group-card">${A.row('download','データを書き出す','','pdDataExport','','#809cae')}${A.row('files','保存容量','','pdStorage','','#a38eae')}</div>`);};
  A.apps.settings.render=enhancedSettings;A.actions.settingsHome=enhancedSettings;
- A.actions.pdDataExport=()=>{const data={};for(const key of Object.keys(localStorage).filter(k=>k.startsWith('aura.')))try{data[key.slice(5)]=JSON.parse(localStorage.getItem(key));}catch{data[key.slice(5)]=localStorage.getItem(key);}download('aura-data-'+day()+'.json',JSON.stringify({app:'aura',version:'4.4.0',exportedAt:new Date().toISOString(),data},null,2),'application/json');};
+ A.actions.pdDataExport=()=>{const data={};for(const key of Object.keys(localStorage).filter(k=>k.startsWith('aura.')))try{data[key.slice(5)]=JSON.parse(localStorage.getItem(key));}catch{data[key.slice(5)]=localStorage.getItem(key);}download('aura-data-'+day()+'.json',JSON.stringify({app:'aura',version:document.documentElement.dataset.auraVersion,exportedAt:new Date().toISOString(),data},null,2),'application/json');};
  A.actions.pdStorage=()=>{const groups={};for(const key of Object.keys(localStorage).filter(k=>k.startsWith('aura.'))){const name=key.slice(5),label=/photo/i.test(name)?'写真':/note/i.test(name)?'メモ':/file/i.test(name)?'ファイル':/sketch/i.test(name)?'スケッチ':/journal/i.test(name)?'日記':/expense/i.test(name)?'家計簿':/reading/i.test(name)?'読書':/focus/i.test(name)?'集中':/event|calendar/i.test(name)?'カレンダー':/shopping/i.test(name)?'買い物':/weather/i.test(name)?'天気':/map/i.test(name)?'地図':/habit/i.test(name)?'習慣':/contact/i.test(name)?'連絡先':/reminder/i.test(name)?'リマインダー':/conversion/i.test(name)?'単位換算':/dailyIntention/i.test(name)?'今日':/2048|snake|memory|blocks|mines|reversi|breaker|sudoku|arcade/i.test(name)?'ゲーム':'その他';groups[label]=(groups[label]||0)+new Blob([localStorage.getItem(key)]).size;}const sizes=Object.entries(groups).map(([label,bytes])=>({label,bytes})).sort((a,b)=>b.bytes-a.bytes),sum=sizes.reduce((n,x)=>n+x.bytes,0);page('保存容量',`<div class="pd-storage-total"><strong>${(sum/1024).toFixed(1)}<small>KB</small></strong><span>このブラウザのauraデータ</span></div><div class="pd-storage-list">${sizes.map(x=>`<div><span>${esc(x.label)}</span><strong>${(x.bytes/1024).toFixed(1)}KB</strong><i style="width:${Math.max(1,x.bytes/(sum||1)*100)}%"></i></div>`).join('')}</div><button class="secondary-button pd-wide" data-action="pdDataExport">データを書き出す</button>`,'','settingsHome');};
  const settingToggle=A.actions.settingToggle;A.actions.settingToggle=el=>{settingToggle(el);if(!$('#settings-brightness'))enhancedSettings();};
  const priorSearch=A.searchAdditional;
  A.searchAdditional=q=>(priorSearch?.(q)||'')+[['files','ファイル',A.fileModel.get().filter(x=>(x.name+' '+x.content).toLowerCase().includes(q)).slice(0,4),'pdSearchFile'],['calendar','予定',A.eventModel.get().filter(x=>(x.title+' '+x.place).toLowerCase().includes(q)).slice(0,4),'pdSearchEvent']].map(([app,title,rows,action])=>rows.length?`<p class="spotlight-label">${title}</p><div class="search-content-group">${rows.map(x=>`<button data-action="${action}" data-id="${esc(x.id)}">${A.icon(app)}<span><strong>${esc(x.name||x.title)}</strong><small>${esc(x.date?String(x.date):'')}</small></span>${A.icon('arrow')}</button>`).join('')}</div>`:'').join('');
  A.actions.pdSearchFile=el=>{A.open('files');openFile(el.dataset.id);};A.actions.pdSearchEvent=el=>{A.open('calendar');A.actions.calendarEdit(el);};
+})();
+
+// Settings extensions stay local. Developer tools are diagnostics, not OS privileges.
+(() => {
+  const A = window.Aura, $ = A.$, esc = A.escape;
+  const defaults = {textSize:'standard', boldText:false, highContrast:false, reduceTransparency:false,
+    hideLabels:false, hideWidgets:false, clock12:false, clockSeconds:false,
+    developerMode:false, devFps:false, devBounds:false, devTouches:false, devLog:false};
+  const devKeys = ['devFps','devBounds','devTouches','devLog'];
+  let section = 'home', query = '', apiOffline = false, logs = [], logEpoch = 0;
+  let raf = 0, frames = 0, frameStart = 0;
+  const enabled = () => A.settings.developerMode === true;
+  const group = (title, html) => `<h2 class="st-heading">${title}</h2><div class="group-card">${html}</div>`;
+  const link = (action, title, detail, icon='settings') => A.row(icon,title,detail,action,'','#8f819f');
+  const toggle = (key, title, detail='') => `<button class="st-toggle" data-action="stToggle" data-key="${key}" aria-pressed="${!!A.settings[key]}"><span><strong>${title}</strong><small>${detail}</small></span><i class="preview-switch ${A.settings[key]?'on':''}" aria-hidden="true"></i></button>`;
+  const select = (key, title, options, value) => `<label class="st-select"><span>${title}</span><select data-st-select="${key}">${options.map(([v,t])=>`<option value="${v}" ${String(value)===v?'selected':''}>${t}</option>`).join('')}</select></label>`;
+  const page = (title, html) => {
+    A.statusTheme(false);
+    A.view((title==='設定'?A.nav(title):A.nav(title,'','settingsHome','設定'))+`<div class="app-content st-settings"><p class="st-eyebrow">YOUR AURA / SETTINGS</p><h1 class="st-title">${title}</h1>${html}</div>`);
+  };
+  function save(patch) {
+    const next = {...A.settings,...patch};
+    if (!A.save('settings',next)) return false;
+    A.settings = next;
+    A.applySettings();
+    A.updateClock();
+    return true;
+  }
+  const catalog = [
+    ['表示と操作',[
+      ['settingsDisplay','画面表示と明るさ','明るさ・ダークモード','sun'],
+      ['stAccessibility','文字と見やすさ','文字サイズ・太字・コントラスト・透明度','eye'],
+      ['stHome','ホームと時計','アプリ名・ウィジェット・12時間表示・秒表示','clock'],
+      ['personalize','壁紙とアイコン','壁紙・アイコンスタイル・時計スタイル・配置','photos'],
+      ['settingsAppearance','光と動き','影の深さ・動きを抑える・FHD MOVE APP','layers']]],
+    ['通知とサウンド',[
+      ['noticeSettings','通知設定','バナー・予定通知・アプリ別・ロック画面の本文','messages'],
+      ['stSound','サウンドと集中','音量・触覚フィードバック・集中モード','volume'],
+      ['showNotifications','通知センター','通知の履歴・既読・再通知','messages']]],
+    ['接続とデータ',[
+      ['stConnection','通信と検索','Wi-Fi・Bluetooth・機内モードのデモ / 検索エンジン','globe'],
+      ['connectionCenter','接続とプライバシー','実連携の対応状況・保存した位置情報の消去','lock'],
+      ['pdStorage','保存容量','アプリ別のローカル保存量','files'],
+      ['pdDataExport','データを書き出す','auraデータのJSON保存（個人データを含む）','download']]],
+    ['システム',[
+      ['stDeveloper','開発者設定','FPS・タップ位置・レイアウト枠・API通信診断','settings'],
+      ['fullscreen','全画面で使う','対応ブラウザのみ','grid'],
+      ['gestureGuide','操作ガイド','ジェスチャーとキーボード','info'],
+      ['settingsAbout','このデバイスについて','バージョンとアプリ情報','user'],
+      ['stReset','追加設定をリセット','このバージョンで追加した表示設定・開発者設定のみ','settings'],
+      ['settingsReset','すべてのデータを削除','メモ・写真なども削除 / 復元不可','trash']]]
+  ];
+  A.renderSettingsHub = () => {
+    section = 'home';
+    page('設定', `<button class="profile-card st-profile" data-action="settingsProfile"><span class="avatar">a.</span><span><strong>${esc(A.load('profileName','あなたのaura'))}</strong><small>このブラウザの、あなた仕様。</small></span><span class="chevron">›</span></button>${A.search('st-search','設定を検索')}<div id="st-results"></div><p class="st-footnote">設定はこのブラウザに保存。実端末の設定は変更しません。</p><p class="notes-footer">auraOS ${esc(document.documentElement.dataset.auraVersion)}</p>`);
+    $('#st-search').value = query;
+    $('#st-search').oninput = e => {query=e.target.value.slice(0,100);renderResults();};
+    renderResults();
+  };
+  function renderResults() {
+    const q = query.normalize('NFKC').trim().toLowerCase();
+    const results = catalog.map(([name,items])=>[name,items.filter(item=>(name+' '+item.join(' ')).normalize('NFKC').toLowerCase().includes(q))]).filter(([,items])=>items.length);
+    $('#st-results').innerHTML = results.map(([name,items])=>group(name,items.map(item=>link(...item)).join(''))).join('') || '<p class="st-empty" role="status">一致する設定はありません</p>';
+  }
+  A.actions.stAccessibility = () => {
+    section = 'accessibility';
+    page('文字と見やすさ',group('読みやすさ',select('textSize','本文の文字サイズ',[['standard','標準'],['large','大きい'],['largest','さらに大きい']],A.settings.textSize)+toggle('boldText','本文を太字に','共通の本文・入力欄・リストに反映')+toggle('highContrast','文字のコントラスト','共通の本文・補足文字をくっきり表示')+toggle('reduceTransparency','透明度を下げる','カード・メニューの透けを抑える'))+'<div class="st-preview"><strong>あなたに、ちょうどいい表示。</strong><p>設定はすぐに反映されます。</p><small>文字サイズは共通の本文・入力欄・リストに適用。ゲーム盤やアイコンは対象外です。</small></div>'+link('settingsAppearance','動きを抑える','光と動きの設定へ','layers'));
+  };
+  A.actions.stHome = () => {
+    section = 'homeOptions';
+    page('ホームと時計',group('ホーム画面',toggle('hideLabels','アプリ名を隠す','アイコンの読み上げラベルは維持')+toggle('hideWidgets','ウィジェットを隠す','ホームの天気とカレンダーを非表示'))+group('時計表示',toggle('clock12','12時間表示','上部の時計とロック画面に適用')+toggle('clockSeconds','秒を表示','上部の時計に秒を表示'))+'<p class="st-footnote">日時・タイムゾーンは端末の設定に従います。予定やタイマーの時刻は変更しません。</p>');
+  };
+  A.actions.stSound = () => {
+    section = 'sound';
+    page('サウンドと集中',group('音量',`<label class="st-range">オリジナル音源 <output id="st-volume-value">${A.settings.volume}%</output><input id="st-volume" type="range" min="0" max="100" value="${A.settings.volume}" aria-label="オリジナル音源の音量"></label>`)+group('操作と通知',toggle('sound','触覚フィードバック','振動対応端末のみ')+toggle('focus','集中モード','通知バナーを抑制。通知履歴には保存'))+'<p class="st-footnote">音量はauraの生成アンビエント音源用。端末全体や外部試聴の音量は変更しません。</p>');
+    $('#st-volume').oninput = e => {
+      if(save({volume:Number(e.target.value)})){A.music?.setVolume();$('#st-volume-value').textContent=e.target.value+'%';}
+      else e.target.value=A.settings.volume;
+    };
+  };
+  A.actions.stConnection = () => {
+    section = 'connection';
+    page('通信と検索','<p class="st-footnote">通信スイッチはシミュレーション。実際のネット接続は変わりません。</p>'+group('通信のデモ',toggle('airplane','機内モード')+toggle('wifi','Wi-Fi')+toggle('bluetooth','Bluetooth')+toggle('cellular','モバイル通信'))+group('ブラウザ',select('webEngine','検索エンジン',[['wiki','Wikipedia'],['google','Google'],['bing','Bing'],['duck','DuckDuckGo']],A.load('webEngine','wiki')))+'<p class="st-footnote">Wikipedia以外の検索は別タブで開きます。</p>');
+  };
+  const renders = {home:A.renderSettingsHub,accessibility:A.actions.stAccessibility,homeOptions:A.actions.stHome,sound:A.actions.stSound,connection:A.actions.stConnection,developer:()=>A.actions.stDeveloper()};
+  A.actions.stToggle = el => {
+    const key=el.dataset.key;
+    if(!Object.hasOwn(defaults,key)&&!['sound','focus','airplane','wifi','bluetooth','cellular'].includes(key))return;
+    if(key==='textSize'||key==='developerMode'||(devKeys.includes(key)&&!enabled()))return;
+    const patch = {[key]:!A.settings[key]};
+    if(key==='airplane'&&patch.airplane)patch.cellular=false;
+    const scroll=$('.st-settings')?.scrollTop||0;
+    if(save(patch)){
+      renders[section]?.();
+      $(`[data-action="stToggle"][data-key="${key}"]`)?.focus({preventScroll:true});
+      if($('.st-settings'))$('.st-settings').scrollTop=scroll;
+    }
+  };
+  document.addEventListener('change', e => {
+    const key=e.target.dataset.stSelect, value=e.target.value;
+    if(key==='textSize'&&['standard','large','largest'].includes(value)){
+      if(!save({textSize:value}))e.target.value=A.settings.textSize;
+    }
+    if(key==='webEngine'&&['wiki','google','bing','duck'].includes(value)){
+      if(!A.save('webEngine',value))e.target.value=A.load('webEngine','wiki');
+    }
+  });
+  A.actions.stReset = () => A.confirm('追加設定をリセット？','文字・ホーム・時計・開発者設定を初期化します。メモ・写真・壁紙・通知設定は残ります。',()=>{
+    if(save(defaults)){query='';A.actions.settingsHome();A.toast('追加設定をリセットしました');}
+  });
+
+  function storageSummary() {
+    try {
+      const keys=Object.keys(localStorage).filter(k=>k.startsWith('aura.'));
+      return {available:true,keys:keys.length,bytes:keys.reduce((n,k)=>n+new Blob([localStorage.getItem(k)||'']).size,0)};
+    } catch {return {available:false,keys:0,bytes:0};}
+  }
+  const capabilities = () => ({secureContext:window.isSecureContext,online:navigator.onLine,
+    camera:!!navigator.mediaDevices?.getUserMedia,geolocation:!!navigator.geolocation,
+    notifications:'Notification' in window?Notification.permission:'unsupported',
+    share:!!navigator.share,clipboard:!!navigator.clipboard,fullscreen:!!document.fullscreenEnabled});
+  const report = () => ({app:'aura',version:document.documentElement.dataset.auraVersion,
+    generatedAt:new Date().toISOString(),viewport:{width:innerWidth,height:innerHeight,pixelRatio:devicePixelRatio},
+    capabilities:capabilities(),storage:storageSummary(),apiOffline,requests:logs.map(row=>({...row}))});
+  A.actions.stDeveloper = () => {
+    section='developer';
+    const c=capabilities(), storage=storageSummary();
+    page('開発者設定',`<div class="st-dev-intro"><span>DEVELOPER TOOLS</span><strong>挙動を、確かめる。</strong><p>aura内だけの診断ツール。端末の開発者権限・USBデバッグとは無関係です。</p></div><div class="group-card"><button class="st-toggle" data-action="stDeveloperToggle" aria-pressed="${enabled()}"><span><strong>開発者モード</strong><small>${enabled()?'有効 / オフにすると全診断を停止':'初期状態はオフ'}</small></span><i class="preview-switch ${enabled()?'on':''}" aria-hidden="true"></i></button></div>`+(enabled()?
+      group('画面の診断',toggle('devFps','FPSを表示','描画コールバックの概算値 / 実測ベンチマークではありません')+toggle('devBounds','レイアウト枠を表示','ボタン・入力欄・カードの境界')+toggle('devTouches','タップ位置を表示','aura内のポインター位置を一時表示'))+
+      group('API通信の診断',toggle('devLog','通信ログを記録','有効化後の共通JSON APIのみ / 最大30件 / このタブのメモリ内')+`<button class="st-toggle" data-action="stOffline" aria-pressed="${apiOffline}"><span><strong>APIオフラインを再現</strong><small>共通JSON APIの新規リクエストを遮断。画像・地図タイル・外部リンク・進行中の通信は対象外。再読み込みで解除。</small></span><i class="preview-switch ${apiOffline?'on':''}" aria-hidden="true"></i></button>`)+
+      `<div class="st-api-log"><div class="st-log-head"><h2 class="st-heading">直近の通信</h2><button data-action="stDeveloper">更新</button><button data-action="stClearLogs">消去</button></div><p class="st-footnote">URL・座標・検索語・本文は記録せず、既知のサービス名・結果・所要時間だけ記録します。</p>${logs.length?`<ol>${logs.slice().reverse().map(row=>`<li><strong>${esc(row.service)}</strong><span>${esc(row.result)} · ${row.ms} ms</span></li>`).join('')}</ol>`:'<p class="st-empty">記録はありません。記録をオンにして天気などを更新してください。</p>'}</div>`+
+      group('環境情報',`<dl class="st-diagnostics"><dt>バージョン</dt><dd>${esc(document.documentElement.dataset.auraVersion)}</dd><dt>画面 / DPR</dt><dd>${innerWidth} × ${innerHeight} / ${devicePixelRatio}</dd><dt>HTTPS等の安全な接続</dt><dd>${c.secureContext?'はい':'いいえ'}</dd><dt>ブラウザの接続状態</dt><dd>${c.online?'オンライン':'オフライン'}</dd><dt>カメラ / 位置情報API</dt><dd>${c.camera?'対応':'非対応'} / ${c.geolocation?'対応':'非対応'}</dd><dt>OS通知の権限</dt><dd>${esc(c.notifications)}</dd><dt>共有 / クリップボードAPI</dt><dd>${c.share?'対応':'非対応'} / ${c.clipboard?'対応':'非対応'}</dd><dt>aura保存データ</dt><dd>${storage.available?storage.keys+'項目 / '+(storage.bytes/1024).toFixed(1)+' KB':'読み取り不可'}</dd></dl>`)+
+      '<p class="st-footnote">API対応は権限許可や動作を保証しません。容量はaura保存値のUTF-8換算で、端末の空き容量ではありません。</p>'+group('確認と書き出し',link('stTestNotice','テスト通知','画面内の通知履歴へ追加。OS通知の権限要求なし','messages')+link('stExportDiagnostics','診断情報を書き出す','環境・合計保存量・通信ログのみ / データ本文は含みません','download')):
+      '<p class="st-footnote">有効にすると画面・通信の診断項目が表示されます。個人データの自動送信は行いません。</p>'));
+  };
+  A.actions.stDeveloperToggle = () => {
+    const apply = () => {
+      if(save({developerMode:!enabled(),...Object.fromEntries(devKeys.map(k=>[k,false]))}))A.actions.stDeveloper();
+    };
+    if(enabled())apply();else A.confirm('開発者モードを有効にしますか？','画面・通信の診断項目を追加します。各ツールは個別にオンにしてください。診断データの自動送信はありません。',apply);
+  };
+  A.actions.stOffline = () => {if(enabled()){apiOffline=!apiOffline;syncTools();A.actions.stDeveloper();}};
+  A.actions.stClearLogs = () => {if(enabled()){logs=[];logEpoch++;A.actions.stDeveloper();}};
+  A.actions.stTestNotice = () => {
+    if(!enabled())return;
+    const ok=A.notify({app:'settings',title:'開発者テスト通知',body:'通知表示の確認用です。外部送信はありません。',demo:true});
+    A.toast(ok?'テスト通知を履歴に追加しました':'通知を追加できませんでした');
+  };
+  A.actions.stExportDiagnostics = () => {
+    if(!enabled())return;
+    A.download(new Blob([JSON.stringify(report(),null,2)],{type:'application/json'}),'aura-diagnostics.json');
+  };
+  const request=A.network.request;
+  const services={'api.open-meteo.com':'Open-Meteo','geocoding-api.open-meteo.com':'Open-Meteo Geocoding','ja.wikipedia.org':'Wikipedia','nominatim.openstreetmap.org':'Nominatim','itunes.apple.com':'iTunes','api.frankfurter.dev':'Frankfurter'};
+  A.network.request=async function(url,options){
+    const started=performance.now(), record=enabled()&&A.settings.devLog, epoch=logEpoch;
+    let result='成功';
+    try {
+      if(enabled()&&apiOffline){result='テスト遮断';throw new Error('開発者設定：APIオフラインの再現中');}
+      return await request.call(this,url,options);
+    } catch(error){if(result!=='テスト遮断')result=error.name==='AbortError'?'中断':'失敗';throw error;}
+    finally {
+      if(record&&enabled()&&A.settings.devLog&&epoch===logEpoch){
+        let service='その他のAPI';
+        try{service=services[new URL(url,location.href).hostname]||service;}catch{/* Never log raw URLs. */}
+        logs.push({service,result,ms:Math.max(0,Math.round(performance.now()-started))});logs=logs.slice(-30);
+      }
+    }
+  };
+  function stopFps(){cancelAnimationFrame(raf);raf=0;$('#st-fps')?.remove();}
+  function tick(now){
+    frames++;
+    if(now-frameStart>=1000){$('#st-fps').textContent=Math.round(frames*1000/(now-frameStart))+' FPS';frameStart=now;frames=0;}
+    raf=requestAnimationFrame(tick);
+  }
+  function syncTools(){
+    const screen=$('#phone-screen'), on=enabled();
+    screen.classList.toggle('st-dev-bounds',on&&A.settings.devBounds);
+    if(!on){apiOffline=false;$('.st-touch')?.remove();}
+    if(!on||!A.settings.devLog){logs=[];logEpoch++;}
+    if(on&&A.settings.devFps&&!document.hidden){
+      if(!raf){screen.insertAdjacentHTML('beforeend','<output id="st-fps" class="st-fps" aria-label="概算フレームレート">計測中</output>');frames=0;frameStart=performance.now();raf=requestAnimationFrame(tick);}
+    }else stopFps();
+    let warning=$('#st-offline-warning');
+    if(on&&apiOffline){
+      if(!warning){screen.insertAdjacentHTML('beforeend','<button id="st-offline-warning" data-action="stStopOffline">APIテスト遮断中 · 解除</button>');}
+    }else warning?.remove();
+  }
+  A.actions.stStopOffline=()=>{apiOffline=false;syncTools();if(section==='developer'&&A.current==='settings'&&$('[data-action="stOffline"]'))A.actions.stDeveloper();};
+  document.addEventListener('visibilitychange',syncTools);
+  $('#phone-screen').addEventListener('pointerdown',e=>{
+    if(!enabled()||!A.settings.devTouches)return;
+    $('.st-touch')?.remove();
+    const rect=$('#phone-screen').getBoundingClientRect(), dot=document.createElement('i');
+    dot.className='st-touch';dot.setAttribute('aria-hidden','true');
+    dot.style.left=((e.clientX-rect.left)*$('#phone-screen').clientWidth/rect.width)+'px';
+    dot.style.top=((e.clientY-rect.top)*$('#phone-screen').clientHeight/rect.height)+'px';
+    $('#phone-screen').append(dot);setTimeout(()=>dot.remove(),550);
+  },{passive:true});
+  const applySettings=A.applySettings;
+  A.applySettings=()=>{
+    for(const [key,value] of Object.entries(defaults)){
+      if(typeof value==='boolean'&&typeof A.settings[key]!=='boolean')A.settings[key]=value;
+    }
+    if(!['standard','large','largest'].includes(A.settings.textSize))A.settings.textSize='standard';
+    applySettings();
+    const screen=$('#phone-screen');
+    screen.dataset.textSize=A.settings.textSize;
+    for(const key of ['boldText','highContrast','reduceTransparency','hideLabels','hideWidgets','clockSeconds','clock12'])screen.dataset[key]=String(A.settings[key]);
+    syncTools();
+  };
+  const updateClock=A.updateClock;
+  A.updateClock=()=>{
+    updateClock();
+    const date=new Date(),options={hour:'numeric',minute:'2-digit',hour12:A.settings.clock12};
+    $('#status-time').textContent=date.toLocaleTimeString('ja-JP',{...options,...(A.settings.clockSeconds?{second:'2-digit'}:{})});
+    $('#lock-time').textContent=date.toLocaleTimeString('ja-JP',options);
+  };
+  A.applySettings();A.updateClock();
 })();

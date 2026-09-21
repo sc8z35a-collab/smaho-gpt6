@@ -10,7 +10,7 @@ async function checkControlDesk(browser,url){
  const open=()=>page.evaluate(()=>Aura.controls());
  const toggle=key=>page.locator(`[data-action=controlToggle][data-key="${key}"]`);
  const range=async(id,value)=>page.locator(id).evaluate((el,value)=>{el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));},String(value));
- const click=action=>page.locator(`[data-action="${action}"]`).click();
+ const click=action=>page.locator(`#overlay [data-action="${action}"]`).click();
  page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/*',r=>new URL(r.request().url()).origin===new URL(url).origin?r.continue():r.abort());
  try{
@@ -198,16 +198,40 @@ async function checkControlDesk(browser,url){
   const box=await page.locator('#ev-canvas').boundingBox();
   await page.mouse.move(box.x+20,box.y+20);await page.mouse.down();await page.mouse.move(box.x+150,box.y+120,{steps:12});await page.mouse.up();
   assert.equal(await page.evaluate(()=>Aura.load('sketches',[])[0].strokes.length),1);
-  // Browsers may deliver an additional pointer sample. Verify exact persistence,
-  // rather than assuming the number of events dispatched for mouse.move steps.
-  const drawnPoints=await page.evaluate(()=>Aura.load('sketches',[])[0].strokes[0].points);
-  assert.ok(drawnPoints.length>=2,'Drawing must contain an actual stroke');
+  const storedPoints=await page.evaluate(()=>Aura.load('sketches',[])[0].strokes[0].points);
+  assert.ok(storedPoints.length>=13,'Pointer samples missing');
   await page.reload();await page.evaluate(()=>Aura.actions.evSketchOpen({dataset:{id:Aura.load('sketches',[])[0].id}}));
-  assert.deepEqual(await page.evaluate(()=>Aura.load('sketches',[])[0].strokes[0].points),drawnPoints);
+  assert.deepEqual(await page.evaluate(()=>Aura.load('sketches',[])[0].strokes[0].points),storedPoints);
   console.log('PASS real pointer drawing survives reload');
+  await page.evaluate(()=>{Aura.open('settings');Aura.actions.stAccessibility();});
+  await page.locator('[data-st-select="textSize"]').selectOption('large');
+  await page.locator('[data-key="boldText"]').click();
+  await page.evaluate(()=>Aura.actions.stHome());
+  await page.locator('[data-key="clockSeconds"]').click();
+  await page.reload();await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(()=>Aura.settings.textSize),'large');
+  assert.equal(await page.evaluate(()=>Aura.settings.boldText),true);
+  assert.match(await page.locator('#status-time').innerText(),/\d+:\d+:\d+/);
+  assert.equal(await page.evaluate(()=>Aura.load('notes',[])[0].id),'keep');
+  console.log('PASS new preferences survive reload and retain existing notes');
+  await page.evaluate(()=>{Aura.open('settings');Aura.actions.stDeveloper();});
+  await page.locator('[data-action="stDeveloperToggle"]').click();await page.locator('#confirm-yes').click();
+  await page.locator('[data-key="devLog"]').click();await page.locator('[data-action="stOffline"]').click();
+  await page.evaluate(async()=>{try{await Aura.network.request('https://example.test/private');}catch{}});
+  await page.reload();await page.evaluate(()=>{Aura.open('settings');Aura.actions.stDeveloper();});
+  assert.equal(await page.evaluate(()=>Aura.settings.developerMode),true);
+  assert.equal(await page.locator('[data-action="stOffline"]').getAttribute('aria-pressed'),'false');
+  assert.equal(await page.locator('.st-api-log li').count(),0);
+  assert.equal(await page.locator('#st-offline-warning').count(),0);
+  console.log('PASS reload clears API simulation and diagnostic records');
+  await page.evaluate(()=>{const s=Aura.load('settings',{});s.textSize='bad';s.devFps='true';Aura.save('settings',s);});
+  await page.reload();
+  assert.equal(await page.evaluate(()=>Aura.settings.textSize),'standard');
+  assert.equal(await page.evaluate(()=>Aura.settings.devFps),false);
+  console.log('PASS invalid new preference values fall back safely');
   assert.deepEqual(errors,[]);
   console.log('PASS no uncaught browser errors');
   const controls=await checkControlDesk(browser,url);
-  console.log(`RESULT: ${9+controls} passed, 0 failed.`);
+  console.log(`RESULT: ${12+controls} passed, 0 failed.`);
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

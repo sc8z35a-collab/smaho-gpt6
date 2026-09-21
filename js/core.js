@@ -1125,5 +1125,5 @@
   document.addEventListener('keydown',e=>{if(e.key!=='Tab'||A.$('#overlay').hidden||!e.target.closest('#overlay,#toast'))return;const items=[...A.$$('button:not(:disabled),input,textarea,select,a[href],summary',A.$('#overlay')),...A.$$('#toast.visible button')].filter(el=>el.getClientRects().length);const first=items[0],last=items.at(-1);if(!first)return;if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}});
   A.$('#home-search').onclick=A.spotlight;A.$('#status-time').onclick=A.notifications;
   A.renderLockNotices();
-  A.renderHome();A.applySettings();A.updateClock();setInterval(A.updateClock,1000);
+  A.renderHome();A.applySettings();A.updateClock();setInterval(()=>A.updateClock(),1000);
 })();
