@@ -636,17 +636,29 @@
     ['flashlight','flashlight','画面ライト'],['clock','timer','時計'],['calculator','calculator','計算機'],['camera','camera','カメラ'],
     ['notes','document','メモ'],['recorder','mic','録音'],['focus','moon','集中'],['settings','settings','設定']
   ];
-  const controlSelection=()=>Array.isArray(A.settings.controlShortcuts)?[...new Set(A.settings.controlShortcuts)].filter(id=>controlShortcuts.some(([key])=>key===id)):controlShortcuts.slice(0,4).map(([id])=>id);
+  const controlSelection=()=>{
+    const saved=Array.isArray(A.settings.controlShortcuts)?[...new Set(A.settings.controlShortcuts)].filter(id=>controlShortcuts.some(([key])=>key===id)):[];
+    return saved.length?saved:controlShortcuts.slice(0,4).map(([id])=>id);
+  };
+  const currentControlScene=()=>Object.keys(controlScenes).find(id=>Object.entries(controlScenes[id].values).every(([key,value])=>(key==='warm'?!!A.settings[key]:A.settings[key])===value));
   const controlVisible=()=>!A.$('#overlay').hidden&&A.$('#overlay').classList.contains('controls-overlay');
   const controlFormat=seconds=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
   const controlPatch=values=>{
     const next={...A.settings,...values};
     if(!A.save('settings',next))return false;
-    Object.assign(A.settings,values);A.applySettings();A.music?.setVolume();return true;
+    Object.assign(A.settings,values);A.applySettings();
+    if(Object.hasOwn(values,'volume')&&A.music?.playing)A.music.setVolume();
+    return true;
   };
   // The small timer is independent of the Clock and Focus app timers.
   const storedControlTimer=A.load('controlTimer',null);
-  let controlTimer=storedControlTimer&&Number.isFinite(storedControlTimer.duration)&&storedControlTimer.duration>0&&storedControlTimer.duration<=3600&&Number.isFinite(storedControlTimer.remaining)&&storedControlTimer.remaining>=0&&storedControlTimer.remaining<=storedControlTimer.duration&&Number.isFinite(storedControlTimer.end)&&storedControlTimer.end>=0&&storedControlTimer.end<=Date.now()+3600000?storedControlTimer:null;
+  const normalizeControlTimer=value=>value&&typeof value.id==='string'&&Number.isInteger(value.duration)&&value.duration>0&&value.duration<=3600&&Number.isInteger(value.remaining)&&value.remaining>0&&value.remaining<=value.duration&&Number.isFinite(value.end)&&value.end>=0&&value.end<=Date.now()+3600000?value:null;
+  let controlTimer=normalizeControlTimer(storedControlTimer);
+  window.addEventListener('storage',e=>{
+    if(e.key!=='aura.controlTimer')return;
+    controlTimer=normalizeControlTimer(A.load('controlTimer',null));
+    if(controlVisible())A.controls();
+  });
   const controlRemaining=()=>controlTimer?Math.max(0,controlTimer.end?Math.ceil((controlTimer.end-Date.now())/1000):controlTimer.remaining):0;
   const storeControlTimer=next=>{if(!A.save('controlTimer',next))return false;controlTimer=next;return true;};
   const controlQuickMarkup=()=>controlSelection().map(id=>{
@@ -658,7 +670,7 @@
     const active=refresh?document.activeElement:null,identity=active?.dataset,activeId=active?.id;
     const editing=refresh&&A.$('#cc-customize')?.open;
     const s=A.settings,music=A.music,selection=controlSelection();
-    const scene=Object.keys(controlScenes).find(id=>Object.entries(controlScenes[id].values).every(([key,value])=>(key==='warm'?!!s[key]:s[key])===value));
+    const scene=currentControlScene();
     const toggle=(key,icon,label,detail)=>`<button class="cc-tile ${s[key]?'on':''}" data-action="controlToggle" data-key="${key}" aria-pressed="${!!s[key]}"><span class="cc-tile-icon">${A.icon(icon)}</span><span><strong>${label}</strong><small>${detail}</small></span><i class="cc-led" aria-hidden="true"></i></button>`;
     A.overlay(`<div class="cc-heading"><div><span class="cc-eyebrow">AURA / CONTROL DESK</span><h2>コントロールセンター</h2></div><button class="close-button" data-action="closeOverlay" aria-label="閉じる">${A.icon('close')}</button></div>
       <div class="cc-caption"><span><i></i>あなたのペースに。</span><span id="cc-time"></span></div>
@@ -678,7 +690,7 @@
       const value=Number(e.target.value);
       if(!controlPatch({[key]:value})){e.target.value=s[key];return;}
       e.target.style.setProperty('--level',value+'%');A.$('#cc-'+key+'-value').textContent=value+'%';
-      A.$$('.cc-scenes button').forEach(button=>button.setAttribute('aria-pressed','false'));
+      A.$$('.cc-scenes button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.id===currentControlScene())));
       if(key==='volume'){const mute=A.$('[data-action="controlMute"]');mute.setAttribute('aria-pressed',String(value===0));mute.innerHTML=A.icon('volume')+(value===0?'解除':'ミュート');}
     };
     A.$('#control-seek').oninput=e=>{
@@ -742,7 +754,15 @@
   };
   A.actions.lock=A.lock;
   A.actions.controlPlay=()=>{A.music?.toggle();A.controls();};
-  A.actions.flashlight=()=>{const el=document.createElement('div');el.className='flashlight-screen';el.innerHTML='<button>消灯</button>';el.onclick=()=>el.remove();A.$('#phone-screen').appendChild(el);};
+  A.actions.flashlight=()=>{
+    if(A.$('.flashlight-screen'))return;
+    const returnFocus=document.activeElement,el=document.createElement('div');
+    el.className='flashlight-screen';el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');el.setAttribute('aria-label','画面ライト');el.innerHTML='<button>消灯</button>';
+    const close=()=>{el.remove();if(returnFocus?.isConnected)returnFocus.focus({preventScroll:true});};
+    el.onclick=close;
+    el.onkeydown=e=>{if(e.key==='Escape'){e.stopPropagation();close();}if(e.key==='Tab'){e.preventDefault();el.querySelector('button').focus();}};
+    A.$('#phone-screen').appendChild(el);el.querySelector('button').focus();
+  };
   A.actions.about=()=>A.overlay(`${A.overlayTitle('About this little world')}<div class="about-hero">aura.</div><p class="about-copy">手のひらに、もうひとつの世界。<br>いつもの日常に、少しの好奇心を。</p><div class="about-stats"><div><strong>30</strong><span>APPS</span></div><div><strong>08</strong><span>GAMES</span></div><div><strong>∞</strong><span>CURIOSITY</span></div></div><p class="about-note">auraは、ブラウザの中で動く架空のスマートフォンです。実際のOS、通信サービス、銀行・医療サービスではありません。<br><br>天気はOpen-Meteo、地図はOpenStreetMap、記事検索はWikipediaと接続します。電話・SMS・メールは端末の対応アプリで最終操作を行います。デモと実連携は区別されます。ヘルスケアの自動計測と実決済は未接続です。<br><br>メモ、設定、写真などはこのブラウザに保存されます。録音はアプリを閉じるまで保持されます。データは他の端末へ同期されません。カメラ・マイクの利用には許可が必要です。</p><p class="control-footer">auraOS 4.5 / NOTIFICATIONS</p>`);
   A.spotlight = () => { A.overlay(`${A.overlayTitle('見つけよう。')}<label class="spotlight-input">${A.icon('search')}<input id="spotlight-query" placeholder="アプリを検索" aria-label="アプリを検索" autocomplete="off"></label><p class="spotlight-label">あなたの小さな世界</p><div class="spotlight-results" id="spotlight-results"></div>`);const render=q=>{const matches=Object.values(A.apps).filter(a=>(a.name+a.id).toLowerCase().includes(q.toLowerCase()));A.$('#spotlight-results').innerHTML=matches.map(a=>A.launcher(a)).join('')||'<p style="grid-column:span 4;font-size:12px;opacity:.65">該当するアプリはありません。</p>';};render('');A.$('#spotlight-query').oninput=e=>render(e.target.value);setTimeout(()=>A.$('#spotlight-query')?.focus(),120); };
   A.updateClock = () => {const d=new Date();const time=d.toLocaleTimeString('ja-JP',{hour:'numeric',minute:'2-digit',hour12:false});A.$('#status-time').textContent=time;A.$('#lock-time').textContent=time;const date=d.toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'});A.$('#home-date').textContent=date;A.$('#lock-date').textContent=date;A.$('#widget-day').textContent=d.getDate();A.$('#widget-weekday').textContent=['日','月','火','水','木','金','土'][d.getDay()]+'曜日';A.clockTick?.();A.music?.tick();A.updateWidgets?.();};
