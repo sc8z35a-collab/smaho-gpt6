@@ -102,7 +102,7 @@
    const draft={title:$('#note-title').value,body:$('#note-body').value};
    noteDrafts.set(id,draft);$('#note-length').textContent=Array.from(draft.body).length+'字';saveNoteDraft(id);
   };
-  for(const el of [$('#note-title'),$('#note-body')]){el.oninput=save;el.oncompositionend=save;}
+  for(const el of [$('#note-title'),$('#note-body')]){el.oninput=save;el.addEventListener('compositionend',save);}
   if(notePreview)renderNotePreview(n);
 
  }
