@@ -234,10 +234,46 @@
   const link = (action, title, detail, icon='settings') => A.row(icon,title,detail,action,'','#8f819f');
   const toggle = (key, title, detail='') => `<button class="st-toggle" data-action="stToggle" data-key="${key}" aria-pressed="${!!A.settings[key]}"><span><strong>${title}</strong>${detail?`<small>${detail}</small>`:''}</span><i class="preview-switch ${A.settings[key]?'on':''}" aria-hidden="true"></i></button>`;
   const select = (key, title, options, value) => `<label class="st-select"><span>${title}</span><select data-st-select="${key}">${options.map(([v,t])=>`<option value="${v}" ${String(value)===v?'selected':''}>${t}</option>`).join('')}</select></label>`;
+  // Local vector materials are decorative; existing controls own all interactions.
+  let artSerial = 0;
+  function materialArt(kind='dial') {
+    const id='st-material-'+(++artSerial), paint=name=>`url(#${id}-${name})`;
+    const ticks=Array.from({length:48},(_,i)=>`<path d="M0 -65v${i%4===0?7:3}" transform="rotate(${i*7.5})"/>`).join('');
+    const screws=[[28,26],[212,26],[28,174],[212,174]].map(([x,y])=>`<g transform="translate(${x} ${y})"><circle r="3" fill="${paint('metal')}" stroke="#7c898e" stroke-width=".6"/><path d="M-1.5 1.5l3 -3" stroke="#5c6b73" stroke-width=".7"/></g>`).join('');
+    const layers=`<g transform="translate(120 95) rotate(-16) skewX(12) scale(1 .72)"><rect x="-64" y="-38" width="128" height="110" rx="19" fill="${paint('edge')}"/><rect x="-64" y="-52" width="128" height="110" rx="19" fill="${paint('glass')}" stroke="#e9f9f8"/><rect x="-56" y="-64" width="112" height="98" rx="16" fill="${paint('glass')}" stroke="#e9f9f8"/><rect x="-48" y="-77" width="96" height="84" rx="13" fill="${paint('metal')}" stroke="#fff"/><path d="M-31 -54h43M-31 -43h60M-31 -32h31" stroke="#6c8684" stroke-width="3" stroke-linecap="round"/><rect x="-30" y="-18" width="28" height="12" rx="6" fill="#537d71"/><circle cx="-8" cy="-12" r="4" fill="#eff9f1"/></g>`;
+    const chip=`<g transform="translate(120 99) rotate(-14)"><path d="M-90 -48h32M-90 -22h32M-90 4h32M-90 30h32M58 -48h30M58 -22h30M58 4h30M58 30h30M-34 -86v28M0 -86v28M34 -86v28M-34 58v28M0 58v28M34 58v28" stroke="#c0a878" stroke-width="4"/><rect x="-65" y="-65" width="130" height="130" rx="20" fill="${paint('edge')}"/><rect x="-60" y="-70" width="120" height="120" rx="17" fill="${paint('metal')}" stroke="#f5faf6"/><rect x="-43" y="-53" width="86" height="86" rx="12" fill="${paint('glass')}" stroke="#f0fdf5"/><path d="M-18 -23l-12 13 12 13M18 -23l12 13 -12 13M6 -30L-6 10" stroke="#eafff5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="34" cy="40" r="3" fill="#addab8"/></g>`;
+    const dial=`<g transform="translate(120 97) scale(1 .86)"><ellipse cy="16" rx="76" ry="76" fill="${paint('edge')}"/><circle r="77" fill="${paint('metal')}" stroke="#e9eeeb"/><g stroke="#5b7073" stroke-width="1.1">${ticks}</g><circle cy="3" r="55" fill="#42585b"/><circle r="55" fill="${paint('metal')}" stroke="#fbfff9"/><circle r="48" fill="none" stroke="#738987" stroke-width=".7"/><circle r="44" fill="none" stroke="#f9fff8" stroke-width=".7"/><circle r="39" fill="${paint('face')}"/><path d="M0 -39v13" stroke="#3b7668" stroke-width="3" stroke-linecap="round"/><circle r="8" fill="none" stroke="#6b8680"/><circle r="2" fill="#759c8b"/></g><path d="M78 168h54" stroke="#8b9f98" stroke-width="2" stroke-linecap="round"/><path d="M78 168h32" stroke="#e2f4e7" stroke-width="2" stroke-linecap="round"/><circle cx="159" cy="168" r="3" fill="#b7e0be"/>`;
+    return `<svg class="st-material-art" viewBox="0 0 240 210" aria-hidden="true" focusable="false"><defs><linearGradient id="${id}-metal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fffdf0"/><stop offset=".25" stop-color="#c0ccc5"/><stop offset=".48" stop-color="#f7faf0"/><stop offset=".72" stop-color="#98ada8"/><stop offset="1" stop-color="#d4ded3"/></linearGradient><linearGradient id="${id}-edge" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#81958b"/><stop offset="1" stop-color="#344b48"/></linearGradient><linearGradient id="${id}-glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#c9e7dc" stop-opacity=".9"/><stop offset="1" stop-color="#527f74" stop-opacity=".9"/></linearGradient><radialGradient id="${id}-face" cx=".3" cy=".2" r=".9"><stop stop-color="#fafcef"/><stop offset=".65" stop-color="#c9d6ca"/><stop offset="1" stop-color="#a6b9ae"/></radialGradient></defs><ellipse cx="124" cy="183" rx="91" ry="14" fill="#16392f" opacity=".12"/><g class="st-art-platform"><rect x="15" y="19" width="210" height="174" rx="27" fill="${paint('edge')}"/><rect x="15" y="12" width="210" height="174" rx="27" fill="${paint('glass')}" stroke="#e4f7eb" stroke-width="1.2"/><path d="M32 22h170M24 46v100" stroke="#e6f8ec" opacity=".45"/>${screws}</g>${kind==='layers'?layers:kind==='chip'?chip:dial}</svg>`;
+  }
+  const sectionArt = {
+    '文字と見やすさ':['READABILITY','文字を、心地よく。','layers'],
+    'ホームと時計':['HOME & CLOCK','いつもの景色を。','layers'],
+    'サウンドと集中':['SOUND & FOCUS','自分のペースで。','dial'],
+    '通信と検索':['CONNECTION','つながりを選ぶ。','chip'],
+    '開発者設定':['DEVELOPER','細部を、確かめる。','chip'],
+    '画面表示と明るさ':['DISPLAY','光を、自分好みに。','dial'],
+    '光と奥行き':['LIGHT & DEPTH','重なりに、表情を。','layers']
+  };
+  const sectionBanner = title => {
+    const art=sectionArt[title];
+    return art?`<div class="st-section-banner"><div><span class="st-kicker">${esc(art[0])}</span><p>${art[1]}</p></div>${materialArt(art[2])}</div>`:'';
+  };
   const page = (title, html) => {
     A.statusTheme(false);
-    A.view((title==='設定'?A.nav(title):A.nav(title,'','settingsHome','設定'))+`<div class="app-content st-settings">${html}</div>`);
+    A.view((title==='設定'?A.nav(title):A.nav(title,'','settingsHome','設定'))+`<div class="app-content st-settings" data-st-section="${section}">${sectionBanner(title)}${html}</div>`);
   };
+  // Preserve the legacy brightness and appearance handlers, including their bindings.
+  for(const action of ['settingsDisplay','settingsAppearance']) {
+    const original=A.actions[action];
+    A.actions[action]=(...args)=>{
+      original(...args);
+      const content=$('#app-screen .app-content');
+      if(!content)return;
+      content.classList.add('st-settings');
+      content.dataset.stSection=action==='settingsDisplay'?'display':'appearance';
+      content.insertAdjacentHTML('afterbegin',sectionBanner(action==='settingsDisplay'?'画面表示と明るさ':'光と奥行き'));
+    };
+  }
   function save(patch) {
     const next = {...A.settings,...patch};
     if (!A.save('settings',next)) return false;
@@ -272,7 +308,9 @@
   ];
   A.renderSettingsHub = () => {
     section = 'home';
-    page('設定', `<button class="profile-card st-profile" data-action="settingsProfile"><span class="avatar">a.</span><span><strong>${esc(A.load('profileName','あなたのaura'))}</strong></span><span class="chevron">›</span></button>${A.search('st-search','設定を検索')}<div id="st-results"></div><p class="st-footnote">このブラウザに保存。実端末は変更しません。</p><p class="notes-footer">auraOS ${esc(document.documentElement.dataset.auraVersion)}</p>`);
+    const depth={soft:'やわらか',balanced:'バランス',deep:'くっきり'}[A.settings.depth]||'バランス';
+    const shortcut=(action,icon,title,value)=>`<button data-action="${action}" class="st-quick"><span class="st-quick-icon" aria-hidden="true">${A.icon(icon)}</span><span>${title}<strong>${esc(value)}</strong></span><span class="st-quick-arrow" aria-hidden="true">↗</span></button>`;
+    page('設定', `<section class="st-studio-hero" aria-label="設定の概要"><div class="st-hero-copy"><span class="st-kicker">AURA / PERSONAL STUDIO</span><h1>心地よさを、<br>仕立てる。</h1><p>光、音、いつもの景色。</p></div>${materialArt()}<div class="st-hero-bottom"><span><i aria-hidden="true"></i>ブラウザ内の設定</span><span>auraOS ${esc(document.documentElement.dataset.auraVersion)}</span></div></section><div class="st-quick-grid" aria-label="現在の設定とショートカット">${shortcut('settingsDisplay','sun','画面',A.settings.dark?'ダーク':'ライト')}${shortcut('stSound','volume','音源の音量',String(A.settings.volume)+'%')}${shortcut('settingsAppearance','layers','影の深さ',depth)}</div><button class="profile-card st-profile" data-action="settingsProfile"><span class="avatar" aria-hidden="true">a.</span><span><strong>${esc(A.load('profileName','あなたのaura'))}</strong><small>表示名を編集</small></span><span class="chevron" aria-hidden="true">›</span></button>${A.search('st-search','設定を検索')}<div id="st-results"></div><p class="st-footnote st-local-note">このブラウザに保存。実端末は変更しません。</p>`);
     $('#st-search').value = query;
     $('#st-search').oninput = e => {query=e.target.value.slice(0,100);renderResults();};
     renderResults();
@@ -282,7 +320,10 @@
     const results = catalog.map(([name,items])=>[name,items.filter(item=>(name+' '+item.join(' ')).normalize('NFKC').toLowerCase().includes(q))]).filter(([,items])=>items.length);
     // Keep all search keywords; only essential warnings need visible secondary copy.
     const warnings = {pdDataExport:'JSON（個人データを含む）',settingsReset:'復元不可'};
-    $('#st-results').innerHTML = results.map(([name,items])=>group(name,items.map(([action,title,,icon])=>link(action,title,warnings[action]||'',icon)).join(''))).join('') || '<p class="st-empty" role="status">一致する設定はありません</p>';
+    $('#st-results').innerHTML = results.map(([name,items])=>{
+      const index=catalog.findIndex(([title])=>title===name);
+      return `<section class="st-category" data-st-category="${index}"><header><span class="st-category-number" aria-hidden="true">0${index+1}</span><h2 class="st-heading">${name}</h2><span class="st-category-count">${items.length}項目</span></header><div class="group-card">${items.map(([action,title,,icon])=>link(action,title,warnings[action]||'',icon)).join('')}</div></section>`;
+    }).join('') || '<p class="st-empty" role="status">一致する設定はありません</p>';
   }
   A.actions.stAccessibility = () => {
     section = 'accessibility';
