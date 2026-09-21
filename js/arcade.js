@@ -53,7 +53,7 @@
  A.actions.blocksMove=el=>moveBlock(Number(el.dataset.value),0);A.actions.blocksRotate=rotateBlock;A.actions.blocksSoft=()=>moveBlock(0,1);A.actions.blocksDrop=()=>{if(!blocks.running)return;while(fits({...blocks.piece,y:blocks.piece.y+1})){blocks.piece.y++;blocks.score+=2;}settle();};A.actions.blocksHold=()=>{if(!blocks.running||blocks.held)return;const id=blocks.piece.id;blocks.piece=piece(blocks.hold===null?blocks.next:blocks.hold);if(blocks.hold===null)blocks.next=nextBlock();blocks.hold=id;blocks.held=true;if(!fits(blocks.piece)){blocks.over=true;blocks.running=false;}renderBlocks();};A.actions.blocksToggle=()=>{if(blocks.over)resetBlocks();blocks.running=!blocks.running;blocks.last=Date.now();renderBlocks();};A.actions.blocksRestart=()=>A.confirm('新しいゲーム？','現在の盤面をリセットします。',()=>{resetBlocks();saveBlocks();renderBlocks();});A.actions.blocksHelp=()=>help('Block Atelier','横一列をそろえて消します。↑で回転、←→で移動、↓で下降、Spaceで落下、Cでホールド。アプリを離れると保存・一時停止します。');
 
  // Crystal Field: persistent cells, batched flood reveal and active-play timing.
- let mines=null,mineMode='open',mineFocus=0,mineHint=-1,mineMessage='',mineClock=0;
+ let mines=null,mineMode='open',mineFocus=0,mineHint=-1,mineMessage='',mineClock=0,mineSaveState='idle';
  const mineDifficulties={easy:[8,10],normal:[10,18],hard:[12,28]};
  const mineLabels={easy:'初級',normal:'中級',hard:'上級'};
  const minePrefs=A.load('minesPreferences',{});
@@ -121,7 +121,16 @@
   mineMessage=mines.paused?'保存した探索を再開できます。':mines.day?'中央の＋マスから、日替わりの探索を始めましょう。':'保存した盤面を読み込みました。';
   return true;
  }
- const saveMines=()=>A.save('minesState',mines);
+ function renderMineSave(){
+  const label=$('#mines-save-status'),retry=$('#mine-save-retry');if(!label||!retry)return;
+  const failed=mineSaveState==='failed',text=failed?'進行を保存できません。容量・ブラウザの保存設定を確認してください。':mineSaveState==='saved'?'進行を端末内に保存しました':'進行は端末内に自動保存します';
+  if(label.textContent!==text)label.textContent=text;
+  label.dataset.failed=String(failed);retry.hidden=!failed;
+ }
+ function saveMines(){
+  if(!mines)return false;
+  const saved=A.save('minesState',mines);mineSaveState=saved?'saved':'failed';renderMineSave();return saved;
+ }
  const mineCanPlay=()=>mines&&!mines.over&&!mines.paused&&!document.hidden&&$('#overlay').hidden;
  function tickMines(){
   const now=performance.now(),delta=now-mineClock;mineClock=now;
@@ -200,11 +209,15 @@
   const root=$('#mines-board');if(!root)return;
   const adjacent=mines.open.includes(index)&&!mines.paused&&!mines.over?neighbors(index,mines.size):[];
   for(const cell of root.children)cell.classList.toggle('neighbor',adjacent.includes(Number(cell.dataset.index)));
+  const preview=$('#mines-neighbor-info');if(!preview)return;
+  const flags=adjacent.filter(i=>mines.flags.includes(i)).length,unopened=adjacent.filter(i=>!mines.open.includes(i)&&!mines.flags.includes(i)).length;
+  preview.textContent=adjacent.length?`周囲の鉱石 ${nearBombs(index)} / 旗 ${flags} / 未開封 ${unopened}${flags===nearBombs(index)&&unopened?' · 数字を押すと一括探索（誤旗に注意）':''}`:'数字に触れると周囲の旗と未開封数を表示';
  }
  function renderMines(changed=[],origin=0){
   const root=$('#mines-board');if(!root)return;
   const m=mines,scene=$('#mines-scene'),fresh=new Set(changed),opened=new Set(m.open),flags=new Set(m.flags),bombs=new Set(m.bombs);
   root.style.setProperty('--mine-size',m.size);
+  const animate=!mineLite&&!A.settings.reduceMotion&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   // Never rebuild existing buttons during a move: focus and compositor animations survive.
   if(root.children.length!==m.size**2){
    root.innerHTML=Array.from({length:m.size**2},(_,i)=>`<button class="mine-cell" data-action="mineCell" data-index="${i}" tabindex="${i===mineFocus?0:-1}"><span class="mine-face" aria-hidden="true"></span></button>`).join('');
@@ -219,7 +232,8 @@
    for(const [name,active] of Object.entries({open:isOpen,flag,bomb,hit:m.hit===i,wrong,start,hint:mineHint===i}))cell.classList.toggle(name,active);
    cell.dataset.near=n;cell.tabIndex=i===mineFocus?0:-1;
    cell.setAttribute('aria-label',`${Math.floor(i/m.size)+1}行${i%m.size+1}列 ${bomb?'鉱石':wrong?'誤った旗':isOpen?`開封済み・周囲の鉱石${n}個`:flag?'旗・未開封':'未開封'}${mineHint===i?'・スキャン済み':''}${start?'・日替わりスタート地点':''}`);
-   if(fresh.has(i)){
+   if(!animate)cell.classList.remove('revealing');
+   if(fresh.has(i)&&animate){
     const distance=Math.abs(i%m.size-origin%m.size)+Math.abs(Math.floor(i/m.size)-Math.floor(origin/m.size));
     cell.style.setProperty('--reveal-delay',`${Math.min(280,distance*24)}ms`);cell.classList.add('revealing');
    }
@@ -251,6 +265,7 @@
   $('#mine-daily').setAttribute('aria-pressed',String(!!m.day));$('#mine-free').setAttribute('aria-pressed',String(!m.day));
   $('#mines-mode-label').textContent=m.day?`DAILY · ${m.day} · 同じ鉱脈を何度でも`:'FREE EXPLORE · 毎回、新しい鉱脈';
   A.$$('[data-action="mineDifficulty"]').forEach(el=>{el.classList.toggle('active',el.dataset.value===m.difficulty);el.setAttribute('aria-pressed',String(el.dataset.value===m.difficulty));});
+  mineHighlight(m.paused||m.over?-1:mineFocus);renderMineSave();
  }
  function minesApp(){
   if(!mines&&!restoreMines(A.load('minesState',null)))resetMines();
@@ -263,12 +278,14 @@
     <div class="arc-scorebar crystal-scores">${score('残りの旗',0,'mines-left')}${score('探索時間','00:00','mines-time')}<div><small id="mines-best-label">最短記録</small><strong id="mines-best">—</strong></div></div>
     <div class="crystal-progress"><span id="mines-progress-label"></span><progress id="mines-progress" aria-label="安全マスの探索進捗" max="1" value="0"></progress></div>
     <div class="mines-shell"><div class="mines-scroll" id="mines-scroll"><div id="mines-board" class="mines-board" role="group" aria-label="探索盤面。矢印キーで移動、Enterで操作、Fで旗" aria-describedby="mines-controls-help"></div></div><div id="mines-pause-cover" class="crystal-pause" hidden><strong>ひと息、つこう。</strong><p>盤面とタイマーを一時停止しています</p><button data-action="minePause">探索を再開</button></div><div class="crystal-sparkles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    <p id="mines-neighbor-info" class="crystal-neighbor-info">数字に触れると周囲の旗と未開封数を表示</p>
     <div id="mines-status" class="crystal-status" role="status" aria-live="polite"></div>
     <p id="mines-message" class="crystal-message" aria-live="polite"></p>
     <div id="mines-result" class="crystal-result" hidden><strong>探索レポート</strong><p id="mines-result-copy"></p><button data-action="mineRestart">新しい鉱脈へ</button></div>
     <div class="crystal-controls"><button data-action="mineFlag" id="mine-flag" aria-pressed="false">旗モード</button><button data-action="mineHint" id="mine-hint">安全スキャン 3/3</button><button data-action="minePause" id="mine-pause">一時停止</button></div>
     <div class="crystal-tools"><button data-action="mineZoom" id="mine-zoom" aria-pressed="false">盤面を拡大</button><button data-action="mineQuality" id="mine-quality" aria-pressed="false">高精細描画</button><button data-action="mineRecords">成績</button><button data-action="mineRestart">新しい盤面</button></div>
     <div class="crystal-preferences"><button data-action="mineTheme" id="mine-theme">結晶色：アクア</button><button data-action="mineSound" id="mine-sound" aria-pressed="false">効果音 OFF</button></div>
+    <div class="crystal-save"><span id="mines-save-status" role="status" aria-live="polite"></span><button id="mine-save-retry" data-action="mineSaveRetry" hidden>進行の保存を再試行</button></div>
     <p class="crystal-help" id="mines-controls-help">タップで探索 · 長押し / 右クリックで旗<br>PC：矢印で移動 · Enter / Spaceで操作 · Fで旗 · Pで一時停止<br>旗を数字と同じ数だけ置き、数字をタップすると周囲を一括探索。</p>
    </section>`,iconButton('mineHelp','遊び方','document'));
   renderMines();
@@ -313,7 +330,11 @@
     e.preventDefault();mineFocus=next;root.children[next].focus();
    }else if(e.key.toLowerCase()==='f'){e.preventDefault();if(!e.repeat)flagMine(index);}
   });
-  every(tickMines,250);every(saveMines,5000);
+  every(tickMines,250);
+  // Avoid repeating storage-error toasts while paused or while waiting for manual retry.
+  every(()=>{if(mineSaveState!=='failed'&&mines.started&&mineCanPlay())saveMines();},5000);
+  const motion=window.matchMedia('(prefers-reduced-motion: reduce)');
+  if(motion.addEventListener)on(motion,'change',()=>renderMines());
   const suspend=()=>{cancelHold();tickMines();pauseMines();};
   on(document,'visibilitychange',()=>{if(document.hidden)suspend();else mineClock=performance.now();});
   on(window,'blur',suspend);on(window,'pagehide',suspend);
@@ -321,6 +342,7 @@
   overlays.observe($('#overlay'),{attributes:true,attributeFilter:['hidden']});
   disposers.push(()=>{cancelHold();overlays.disconnect();closeMineAudio();tickMines();if(mines.started&&!mines.over)mines.paused=true;saveMines();});
  }
+ A.actions.mineSaveRetry=()=>{tickMines();saveMines();};
  A.actions.mineCell=el=>{mineFocus=Number(el.dataset.index);mineMode==='flag'?flagMine(mineFocus):revealMine(mineFocus);};
  A.actions.mineFlag=()=>{if(!mineCanPlay())return;mineMode=mineMode==='flag'?'open':'flag';mineHint=-1;renderMines();};
  A.actions.minePause=()=>{
