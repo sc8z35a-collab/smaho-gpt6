@@ -18,6 +18,7 @@ const count2048=n=>Number.isSafeInteger(n)&&n>=0?n:0;
 const validTiles2048=list=>Array.isArray(list)&&list.length===16&&list.every(v=>v===0||(Number.isSafeInteger(v)&&v>=2&&v<=2**48&&Number.isInteger(Math.log2(v))));
 const saved2048=A.load('2048state',null);
 const restored2048=validTiles2048(saved2048?.tiles)&&saved2048.tiles.some(Boolean)&&Number.isSafeInteger(saved2048.score)&&saved2048.score>=0;
+let recoveryNotice2048=!!saved2048&&!restored2048;
 let tiles=restored2048?[...saved2048.tiles]:Array(16).fill(0);
 let score=restored2048?saved2048.score:0,best=Math.max(count2048(A.load('2048best',0)),score);
 let turns2048=restored2048?count2048(saved2048.moves):0;
@@ -61,8 +62,10 @@ function plan2048(board,direction){
 function movable(board=tiles){return directions2048.some(d=>plan2048(board,d).changed);}
 function animate2048(el,frames,options){
  if(!el||reduced2048()||!el.animate)return;
+ for(const running of animations2048)if(running.effect?.target===el){running.cancel();animations2048.delete(running);}
  const animation=el.animate(frames,options);animations2048.add(animation);
  const done=()=>animations2048.delete(animation);animation.onfinish=done;animation.oncancel=done;
+ return animation;
 }
 function stopMotion2048(){
  clearTimeout(moveTimer2048);moveTimer2048=null;finishMove2048=null;pending2048=null;busy2048=false;
@@ -103,19 +106,21 @@ function render2048(message=''){
  board.setAttribute('aria-label',`2048の盤面。スコア ${score}。`+Array.from({length:4},(_,r)=>`${r+1}行目 ${tiles.slice(r*4,r*4+4).map(v=>v||'空').join('、')}`).join('。'));
 }
 function slide2048(plan,spawned){
- const layer=$('#tiles-2048'),duration=reduced2048()?0:prefs2048.speed==='quick'?95:150;
+ const layer=$('#tiles-2048'),duration=reduced2048()||!layer.animate?0:prefs2048.speed==='quick'?95:150;
  const step=(layer.clientWidth+parseFloat(getComputedStyle(layer).getPropertyValue('--g-gap')))/4;
- const survivors=new Map(),removed=[];
+ const survivors=new Map(),removed=[],slides=[];
  busy2048=true;
  for(const path of plan.paths){
   const el=nodes2048.get(path.from);if(!el)continue;
   position2048(el,path.to);el.style.zIndex=path.consumed?'2':'3';
-  if(path.from!==path.to)animate2048(el,[{transform:`translate3d(${(path.from%4-path.to%4)*step}px,${(Math.floor(path.from/4)-Math.floor(path.to/4))*step}px,0)`},{transform:'translate3d(0,0,0)'}],{duration,easing:'cubic-bezier(.2,.75,.25,1)'});
+  if(path.from!==path.to)slides.push(animate2048(el,[{transform:`translate3d(${(path.from%4-path.to%4)*step}px,${(Math.floor(path.from/4)-Math.floor(path.to/4))*step}px,0)`},{transform:'translate3d(0,0,0)'}],{duration,easing:'cubic-bezier(.2,.75,.25,1)'}));
   if(path.consumed)removed.push(el);else survivors.set(path.to,el);
  }
  nodes2048=survivors;
  const finish=()=>{
   clearTimeout(moveTimer2048);moveTimer2048=null;finishMove2048=null;
+  // Timers may fire between compositor frames: settle old transforms first.
+  slides.forEach(animation=>{animation?.cancel();animations2048.delete(animation);});
   removed.forEach(el=>el.remove());
   for(const [index,el] of survivors){
    face2048(el,tiles[index]);el.style.zIndex='';
@@ -187,21 +192,21 @@ function game2048(){
   <div class="g2048-meta"><span><strong id="moves-2048">0</strong> 手</span><span>空き <strong id="empty-2048">14</strong></span><span>最大 <strong id="high-2048">2</strong></span></div>
   <div class="g2048-combo" id="combo-2048"></div>
   <section class="g2048-result" id="result-2048" aria-labelledby="result-title-2048" hidden><small>YOUR LITTLE MILESTONE</small><h3 id="result-title-2048"></h3><p id="result-copy-2048"></p><button id="continue-2048" data-action="continue2048">続ける</button><button data-action="restart2048">新しく始める</button></section>
-  <div class="g2048-tools"><button id="undo-2048" data-action="undo2048" aria-label="一手戻す">${icon('back')}<span>戻す <small id="undo-count-2048">0</small></span></button><button id="redo-2048" data-action="redo2048">${icon('arrow')}<span>やり直す</span></button><button id="hint-2048" data-action="hint2048">${icon('sun')}<span>ヒント</span></button><button data-action="restart2048">${icon('refresh')}<span>新しく</span></button></div>
+  <div class="g2048-tools"><button id="undo-2048" data-action="undo2048" aria-label="一手戻す">${icon('arrow','style="transform:rotate(180deg)"')}<span>戻す <small id="undo-count-2048">0</small></span></button><button id="redo-2048" data-action="redo2048">${icon('arrow')}<span>やり直す</span></button><button id="hint-2048" data-action="hint2048">${icon('sun')}<span>ヒント</span></button><button data-action="restart2048">${icon('refresh')}<span>新しく</span></button></div>
   <p class="g2048-status" id="status-2048" role="status" aria-live="polite" aria-atomic="true"></p>
   <div class="g2048-pad" role="group" aria-label="移動方向">${[['up','↑'],['left','←'],['down','↓'],['right','→']].map(([d,s])=>`<button data-action="move2048" data-value="${d}" aria-label="${labels2048[d]}へ動かす">${s}</button>`).join('')}</div>
   <p id="instructions-2048" class="g2048-caption">スワイプ / 矢印 / WASD<br>取り消し Z ・ やり直し Y</p>
   <details class="g2048-settings"><summary>見た目とプレイ記録</summary><fieldset><legend>タイルの素材</legend>${[['ceramic','陶器'],['aurora','オーロラ']].map(([v,label])=>`<button data-action="theme2048" data-value="${v}" aria-pressed="${prefs2048.theme===v}">${label}</button>`).join('')}</fieldset><fieldset><legend>モーションの速さ</legend>${[['smooth','なめらか'],['quick','きびきび']].map(([v,label])=>`<button data-action="speed2048" data-value="${v}" aria-pressed="${prefs2048.speed===v}">${label}</button>`).join('')}</fieldset><p>「動きを抑える」設定と端末の動き軽減を優先します。</p><dl><div><dt>自己最大タイル</dt><dd id="record-tile-2048">2</dd></div><div><dt>最多連続合体</dt><dd><span id="record-combo-2048">0</span> 手</dd></div></dl><p>連続合体は演出・記録のみ。追加の得点倍率はありません。取り消し履歴はこのページ内で直近32手まで。</p></details>
   <button class="g2048-save" id="save-2048" data-action="save2048" aria-label="進行状況を保存し直す">端末に自動保存</button>
  </div>`);
- paint2048();save2048();render2048(saved2048&&!restored2048?'保存された盤面を読み込めなかったため、新しい盤面で開始しました。':'');
+ paint2048();save2048();render2048(recoveryNotice2048?'保存された盤面を読み込めなかったため、新しい盤面で開始しました。':'');recoveryNotice2048=false;
  const board=$('#board-2048');let pointer=null;
  const on=(target,type,fn,options)=>{target.addEventListener(type,fn,options);gameCleanups.push(()=>target.removeEventListener(type,fn,options));};
  on(board,'pointerdown',e=>{if(!e.isPrimary||e.button!==0||pointer)return;pointer={id:e.pointerId,x:e.clientX,y:e.clientY};board.setPointerCapture(e.pointerId);board.focus({preventScroll:true});});
  on(board,'pointerup',e=>{if(!pointer||e.pointerId!==pointer.id)return;const dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;pointer=null;if(board.hasPointerCapture(e.pointerId))board.releasePointerCapture(e.pointerId);if(Math.max(Math.abs(dx),Math.abs(dy))<18)return;move2048(Math.abs(dx)>Math.abs(dy)?dx>0?'right':'left':dy>0?'down':'up');});
  const cancelPointer=()=>{pointer=null;};on(board,'pointercancel',cancelPointer);on(board,'lostpointercapture',cancelPointer);
  listenKey(e=>{
-  if(!active2048()||!$('#overlay').hidden||e.target.closest('input,textarea,select,[contenteditable="true"]')||e.altKey)return;
+  if(!active2048()||!$('#overlay').hidden||e.isComposing||e.target.closest('input,textarea,select,[contenteditable]')||e.altKey)return;
   const key=e.key.toLowerCase(),modifier=e.ctrlKey||e.metaKey;
   if(key==='z'||key==='y'){e.preventDefault();if(!e.repeat)historyStep2048(key==='y'||e.shiftKey);return;}
   if(modifier)return;
@@ -224,7 +229,8 @@ A.actions.restart2048=()=>{if(!active2048())return;pending2048=null;A.confirm('�
 });};
 function preference2048(key,value){
  const allowed=key==='theme'?['ceramic','aurora']:['smooth','quick'];if(!active2048()||!allowed.includes(value))return;
- prefs2048[key]=value;A.save('2048preferences',prefs2048);
+ prefs2048[key]=value;const saved=A.save('2048preferences',prefs2048);
+ if(!saved)render2048('見た目の設定を保存できませんでした。このページ内だけに適用します。');
  if(key==='theme')$('.studio-2048').dataset.material=value;
  A.$$(`.studio-2048 [data-action="${key}2048"]`).forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.value===value)));
 }
