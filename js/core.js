@@ -366,9 +366,9 @@
           line('M17 58l9-8m28 0 9 8','#fff',.65)+line('M17 60h9m28 0h8','#b4c9d8',.4))+
         path('M33 46l5 4a3 3 0 0 0 4 0l5-4-5 6a3 3 0 0 1-4 0Z','#749abd','opacity=".18"')+
         seam('M11 36v22q0 5 4 5','#fff',.9),
-      clock: () => circle(40,40,32.1,'none','stroke="#22384e" stroke-width=".45"')+
+      clock: now => circle(40,40,32.1,'none','stroke="#22384e" stroke-width=".45"')+
         fine([30,60,120,150,210,240,300,330].map(a=>rect(39.5,18.8,1,2.5,.35,metal,`transform="rotate(${a} 40 40)"`)).join(''))+
-        line('M40 40V26','#bdcddc',.65,`class="app-clock-hour" transform="rotate(${0} 40 40)" data-detail-hand="hour"`)+
+        line('M40 40V26','#bdcddc',.65,`class="app-clock-hour" transform="rotate(${(now.getHours()%12)*30+now.getMinutes()/2} 40 40)" data-detail-hand="hour"`)+
         path('M13 42a28 28 0 0 0 43 22c-18 6-33-3-43-22Z','#7188a5','opacity=".07"'),
       maps: () => fine([[13,21],[19,25],[8,42],[68,70],[73,65]].map(([x,y])=>circle(x,y+1,2,'#9ab999')+circle(x,y,1.9,'#b4d19c')+circle(x-.5,y-.6,.65,'#dce9b7')).join('')+
           line('M4 53l16-5M33 43l3-1M73 28l5-2','#fff5db',.65)+line('M24 56h6m-6 2h6m-6 2h6','#c6ccbf',.65)+
@@ -474,7 +474,7 @@
       const base = art[id];
       art[id] = now => {
         // The inset hand shares the live clock selector and starts at real time.
-        const refinement = detail[id]().replace('rotate(0 40 40)" data-detail-hand="hour"', `rotate(${(now.getHours()%12)*30+now.getMinutes()/2} 40 40)" data-detail-hand="hour"`);
+        const refinement = detail[id](now);
         return `<g class="icon-motion motion-scene scene-${id}" style="--motion-phase:${-(index%7)*.47}s">${base(now)}${finish[id]()}<g class="app-material-detail">${refinement}</g></g>`;
       };
     });
