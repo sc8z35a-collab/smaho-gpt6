@@ -12,6 +12,14 @@
 - [保存先：共有PR #11](https://github.com/sc8z35a-collab/smaho-gpt6/pull/11)
 - **依頼により、今回の2048変更のテストは未実施です。** PR保存と本番公開は別で、この作業では本番デプロイを行っていません。
 
+## Orbit Breaker — Flight Upgrade（PRに保存）
+
+Orbitを宇宙背景・立体ブロック・光の軌跡と破片演出へ刷新。120Hz固定物理と描画補間、3難易度、6種の配置、強化アイテム、FOCUS、ミッション、ノーミス報酬を実装しました。進行の自動保存と再開、3秒カウントダウン、壁反射付き発射ガイド、盤面重視表示を追加しています。
+
+- [PRタイトル・完全版の変更説明・操作・保存仕様・未検証範囲](CHANGES-ORBIT.md)
+- [保存先：共有PR #11](https://github.com/sc8z35a-collab/smaho-gpt6/pull/11)
+- **依頼によりOrbitのテストは未実施です。** FPS・実機動作は未測定。PR保存と本番公開は別で、マージ・デプロイは行っていません。
+
 ## 4.6 設定と開発者ツール
 
 設定を4カテゴリ・18項目の検索付き一覧に整理しました。既存データは保持します。
@@ -233,7 +241,7 @@ tests/persistence.cjs   Playwrightでの再読込・既存配置移行・タイ�
 
 追加の起動リンク：`#app=games&view=blocks`、`mines`、`reversi`、`breaker`、`sudoku`（後ろ4件も同じview形式）。
 
-追加ゲームの保存キーは `arcadeFavorites`、`arcadeRecent`、`blocksState`、`blocksBest`、`minesState`、`minesWins`、`minesBest-難易度`、`reversiState`、`reversiWins`、`breakerBest`、`sudokuState`、`sudokuWins`、`sudokuDaily`（すべて `aura.` 接頭辞）。ブロック崩しは最高点のみ保存し、進行は同じページを開いている間だけ保持します。スケッチ同様にゲーム操作の取り消し履歴はセッション内のみです。
+追加ゲームの保存キーは `arcadeFavorites`、`arcadeRecent`、`blocksState`、`blocksBest`、`minesState`、`minesWins`、`minesBest-難易度`、`reversiState`、`reversiWins`、`breakerBest`、`sudokuState`、`sudokuWins`、`sudokuDaily`（すべて `aura.` 接頭辞）。当初のブロック崩しは最高点のみ保存していました。現行Orbitでは `breakerPreferences`・`breakerRecords`・`breakerState` を追加し、設定・難易度別記録・進行1枠を保存します（[現行の保存仕様](CHANGES-ORBIT.md)）。スケッチ同様にゲーム操作の取り消し履歴はセッション内のみです。
 
 ゲーム追加・グラフィック変更も、依頼によりテストを実行していません。本番反映時はGitHub Pagesのデプロイ成否と配信バージョンだけを確認します。
 
