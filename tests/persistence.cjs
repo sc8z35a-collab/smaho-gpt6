@@ -143,12 +143,39 @@ async function checkControlDesk(browser,url){
  } finally {await page.close();}
 }
 
+async function checkNotesStudio(browser,url){
+ const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/*',r=>new URL(r.request().url()).origin===new URL(url).origin?r.continue():r.abort());
+ try{
+  await page.goto(url+'#app=notes');
+  await page.evaluate(()=>{Aura.noteModel.replace([{id:'legacy-note',title:'引き継ぐメモ',body:'本文',updated:1000}]);Aura.actions.pdNoteReset();});
+  const saved=await page.evaluate(()=>localStorage.getItem('aura.notes'));
+  await page.reload();assert.equal(await page.evaluate(()=>localStorage.getItem('aura.notes')),saved);
+  await page.locator('.memo-card').click();await page.locator('.memo-style-panel summary').click();
+  for(const [key,id] of [['tone','lavender'],['paper','dots'],['font','serif']])await page.locator(`[data-action=pdNoteStyle][data-key=${key}][data-id=${id}]`).click();
+  await page.locator('#note-body').fill('再読込後にも残る本文');await page.locator('[data-action=noteList]').click();await page.locator('[data-action=pdNoteLayout][data-id=list]').click();
+  await page.reload();assert.equal(await page.locator('#notes-grid').getAttribute('data-layout'),'list');
+  await page.locator('.memo-card').click();assert.deepEqual(await page.locator('.memo-paper').evaluate(el=>({...el.dataset})),{tone:'lavender',paper:'dots',font:'serif'});
+  assert.equal(await page.locator('#note-body').inputValue(),'再読込後にも残る本文');
+  console.log('PASS notes reload: legacy notes, chosen stationery, text and layout persist');
+  await page.evaluate(()=>{Aura.testReplace=Aura.noteModel.replace;Aura.noteModel.replace=()=>false;});
+  await page.locator('#note-body').fill('再試行する下書き');await page.locator('[data-action=noteList]').click();await page.locator('.memo-card').click();
+  assert.equal(await page.locator('#note-body').inputValue(),'再試行する下書き');assert.equal(await page.locator('#memo-save-retry').isVisible(),true);
+  await page.evaluate(()=>{Aura.noteModel.replace=Aura.testReplace;delete Aura.testReplace;});await page.locator('#memo-save-retry').click();
+  await page.reload();await page.locator('.memo-card').click();assert.equal(await page.locator('#note-body').inputValue(),'再試行する下書き');
+  assert.equal(await page.locator('#memo-save-warning').isVisible(),false);assert.deepEqual(errors,[]);
+  console.log('PASS notes reload: retry commits recovered draft; no uncaught errors');return 2;
+ }finally{await page.close();}
+}
+
 (async()=>{
  const browser=await chromium.launch({headless:true});
  try {
   const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   const url=process.env.AURA_TEST_URL||'http://127.0.0.1:8765/';
+  if(process.env.AURA_TEST_SCOPE==='notes'){const count=await checkNotesStudio(browser,url);console.log(`RESULT: ${count} passed, 0 failed.`);return;}
   await page.goto(url);
   const legacy=['calendar','photos','camera','weather','mail','clock','maps','notes','reminders','files','calculator','settings','games','health','wallet','recorder','phone','safari','messages','music'];
   [legacy[0],legacy[18]]=[legacy[18],legacy[0]];
@@ -231,7 +258,8 @@ async function checkControlDesk(browser,url){
   console.log('PASS invalid new preference values fall back safely');
   assert.deepEqual(errors,[]);
   console.log('PASS no uncaught browser errors');
+  const notes=await checkNotesStudio(browser,url);
   const controls=await checkControlDesk(browser,url);
-  console.log(`RESULT: ${12+controls} passed, 0 failed.`);
+  console.log(`RESULT: ${12+controls+notes} passed, 0 failed.`);
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
