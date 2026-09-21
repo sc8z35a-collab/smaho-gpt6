@@ -318,7 +318,7 @@ function preference2048(key,value){
 }
 A.actions.theme2048=el=>preference2048('theme',el.dataset.value);A.actions.speed2048=el=>preference2048('speed',el.dataset.value);
 // Little Snake — fixed-step rules, interpolated rendering and bounded local records.
-const snakeSize=18, snakeCanvasSize=648;
+const snakeSize=18;
 const snakeModes={
  classic:{label:'クラシック',hint:'壁と体を避けて、実を集めよう',step:150,min:95,wrap:false},
  garden:{label:'おさんぽ',hint:'壁を通り抜ける、ゆったりした庭',step:210,min:210,wrap:true},
@@ -333,7 +333,18 @@ const snakeRecords=Object.fromEntries(Object.keys(snakeModes).map(id=>[id,{best:
 let snakeBest=snakeNumber(A.load('snakeBest',0));
 const snakeHistoryRaw=A.load('snakeHistory',[]);
 let snakeHistory=(Array.isArray(snakeHistoryRaw)?snakeHistoryRaw:[]).filter(r=>r&&Object.hasOwn(snakeModes,r.mode)).slice(0,8).map(r=>({mode:r.mode,score:snakeNumber(r.score),fruit:snakeNumber(r.fruit,320),seconds:snakeNumber(r.seconds),won:r.won===true}));
-let snake=null,snakeFrame=0,snakeLast=0,snakeCanvas=null,snakeGround=null,snakeGroundKey='',snakeParticles=[];
+const snakeBadges=[
+ {id:'first',title:'はじめの一粒',detail:'実を1個食べる',earned:s=>s.fruit>=1},
+ {id:'gold',title:'金色の寄り道',detail:'金の実を食べる',earned:s=>s.gold>=1},
+ {id:'long',title:'庭の探検家',detail:'長さ24マスに育つ',earned:s=>s.body.length>=24},
+ {id:'combo',title:'リズムマスター',detail:'ラッシュで4倍コンボ',earned:s=>s.mode==='rush'&&s.peakCombo===4},
+ {id:'score',title:'豊かな収穫',detail:'1プレイで500点',earned:s=>s.score>=500},
+ {id:'full',title:'庭の守り手',detail:'324マスを埋める',earned:s=>s.won}
+];
+const snakeBadgeRaw=A.load('snakeAchievements',[]);
+const snakeAchievements=new Set((Array.isArray(snakeBadgeRaw)?snakeBadgeRaw:[]).filter(id=>snakeBadges.some(b=>b.id===id)));
+let snake=null,snakeFrame=0,snakeLast=0,snakeCanvas=null,snakeGround=null,snakeGroundKey='',snakeParticles=[],snakeFloats=[];
+let snakeSaveOK=true,snakeScoreAnimation=null;
 const snakeMotionQuery=matchMedia('(prefers-reduced-motion: reduce)');
 const snakeReduced=()=>!!A.settings.reduceMotion||snakeMotionQuery.matches;
 const sameSnakeCell=(a,b)=>!!a&&!!b&&a.x===b.x&&a.y===b.y;
@@ -341,8 +352,45 @@ const snakeLevel=()=>1+Math.floor(snake.fruit/5);
 const snakeStep=()=>Math.max(snakeModes[snake.mode].min,snakeModes[snake.mode].step-(snakeLevel()-1)*6);
 function resetSnake(){
  const body=[{x:7,y:9},{x:6,y:9},{x:5,y:9},{x:4,y:9}];
- snake={body,previous:body.map(p=>({...p})),direction:{x:1,y:0},oldDirection:{x:1,y:0},queue:[],mode:snakePrefs.mode,score:0,fruit:0,time:0,lastFruit:-Infinity,combo:0,bonus:null,food:null,step:snakeModes[snakePrefs.mode].step,accumulator:0,running:false,started:false,over:false,won:false,recorded:false,reason:''};
- snakeParticles=[];snake.food=freeSnakeCell();
+ snake={body,previous:body.map(p=>({...p})),direction:{x:1,y:0},oldDirection:{x:1,y:0},queue:[],mode:snakePrefs.mode,score:0,fruit:0,gold:0,peakCombo:0,bestAtStart:snakeRecords[snakePrefs.mode].best,time:0,lastFruit:-Infinity,combo:0,bonus:null,food:null,step:snakeModes[snakePrefs.mode].step,accumulator:0,running:false,started:false,over:false,won:false,recorded:false,reason:''};
+ snakeParticles=[];snakeFloats=[];snake.food=freeSnakeCell();
+}
+// Saved runs are untrusted input: validate geometry before restoring a paused run.
+function restoreSnake(){
+ const saved=A.load('snakeSession',null);
+ if(!saved||saved.version!==1||typeof saved.mode!=='string'||!Object.hasOwn(snakeModes,saved.mode))return false;
+ const cell=p=>p&&Number.isInteger(p.x)&&Number.isInteger(p.y)&&p.x>=0&&p.y>=0&&p.x<18&&p.y<18;
+ const integer=(n,max)=>Number.isSafeInteger(n)&&n>=0&&n<=max;
+ const b=saved.body;
+ if(!Array.isArray(b)||b.length<4||b.length>323||!b.every(cell)||new Set(b.map(p=>p.y*18+p.x)).size!==b.length)return false;
+ if(!Object.values(snakeDirections).some(d=>sameSnakeCell(d,saved.direction)))return false;
+ const distance=(a,b)=>{const x=Math.abs(a.x-b.x),y=Math.abs(a.y-b.y);return snakeModes[saved.mode].wrap?Math.min(x,18-x)+Math.min(y,18-y):x+y;};
+ if(b.some((p,i)=>i>0&&distance(p,b[i-1])!==1))return false;
+ const neck={x:b[1].x+saved.direction.x,y:b[1].y+saved.direction.y};
+ if(snakeModes[saved.mode].wrap){neck.x=(neck.x+18)%18;neck.y=(neck.y+18)%18;}
+ if(!sameSnakeCell(neck,b[0])||!cell(saved.food)||b.some(p=>sameSnakeCell(p,saved.food)))return false;
+ if(!integer(saved.score,38400)||!integer(saved.fruit,319)||saved.fruit!==b.length-4||!integer(saved.gold,saved.fruit)||!integer(saved.peakCombo,4)||!integer(saved.bestAtStart,1e9))return false;
+ if(!Number.isFinite(saved.time)||saved.time<0||saved.time>1e12||!integer(saved.combo,4)||saved.combo>saved.peakCombo)return false;
+ if(saved.lastFruit!==null&&(!Number.isFinite(saved.lastFruit)||saved.lastFruit<0||saved.lastFruit>saved.time))return false;
+ if(saved.bonus&&(!cell(saved.bonus)||sameSnakeCell(saved.bonus,saved.food)||b.some(p=>sameSnakeCell(p,saved.bonus))||!Number.isFinite(saved.bonus.until)||saved.bonus.until<=saved.time||saved.bonus.until>saved.time+8000))return false;
+ snakePrefs.mode=saved.mode;resetSnake();
+ snake.body=b.map(p=>({x:p.x,y:p.y}));snake.previous=snake.body.map(p=>({...p}));
+ snake.direction={x:saved.direction.x,y:saved.direction.y};snake.oldDirection={...snake.direction};
+ for(const key of ['score','fruit','gold','peakCombo','bestAtStart','time','combo'])snake[key]=saved[key];
+ snake.lastFruit=saved.lastFruit===null?-Infinity:saved.lastFruit;
+ snake.food={x:saved.food.x,y:saved.food.y};snake.bonus=saved.bonus?{x:saved.bonus.x,y:saved.bonus.y,until:saved.bonus.until}:null;
+ snake.started=true;snake.step=snakeStep();snake.reason='保存した庭を復元しました。「再開」で続けられます';
+ return true;
+}
+function snakeSnapshot(){
+ if(!snake?.started||snake.over)return null;
+ return {version:1,mode:snake.mode,body:snake.body,direction:snake.direction,food:snake.food,bonus:snake.bonus,score:snake.score,fruit:snake.fruit,gold:snake.gold,peakCombo:snake.peakCombo,bestAtStart:snake.bestAtStart,time:snake.time,lastFruit:Number.isFinite(snake.lastFruit)?snake.lastFruit:null,combo:snake.combo};
+}
+function earnSnakeBadges(){
+ const earned=snakeBadges.filter(b=>!snakeAchievements.has(b.id)&&b.earned(snake));
+ if(!earned.length)return;
+ earned.forEach(b=>snakeAchievements.add(b.id));
+ snakeText('snake-achievement-notice','実績達成：'+earned.map(b=>b.title).join('・'));
 }
 function freeSnakeCell(exclude=null){
  const occupied=new Set(snake.body.map(p=>p.y*snakeSize+p.x));
@@ -351,9 +399,14 @@ function freeSnakeCell(exclude=null){
  if(!free.length)return null;
  const cell=free[Math.floor(Math.random()*free.length)];return {x:cell%snakeSize,y:Math.floor(cell/snakeSize)};
 }
-function saveSnakeRecords(){
+function saveSnakeRecords(force=true){
+ if(!snake||(!force&&!snakeSaveOK))return false;
  snakeBest=Math.max(snakeBest,snake.score);snakeRecords[snake.mode].best=Math.max(snakeRecords[snake.mode].best,snake.score);
- A.saveBatch({snakeBest,snakeRecords});
+ // Snapshot, records and completion history succeed or roll back together.
+ snakeSaveOK=A.saveBatch({snakeBest,snakeRecords,snakeHistory,snakeSession:snakeSnapshot(),snakeAchievements:[...snakeAchievements]});
+ snakeText('snake-save-status',snakeSaveOK?'端末内に保存済み':'未保存：容量やブラウザ設定を確認し、保存を再試行してください');
+ $('#snake-save-status')?.classList.toggle('save-error',!snakeSaveOK);
+ return snakeSaveOK;
 }
 function finishSnake(reason,won=false){
  snake.over=true;snake.won=won;snake.reason=reason;snake.running=false;snake.queue=[];
@@ -361,7 +414,7 @@ function finishSnake(reason,won=false){
  if(!snake.recorded){
   snake.recorded=true;const r=snakeRecords[snake.mode];r.plays++;r.fruit+=snake.fruit;r.length=Math.max(r.length,snake.body.length);
   snakeHistory=[{mode:snake.mode,score:snake.score,fruit:snake.fruit,seconds:Math.floor(snake.time/1000),won},...snakeHistory].slice(0,8);
-  saveSnakeRecords();A.save('snakeHistory',snakeHistory);
+  earnSnakeBadges();saveSnakeRecords();
  }
  updateSnakeUi();
 }
@@ -369,6 +422,7 @@ function stopSnake(reason='一時停止中。再開ボタンで続けられま�
  cancelAnimationFrame(snakeFrame);snakeFrame=0;
  if(!snake)return;
  snake.running=false;snake.queue=[];if(!snake.over)snake.reason=reason;
+ if(snake.started)saveSnakeRecords();
  updateSnakeUi();drawSnake();
 }
 function burstSnake(cell,gold){
@@ -390,7 +444,10 @@ function tickSnake(){
  snake.previous=snake.body.map(p=>({...p}));snake.body.unshift(head);if(!eating)snake.body.pop();
  if(eating){
   snake.combo=snake.mode==='rush'?(snake.time-snake.lastFruit<=6000?Math.min(4,snake.combo+1):1):1;
-  snake.lastFruit=snake.time;snake.score+=(gold?30:10)*snake.combo;snake.fruit++;burstSnake(head,gold);A.haptic();
+  snake.lastFruit=snake.time;const gain=(gold?30:10)*snake.combo;snake.score+=gain;snake.fruit++;
+  if(gold)snake.gold++;snake.peakCombo=Math.max(snake.peakCombo,snake.combo);
+  if(!snakeReduced())snakeFloats=[...snakeFloats,{x:(head.x+.5)*36,y:(head.y+.5)*36,gain,born:snake.time,gold}].slice(-8);
+  burstSnake(head,gold);earnSnakeBadges();A.haptic();
   if(gold)snake.bonus=null;
   if(snake.body.length===snakeSize*snakeSize){snake.food=null;snake.bonus=null;finishSnake('庭いっぱいに育ちました',true);return;}
   if(normal){
@@ -399,7 +456,7 @@ function tickSnake(){
    if(!snake.food){snake.bonus=null;snake.food=freeSnakeCell();}
   }
   if(snake.fruit%5===0&&!snake.bonus){const cell=freeSnakeCell(snake.food);if(cell)snake.bonus={...cell,until:snake.time+8000};}
-  saveSnakeRecords();updateSnakeUi();
+  saveSnakeRecords(false);updateSnakeUi();
  }
 }
 function snakeLoop(now){
@@ -415,6 +472,8 @@ function snakeLoop(now){
   snake.accumulator-=snake.step;snake.oldDirection={...snake.direction};tickSnake();snake.step=snakeStep();
  }
  snakeParticles=snakeParticles.filter(p=>snake.time-p.born<650);
+ snakeFloats=snakeFloats.filter(p=>snake.time-p.born<950);
+ if(snake.running&&Math.floor((snake.time-dt)/2000)!==Math.floor(snake.time/2000))saveSnakeRecords(false);
  if(Math.floor((snake.time-dt)/100)!==Math.floor(snake.time/100))updateSnakeUi();
  drawSnake();if(snake.running)snakeFrame=requestAnimationFrame(snakeLoop);
 }
@@ -423,20 +482,30 @@ function toggleSnake(){
  if(snake.running){stopSnake();return;}
  if(snake.over)resetSnake();
  if(!snake.started){snake.started=true;snake.accumulator=snake.step;}
- snake.reason='';snake.running=true;snakeLast=performance.now();updateSnakeUi();
+ snake.reason='';snake.running=true;snakeLast=performance.now();
+ $('.snake-settings').open=false;saveSnakeRecords();updateSnakeUi();snakeCanvas.focus({preventScroll:true});
  cancelAnimationFrame(snakeFrame);snakeFrame=requestAnimationFrame(snakeLoop);
 }
 function steerSnake(id){
  if(!snake||snake.over||!snakeCanvas?.isConnected||!$('#overlay').hidden)return;
  const d=snakeDirections[id],last=snake.queue.at(-1)||snake.direction;if(!d||snake.queue.length>=2)return;
- if(d.x===-last.x&&d.y===-last.y||d.x===last.x&&d.y===last.y)return;
+ if(d.x===-last.x&&d.y===-last.y)return;
+ if(d.x===last.x&&d.y===last.y){if(!snake.started)toggleSnake();return;}
  snake.queue.push({...d});if(!snake.started)toggleSnake();
 }
 function snakeText(id,text){const el=$('#'+id);if(el&&el.textContent!==String(text))el.textContent=text;}
 function updateSnakeUi(){
  if(!$('#snake-toggle')||!snake)return;
  const r=snakeRecords[snake.mode],seconds=Math.floor(snake.time/1000);
+ const scoreEl=$('#snake-score'),changed=scoreEl.textContent!==snake.score.toLocaleString();
  snakeText('snake-score',snake.score.toLocaleString());snakeText('snake-best',r.best.toLocaleString());
+ if(changed&&snake.started&&!snakeReduced()&&scoreEl.animate){snakeScoreAnimation?.cancel();snakeScoreAnimation=scoreEl.animate([{transform:'scale(1)'},{transform:'scale(1.13)'},{transform:'scale(1)'}],{duration:260,easing:'ease-out'});}
+ const target=[5,15,30,60,120,320].find(n=>snake.fruit<n)||320;
+ snakeText('snake-goal',snake.won?'庭の成長目標をすべて達成':`成長目標：実を${target}個 · ${snake.fruit} / ${target}`);
+ const progress=$('#snake-goal-progress');progress.max=target;progress.value=snake.fruit;
+ snakeText('snake-best-note',snake.score>snake.bestAtStart?'このモードの自己ベスト更新中':`自己ベストまで ${Math.max(0,snake.bestAtStart-snake.score+10)}点`);
+ const badges=$('#snake-badges'),badgeKey=[...snakeAchievements].sort().join(',');
+ if(badges.dataset.key!==badgeKey){badges.dataset.key=badgeKey;badges.innerHTML=snakeBadges.map(b=>`<li class="${snakeAchievements.has(b.id)?'earned':''}"><span aria-hidden="true">${snakeAchievements.has(b.id)?'◆':'◇'}</span><div><strong>${b.title}</strong><small>${b.detail} · ${snakeAchievements.has(b.id)?'達成済み':'未達成'}</small></div></li>`).join('');}
  snakeText('snake-level',snakeLevel());snakeText('snake-length',snake.body.length);
  snakeText('snake-time',`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`);
  snakeText('snake-toggle',snake.over?'もう一度':snake.running?'一時停止':snake.started?'再開':'スタート');
@@ -447,10 +516,10 @@ function updateSnakeUi(){
  const meter=$('#snake-combo-meter');if(meter)meter.style.width=(snake.mode==='rush'&&snake.combo?Math.max(0,1-(snake.time-snake.lastFruit)/6000)*100:0)+'%';
  const card=$('#snake-curtain');card.hidden=snake.running;
  snakeText('snake-curtain-title',snake.over?snake.won?'GARDEN COMPLETE':'NICE JOURNEY':snake.started?'ひとやすみ':'小さな庭、大きな冒険。');
- snakeText('snake-curtain-copy',snake.over?`${snake.score}点 · 実${snake.fruit}個 · ${seconds}秒`:snake.started?'再開を押すまで、庭の時間は止まります。':'実を食べて、少しずつ長く。');
+ snakeText('snake-curtain-copy',snake.over?`${snake.score>snake.bestAtStart?'自己ベスト更新 · ':''}${snake.score}点 · 実${snake.fruit}個 · ${seconds}秒`:snake.started?'再開を押すまで、庭の時間は止まります。':'実を食べて、少しずつ長く。');
  snakeText('snake-curtain-action',snake.over?'もう一度遊ぶ':snake.started?'続きから':'庭に入る');
- snakeText('snake-record-summary',`${snakeModes[snake.mode].label} · ${r.plays}回完走 · 累計${r.fruit}個 · 最長${r.length}マス`);
- const historyKey=snakeHistory.map(r=>`${r.mode}:${r.score}:${r.seconds}:${r.fruit}`).join('|');
+ snakeText('snake-record-summary',`${snakeModes[snake.mode].label} · ${r.plays}回終了 · 累計${r.fruit}個 · 最長${r.length}マス`);
+ const historyKey=snakeHistory.map(r=>`${r.mode}:${r.score}:${r.seconds}:${r.fruit}:${r.won}`).join('|');
  const history=$('#snake-history');if(history&&history.dataset.key!==historyKey){history.dataset.key=historyKey;history.innerHTML=snakeHistory.length?snakeHistory.map(r=>`<li><span>${snakeModes[r.mode].label}${r.won?' / CLEAR':''}<small>${r.fruit}個 · ${r.seconds}秒</small></span><strong>${r.score.toLocaleString()}<small>点</small></strong></li>`).join(''):'<li>最後まで遊ぶと、ここに記録されます。</li>';}
 }
 function fitSnakeCanvas(){
@@ -525,9 +594,11 @@ function drawSnake(){
   ctx.strokeStyle='#507a55';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(11,0,3,-.8,.8);ctx.stroke();ctx.restore();ctx.restore();
  }
  if(decorative)for(const p of snakeParticles){const age=(snake.time-p.born)/1000;ctx.globalAlpha=Math.max(0,1-age/.65);snakeCircle(ctx,p.x+p.vx*age,p.y+p.vy*age+35*age*age,Math.max(.5,3-age*3),p.color);}ctx.globalAlpha=1;
+ if(!reduced){ctx.save();ctx.textAlign='center';ctx.font='600 23px sans-serif';ctx.lineWidth=4;ctx.strokeStyle='#173b35';for(const p of snakeFloats){const age=(snake.time-p.born)/950,text='+'+p.gain,x=Math.max(38,Math.min(610,p.x)),y=Math.max(30,p.y-12-age*30);ctx.globalAlpha=Math.max(0,1-age);ctx.strokeText(text,x,y);ctx.fillStyle=p.gold?'#ffe09b':'#f4ffda';ctx.fillText(text,x,y);}ctx.restore();}
+
 }
 function gameSnake(){
- if(!snake)resetSnake();
+ if(!snake&&!restoreSnake())resetSnake();
  A.view(A.nav('Little Snake',`<button data-action="snakeHelp" aria-label="リトルスネークの遊び方">?</button>`,'gamesLibrary','ゲーム')+`<div class="app-content snake-studio">
  <header class="snake-heading"><div><small>THE LITTLE GARDEN</small><h2>Little Snake<span>.</span></h2><p>実を集めて、自分だけの長い旅へ。</p></div><span class="snake-edition">18 × 18<br>GARDEN</span></header>
  <div class="snake-modes" role="group" aria-label="プレイモード">${Object.entries(snakeModes).map(([id,m])=>`<button data-action="snakeMode" data-value="${id}" aria-pressed="${id===snake.mode}">${m.label}</button>`).join('')}</div>
@@ -537,13 +608,17 @@ function gameSnake(){
  <div class="snake-livebar"><span id="snake-combo"></span><span id="snake-bonus"></span><time id="snake-time">0:00</time></div><div class="snake-combo-track" aria-hidden="true"><i id="snake-combo-meter"></i></div>
  <div class="snake-actions"><button data-action="snakeToggle" id="snake-toggle">スタート</button><button data-action="snakeRestart">やり直す</button></div>
  <p class="snake-status" id="snake-status" role="status" aria-live="polite"></p>
+ <div class="snake-goal"><div><span id="snake-goal"></span><small id="snake-best-note"></small></div><progress id="snake-goal-progress" max="5" value="0" aria-label="今回の成長目標の達成度"></progress></div>
  <div class="snake-pad" role="group" aria-label="方向操作">${[['up','↑','上'],['left','←','左'],['down','↓','下'],['right','→','右']].map(([id,symbol,label])=>`<button data-action="snakeDirection" data-value="${id}" aria-label="${label}へ進む">${symbol}</button>`).join('')}</div>
  <p class="snake-instructions" id="snake-instructions">スワイプ / 矢印 / WASD · Spaceで一時停止<br>一時停止後は「再開」で続けます</p>
- <details class="snake-settings"><summary>庭の見た目と記録</summary><div class="snake-options"><button data-action="snakeTheme" id="snake-theme"></button><button data-action="snakeQuality" id="snake-quality"></button><button data-action="snakeGrid" id="snake-grid"></button></div><p id="snake-record-summary"></p><h3>最近の8プレイ</h3><ol id="snake-history"></ol><p class="snake-save-note">記録と設定はこのブラウザに保存。途中の盤面は再読み込みでリセットされます。</p></details></div>`);
+ <p class="snake-achievement-notice" id="snake-achievement-notice" role="status" aria-live="polite"></p>
+ <details class="snake-settings"><summary>庭の見た目と記録</summary><div class="snake-options"><button data-action="snakeTheme" id="snake-theme"></button><button data-action="snakeQuality" id="snake-quality"></button><button data-action="snakeGrid" id="snake-grid"></button></div><p id="snake-record-summary"></p><h3>6つの実績</h3><ul id="snake-badges" class="snake-badges"></ul><h3>最近の8プレイ</h3><ol id="snake-history"></ol><div class="snake-save-row"><p id="snake-save-status" role="status"></p><button data-action="snakeSave">今すぐ保存</button></div><p class="snake-save-note">盤面も端末内に自動保存。再読み込み後は一時停止から再開できます。保存は1プレイ分です。</p></details></div>`);
  snakeCanvas=$('#snake-board');const canvas=snakeCanvas;
  const on=(el,event,fn,options)=>{el.addEventListener(event,fn,options);gameCleanups.push(()=>el.removeEventListener(event,fn,options));};
  on(document,'visibilitychange',()=>{if(document.hidden)stopSnake('タブを離れたため一時停止しました');});
  on(window,'blur',()=>stopSnake('別の画面に移ったため一時停止しました'));
+ on(window,'pagehide',()=>stopSnake('ページを閉じたため保存しました'));
+ on($('.snake-settings'),'toggle',e=>{if(e.target.open&&snake.running)stopSnake('見た目と記録を確認中です');});
  const observer=new MutationObserver(()=>{if(!$('#overlay').hidden&&snake.running)stopSnake('メニューを開いたため一時停止しました');});observer.observe($('#overlay'),{attributes:true,attributeFilter:['hidden']});gameCleanups.push(()=>observer.disconnect());
  if(window.ResizeObserver){const resize=new ResizeObserver(fitSnakeCanvas);resize.observe(canvas);gameCleanups.push(()=>resize.disconnect());}else on(window,'resize',fitSnakeCanvas);
  on(snakeMotionQuery,'change',()=>drawSnake());
@@ -563,8 +638,9 @@ function gameSnake(){
   if(d){e.preventDefault();if(!e.repeat)steerSnake(d);}
   if(e.code==='Space'&&!e.target.closest('button,summary')){e.preventDefault();if(!e.repeat)toggleSnake();}
  });
- gameCleanups.push(()=>{stopSnake('おかえりなさい。「再開」で続けられます');snakeCanvas=null;snakeGround=null;snakeParticles=[];});
+ gameCleanups.push(()=>{stopSnake('おかえりなさい。「再開」で続けられます');snakeCanvas=null;snakeGround=null;snakeParticles=[];snakeFloats=[];snakeScoreAnimation?.cancel();});
  updateSnakeOptions();updateSnakeUi();fitSnakeCanvas();
+ snakeText('snake-save-status',snakeSaveOK?'自動保存：2秒ごと・実の獲得時・一時停止時':'未保存：保存を再試行してください');
 }
 function updateSnakeOptions(){
  snakeText('snake-theme',snakePrefs.theme==='moon'?'庭：月あかり':'庭：木もれび');
@@ -573,9 +649,10 @@ function updateSnakeOptions(){
 }
 function changeSnakeLook(key,value){snakePrefs[key]=value;A.save('snakePreferences',snakePrefs);snakeGround=null;updateSnakeOptions();fitSnakeCanvas();}
 function restartSnake(mode=snake.mode){
- const reset=()=>{snakePrefs.mode=mode;A.save('snakePreferences',snakePrefs);resetSnake();A.$$('.snake-modes button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.value===mode)));updateSnakeUi();drawSnake();};
+ const reset=()=>{snakePrefs.mode=mode;A.save('snakePreferences',snakePrefs);resetSnake();saveSnakeRecords();snakeText('snake-achievement-notice','');A.$$('.snake-modes button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.value===mode)));updateSnakeUi();drawSnake();};
  stopSnake();if(snake.started&&!snake.over)A.confirm('新しい庭から始めますか？','今のスコアと盤面はリセットします。保存済みの記録は残ります。',reset);else reset();
 }
+A.actions.snakeSave=()=>{if(snake.running)stopSnake();else{saveSnakeRecords();updateSnakeUi();}};
 A.actions.snakeToggle=toggleSnake;
 A.actions.snakeDirection=(el,event)=>{if(!event||event.detail===0)steerSnake(el.dataset.value);};
 A.actions.snakeRestart=()=>restartSnake();
@@ -585,7 +662,7 @@ A.actions.snakeQuality=()=>changeSnakeLook('quality',snakePrefs.quality==='rich'
 A.actions.snakeGrid=()=>changeSnakeLook('grid',!snakePrefs.grid);
 A.actions.snakeHelp=()=>{
  stopSnake('遊び方を確認中です。閉じてから再開できます');
- A.overlay(`${A.overlayTitle('Little Snake の遊び方')}<div class="about-copy"><p>矢印キー・WASD・盤面のスワイプ・方向ボタンで操作。曲がる方向は2回先まで予約でき、直接の逆走はできません。</p><p>クラシックは壁と自分の体に当たると終了。おさんぽは低速で、壁を抜けて反対側へ移動します。ラッシュは速い移動と6秒以内の連続獲得で最大4倍のコンボに挑戦できます。</p><p>実は10点。5個食べるごとに、空きマスがあれば金の実が8秒間登場します。金の実は30点。どちらも体が1マス伸び、ラッシュでは倍率がかかります。5個ごとにレベルが上がり、おさんぽ以外は少しずつ速くなります。324マスすべて埋めるとクリアです。</p><p>Space（ボタン選択中はそのボタンを操作）で一時停止。タブ切替・メニュー・アプリ移動でも停止し、自動では再開しません。途中の盤面はこのページを開いている間のみ保持します。</p><p>モード別最高点・終了した直近8プレイ・庭の見た目を端末内に保存。旧最高点はゲーム一覧の総合BESTに残します。「動きを減らす」では補間・粒子・背景演出を止め、軽量描画では演出と解像度を抑えます。</p></div>`);
+ A.overlay(`${A.overlayTitle('Little Snake の遊び方')}<div class="about-copy"><p>矢印キー・WASD・盤面のスワイプ・方向ボタンで操作。曲がる方向は2回先まで予約でき、直接の逆走はできません。</p><p>クラシックは壁と自分の体に当たると終了。おさんぽは低速で、壁を抜けて反対側へ移動します。ラッシュは速い移動と6秒以内の連続獲得で最大4倍のコンボに挑戦できます。</p><p>実は10点。5個食べるごとに、空きマスがあれば金の実が8秒間登場します。金の実は30点。どちらも体が1マス伸び、ラッシュでは倍率がかかります。5個ごとにレベルが上がり、おさんぽ以外は少しずつ速くなります。324マスすべて埋めるとクリアです。</p><p>Space（ボタン選択中はそのボタンを操作）で一時停止。タブ切替・メニュー・アプリ移動でも停止し、自動では再開しません。盤面は2秒ごと・実の獲得・一時停止時に保存します。再読み込み後も必ず一時停止から再開し、閉じていた時間は加算しません。保存に失敗した場合は「今すぐ保存」で再試行できます。</p><p>成長目標と6つの実績に挑戦できます。実績はゲームをやり直しても残ります。モード別最高点・終了した直近8プレイ・庭の見た目を端末内に保存。旧最高点はゲーム一覧の総合BESTに残します。「動きを減らす」では補間・粒子・背景演出を止め、軽量描画では演出と解像度を抑えます。</p></div>`);
 };
 // Memory Garden — shuffled pairs with a race-safe reveal timer.
 const symbols=['✿','☀','☾','♧','♡','✦','☁','♫'];const colors=['#cd8d9a','#d2ae69','#a394c4','#91aa81','#d1a092','#a3b3c7','#8bb3c6','#b79ac1'];
@@ -608,7 +685,7 @@ function gardenArt(symbol){const content={
 function renderMemory(){if(!$('#memory-board'))return;$('#memory-board').innerHTML=cards.map((s,i)=>{const visible=flipped.includes(i)||matched.includes(i);return `<button class="memory-card ${visible?'flipped':''} ${matched.includes(i)?'matched':''}" data-action="memoryFlip" data-index="${i}" aria-label="${matched.includes(i)?'一致したカード':visible?s:'裏向きのカード '+(i+1)}" ${matched.includes(i)?'disabled':''}><span style="${visible?'color:'+colors[symbols.indexOf(s)]:''}">${gardenArt(visible?s:'back')}</span></button>`;}).join('');$('#memory-moves').textContent=memoryMoves;$('#memory-pairs').textContent=matched.length/2;}
 function flipCard(index){if(memoryBusy||flipped.includes(index)||matched.includes(index))return;if(!memoryStart)memoryStart=Date.now();flipped.push(index);A.haptic();renderMemory();if(flipped.length===2){memoryMoves++;const [a,b]=flipped;if(cards[a]===cards[b]){matched.push(a,b);flipped=[];renderMemory();if(matched.length===16){const elapsed=Math.floor((Date.now()-memoryStart)/1000);memoryBest=memoryBest?Math.min(memoryBest,memoryMoves):memoryMoves;A.save('memoryBest',memoryBest);$('#memory-status').textContent=`お庭が完成！ ${memoryMoves}手・${elapsed}秒でクリア。`;$('#memory-best').textContent=`BEST ${memoryBest} MOVES`;A.toast('すべてのペアが見つかりました ✿');}else $('#memory-status').textContent='';}else{memoryBusy=true;renderMemory();$('#memory-status').textContent='';memoryTimeout=setTimeout(()=>{flipped=[];memoryBusy=false;if(gamePage==='memory')renderMemory();},800);}}}
 A.actions.memoryFlip=el=>flipCard(+el.dataset.index);A.actions.memoryRestart=()=>{resetMemory();renderMemory();$('#memory-time').textContent='00:00';$('#memory-status').textContent='あせらず、ひとつずつ。';};
-A.actions.gameHelp=()=>{const help=gamePage==='2048'?['2048 の遊び方','盤面を上下左右にスワイプすると、すべてのタイルが動きます。同じ数字がぶつかると合体し、数字が2倍になります。','合体した数字がスコアに加算されます。2048をつくった後も続けられます。動かせなくなったら終了です。','スワイプ・矢印キー・WASD・方向ボタンで操作。Zで戻す、YまたはShift+Zでやり直します。直近32手まで取り消せます。取り消し後に別の手を進めると、やり直し履歴は消えます。', 'ヒントは新タイルの出現と次の一手を評価した目安で、勝利を保証しません。連続合体に得点倍率はなく、合体した数字だけが得点になります。', '盤面・得点・手数・連続合体・達成後の続行状態を自動保存します。取り消し／やり直し履歴は合計32手分を自動保存し、再読み込み後も復元します。「一手の予測と局面の保存」では4方向の比較と、好きな局面1つの保存・復帰ができます。最高点と自己記録は取り消しても残ります。見た目と速さは「見た目とプレイ記録」から変更できます。']:gamePage==='snake'?['Little Snake の遊び方','スタートを押し、スワイプ・矢印キー・画面の方向ボタンでヘビを動かします。小さな実を食べると10点獲得します。','壁や自分の体にぶつかると終了です。来た方向へすぐに逆走することはできません。','アプリを離れると一時停止します。スペースキーでも一時停止できます。']:['Memory Garden の遊び方','カードを2枚めくり、同じ絵柄のペアを探しましょう。一致したカードは表向きのまま残ります。','8組のペアが揃えばクリア。2枚めくるたびに1手として数えます。少ない手数でのクリアに挑戦してください。','ハイスコアは最少手数です。アプリを開き直すと新しいお庭になります。'];A.overlay(`${A.overlayTitle(help[0])}<div class="about-copy">${help.slice(1).map(p=>`<p style="margin:22px 0">${p}</p>`).join('')}</div><button class="control-tile" data-action="closeOverlay" style="width:100%;margin-top:30px">遊んでみる</button>`);};
+A.actions.gameHelp=()=>{if(gamePage==='snake')return A.actions.snakeHelp();const help=gamePage==='2048'?['2048 の遊び方','盤面を上下左右にスワイプすると、すべてのタイルが動きます。同じ数字がぶつかると合体し、数字が2倍になります。','合体した数字がスコアに加算されます。2048をつくった後も続けられます。動かせなくなったら終了です。','スワイプ・矢印キー・WASD・方向ボタンで操作。Zで戻す、YまたはShift+Zでやり直します。直近32手まで取り消せます。取り消し後に別の手を進めると、やり直し履歴は消えます。', 'ヒントは新タイルの出現と次の一手を評価した目安で、勝利を保証しません。連続合体に得点倍率はなく、合体した数字だけが得点になります。', '盤面・得点・手数・連続合体・達成後の続行状態を自動保存します。取り消し／やり直し履歴は合計32手分を自動保存し、再読み込み後も復元します。「一手の予測と局面の保存」では4方向の比較と、好きな局面1つの保存・復帰ができます。最高点と自己記録は取り消しても残ります。見た目と速さは「見た目とプレイ記録」から変更できます。']:gamePage==='snake'?['Little Snake の遊び方','スタートを押し、スワイプ・矢印キー・画面の方向ボタンでヘビを動かします。小さな実を食べると10点獲得します。','壁や自分の体にぶつかると終了です。来た方向へすぐに逆走することはできません。','アプリを離れると一時停止します。スペースキーでも一時停止できます。']:['Memory Garden の遊び方','カードを2枚めくり、同じ絵柄のペアを探しましょう。一致したカードは表向きのまま残ります。','8組のペアが揃えばクリア。2枚めくるたびに1手として数えます。少ない手数でのクリアに挑戦してください。','ハイスコアは最少手数です。アプリを開き直すと新しいお庭になります。'];A.overlay(`${A.overlayTitle(help[0])}<div class="about-copy">${help.slice(1).map(p=>`<p style="margin:22px 0">${p}</p>`).join('')}</div><button class="control-tile" data-action="closeOverlay" style="width:100%;margin-top:30px">遊んでみる</button>`);};
 // Pure mechanics are exposed for regression tests; no production data hooks.
 A.gameMath={mergeLine};
 // Refresh badge counts now that every application has registered.
