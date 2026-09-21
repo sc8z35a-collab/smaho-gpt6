@@ -169,12 +169,93 @@ async function checkNotesStudio(browser,url){
  }finally{await page.close();}
 }
 
+// AURA_TEST_SCOPE=reminders runs only these isolated reminder integration checks.
+async function checkReminderStudio(browser,url){
+ const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
+ let count=0;const pass=name=>{count++;console.log('PASS reminders: '+name);};
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/*',r=>new URL(r.request().url()).origin===new URL(url).origin?r.continue():r.abort());
+ try{
+  await page.goto(url+'#app=reminders');
+  await page.evaluate(()=>{Aura.reminderModel.replace([{id:'legacy-reminder',text:'以前のタスク',done:false},{id:'repeat-reminder',text:'繰り返すタスク',due:'2020-01-01',repeat:'daily',list:'生活',note:'大切なメモ',steps:[{id:'legacy-step',text:'準備',done:true}],done:false}]);Aura.actions.rmResetFilters();});
+  const legacy=await page.evaluate(()=>localStorage.getItem('aura.reminders'));await page.reload();
+  assert.equal(await page.evaluate(()=>localStorage.getItem('aura.reminders')),legacy);
+  await page.locator('#reminder-form input').fill('保存するタスク');await page.locator('#reminder-form input').press('Enter');
+  const saved=await page.evaluate(()=>localStorage.getItem('aura.reminders'));await page.reload();
+  assert.equal(await page.evaluate(()=>localStorage.getItem('aura.reminders')),saved);
+  assert.equal(await page.locator('.rm-task-main').filter({hasText:'保存するタスク'}).count(),1);
+  pass('legacy records and quick capture survive reload');
+
+  await page.locator('.rm-task-main[data-id=repeat-reminder]').click();
+  await page.locator('#app-screen .app-nav [data-action=reminderDetails]').click();
+  await page.locator('#ep-list').fill('暮らし');await page.locator('#ep-note').fill('編集したメモ');await page.keyboard.press('Control+Enter');
+  assert.equal(await page.locator('#overlay').isVisible(),false);
+  await page.locator('#rm-step-form input').fill('片づけ');await page.locator('#rm-step-form input').press('Enter');
+  await page.locator('[data-action=epReminderComplete]').click();
+  const repeated=await page.evaluate(()=>Aura.reminderModel.get()),parent=repeated.find(x=>x.id==='repeat-reminder'),child=repeated.find(x=>x.id===parent.repeatNextId);
+  assert.ok(child&&!child.done&&child.list==='暮らし'&&child.note==='編集したメモ');assert.equal(child.steps.length,2);assert.ok(child.steps.every(x=>!x.done));
+  await page.reload();assert.deepEqual(await page.evaluate(()=>Aura.reminderModel.get()),repeated);
+  await page.evaluate(()=>{Aura.actions.reminderToggle({dataset:{id:'repeat-reminder'}});Aura.actions.reminderToggle({dataset:{id:'repeat-reminder'}});});
+  assert.equal(await page.evaluate(()=>Aura.reminderModel.get().length),repeated.length);
+  pass('editing, inline steps and recurrence persist without duplicate instances');
+
+  await page.evaluate(()=>{Aura.actions.rmResetFilters();document.querySelector('#rm-list-heading').focus();});
+  await page.keyboard.press('n');assert.equal(await page.locator('#reminder-form input').evaluate(el=>el===document.activeElement),true);
+  await page.locator('#reminder-form input').fill('保持する下書き');await page.keyboard.press('n');assert.equal(await page.locator('#reminder-form input').inputValue(),'保持する下書きn');
+  await page.locator('#rm-list-heading').focus();await page.keyboard.press('/');assert.equal(await page.locator('#ep-reminder-query').evaluate(el=>el===document.activeElement),true);
+  await page.locator('[data-action=rmSelectionMode]').click();await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>Aura.current),'reminders');
+  assert.equal(await page.locator('[data-action=rmSelectionMode]').getAttribute('aria-pressed'),'false');
+  pass('shortcuts respect input fields and Escape exits selection only');
+
+  await page.locator('#reminder-form input').evaluate(el=>{const data=new DataTransfer();data.setData('text/plain','まとめ一件目\nまとめ二件目');el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));});
+  assert.equal(await page.locator('#ep-bulk').inputValue(),'まとめ一件目\nまとめ二件目');
+  await page.locator('#overlay [data-action=closeOverlay]').click();assert.equal(await page.locator('#reminder-form input').inputValue(),'保持する下書きn');
+  await page.evaluate(()=>Aura.actions.rmBulkAdd());await page.locator('#ep-bulk').fill('まとめ一件目\nまとめ二件目');await page.keyboard.press('Control+Enter');
+  const bulk=await page.evaluate(()=>Aura.reminderModel.get());assert.equal(bulk.length,repeated.length+2);
+  await page.reload();assert.deepEqual(await page.evaluate(()=>Aura.reminderModel.get()),bulk);
+  pass('multiline paste, cancellation and bulk capture preserve data');
+
+  await page.evaluate(()=>Aura.actions.rmResetFilters());await page.locator('[data-action=rmSelectionMode]').click();
+  await page.locator('.rm-select[data-id=legacy-reminder]').click();await page.locator('[data-action=rmBatchTomorrow]').click();
+  const changed=await page.evaluate(()=>Aura.reminderModel.get().find(x=>x.id==='legacy-reminder').due);assert.match(changed,/^\d{4}-\d{2}-\d{2}$/);
+  await page.locator('[data-action=rmUndo]').click();assert.equal(await page.evaluate(()=>Aura.reminderModel.get().find(x=>x.id==='legacy-reminder').due),undefined);
+  pass('actual selection controls and undo operate correctly');
+
+  await page.evaluate(()=>Aura.actions.rmCompact());await page.reload();assert.equal(await page.locator('.ev-reminders.rm-compact').count(),1);
+  await page.evaluate(()=>{localStorage.setItem('aura.reminderCompact','"invalid"');});await page.reload();assert.equal(await page.locator('.ev-reminders.rm-compact').count(),0);
+  pass('compact view persists and invalid preferences fall back safely');
+
+  for(const viewport of [{width:320,height:568},{width:390,height:844},{width:768,height:1024},{width:844,height:390},{width:1920,height:1080}]){
+   await page.setViewportSize(viewport);
+   for(const dark of [false,true]){
+    await page.evaluate(dark=>{Aura.settings.dark=dark;Aura.applySettings();Aura.actions.rmResetFilters();},dark);
+    assert.equal(await page.locator('.ev-reminders').evaluate(el=>el.scrollWidth<=el.clientWidth),true,`List overflow ${viewport.width}/${dark}`);
+    await page.evaluate(()=>{Aura.actions.rmSelectionMode();Aura.actions.rmSelectAll();});
+    assert.equal(await page.locator('.rm-batch').evaluate(el=>el.scrollWidth<=el.clientWidth),true,`Batch overflow ${viewport.width}`);
+    await page.evaluate(()=>Aura.actions.epReminderOpen({dataset:{id:'repeat-reminder'}}));
+    assert.equal(await page.locator('.ev-reminders').evaluate(el=>el.scrollWidth<=el.clientWidth),true,`Detail overflow ${viewport.width}`);
+    await page.evaluate(()=>Aura.actions.reminderDetails({dataset:{id:'repeat-reminder'}}));
+    assert.equal(await page.locator('#overlay').evaluate(el=>el.scrollWidth<=el.clientWidth),true,`Editor overflow ${viewport.width}`);
+    await page.locator('#modal-form button[type=submit]').scrollIntoViewIfNeeded();
+    assert.equal(await page.locator('#modal-form button[type=submit]').evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight;}),true,`Save clipped ${viewport.width}`);
+    await page.evaluate(()=>Aura.closeOverlay());
+   }
+  }
+  pass('five viewport sizes in light and dark keep all controls reachable');
+  await page.emulateMedia({reducedMotion:'reduce'});await page.evaluate(()=>Aura.actions.rmResetFilters());
+  assert.equal(await page.locator('.rm-orbit-value').evaluate(el=>getComputedStyle(el).transitionDuration),'0s');
+  assert.deepEqual(errors,[]);pass('reduced motion works with no uncaught errors');
+  return count;
+ }finally{await page.close();}
+}
+
 (async()=>{
  const browser=await chromium.launch({headless:true});
  try {
   const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   const url=process.env.AURA_TEST_URL||'http://127.0.0.1:8765/';
+  if(process.env.AURA_TEST_SCOPE==='reminders'){const count=await checkReminderStudio(browser,url);console.log(`RESULT: ${count} passed, 0 failed.`);return;}
   if(process.env.AURA_TEST_SCOPE==='notes'){const count=await checkNotesStudio(browser,url);console.log(`RESULT: ${count} passed, 0 failed.`);return;}
   await page.goto(url);
   const legacy=['calendar','photos','camera','weather','mail','clock','maps','notes','reminders','files','calculator','settings','games','health','wallet','recorder','phone','safari','messages','music'];
@@ -258,6 +339,7 @@ async function checkNotesStudio(browser,url){
   console.log('PASS invalid new preference values fall back safely');
   assert.deepEqual(errors,[]);
   console.log('PASS no uncaught browser errors');
+  await checkReminderStudio(browser,url);
   const notes=await checkNotesStudio(browser,url);
   const controls=await checkControlDesk(browser,url);
   console.log(`RESULT: ${12+controls+notes} passed, 0 failed.`);
