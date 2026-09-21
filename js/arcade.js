@@ -293,21 +293,289 @@
  };
  A.actions.mineHelp=()=>help('Crystal Field · 遊び方','<p>鉱石を避け、すべての安全なマスを開けばクリア。数字は周囲8マスの鉱石の数です。初手とその周囲は必ず安全です。</p><p>タップで探索。旗モード、長押し（約0.44秒）、右クリック、Fキーで旗を切り替えます。数字の周囲に同じ数の旗があれば、数字をタップして一括探索。間違った旗があると鉱石を開く場合があります。</p><p>安全スキャンは1探索3回まで、安全なマスを1つ開きます。使用したクリアはアシスト最短に記録し、通常の最短記録を更新しません。推測が必要な盤面もあります。</p><p>矢印キーで移動、Enter / Spaceで現在のモードの操作、Pで一時停止。拡大表示では盤面をスクロールできます。時間はプレイ中のみ計測。別画面・タブ・ダイアログへ移ると一時停止し、戻ったら手動で再開します。</p><p>盤面・経過時間・旗・スキャン残数を端末内に自動保存。高精細描画ボタンで軽量描画に切替。OSとauraの「動きを減らす」に対応します。</p>');
 
- // Reversi: legal move generation, two-ply positional AI and local two-player mode.
- const directions=[[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
- const weights=[120,-25,20,5,5,20,-25,120,-25,-45,-5,-5,-5,-5,-45,-25,20,-5,15,3,3,15,-5,20,5,-5,3,3,3,3,-5,5,5,-5,3,3,3,3,-5,5,20,-5,15,3,3,15,-5,20,-25,-45,-5,-5,-5,-5,-45,-25,120,-25,20,5,5,20,-25,120];
- let reversi=null,reversiHistory=[],aiBusy=false;
- function freshReversi(mode='cpu'){reversi={board:Array(64).fill(0),turn:1,mode,over:false,counted:false};reversi.board[27]=reversi.board[36]=2;reversi.board[28]=reversi.board[35]=1;reversiHistory=[];aiBusy=false;}
- function flips(board,index,color){if(board[index])return [];const x=index%8,y=Math.floor(index/8),out=[];for(const [dx,dy] of directions){let nx=x+dx,ny=y+dy,line=[];while(nx>=0&&ny>=0&&nx<8&&ny<8&&board[ny*8+nx]===3-color){line.push(ny*8+nx);nx+=dx;ny+=dy;}if(line.length&&nx>=0&&ny>=0&&nx<8&&ny<8&&board[ny*8+nx]===color)out.push(...line);}return out;}
- const moves=(board,color)=>Array.from({length:64},(_,i)=>i).filter(i=>flips(board,i,color).length);
- function placed(board,index,color){const next=[...board];for(const p of flips(board,index,color))next[p]=color;next[index]=color;return next;}
- function evaluateBoard(board,color){return board.reduce((sum,v,i)=>sum+(v===color?weights[i]:v===3-color?-weights[i]:0),0)+(moves(board,color).length-moves(board,3-color).length)*7;}
- function cpuMove(){let best=-Infinity,chosen=null;for(const index of moves(reversi.board,2)){const after=placed(reversi.board,index,2),replies=moves(after,1);const value=replies.length?Math.min(...replies.map(r=>evaluateBoard(placed(after,r,1),2))):evaluateBoard(after,2)+30;if(value>best){best=value;chosen=index;}}return chosen;}
- function finishTurn(){const r=reversi;r.turn=3-r.turn;r.pass=false;if(!moves(r.board,r.turn).length){r.turn=3-r.turn;r.pass=true;if(!moves(r.board,r.turn).length){r.over=true;const black=r.board.filter(x=>x===1).length,white=r.board.filter(x=>x===2).length;if(!r.counted&&black>white){A.save('reversiWins',A.load('reversiWins',0)+1);r.counted=true;}}}A.save('reversiState',r);renderReversi();scheduleAI();}
- function scheduleAI(){if(reversi.mode!=='cpu'||reversi.turn!==2||reversi.over||aiBusy)return;aiBusy=true;renderReversi();defer(()=>{const index=cpuMove();aiBusy=false;if(index!==null){reversi.board=placed(reversi.board,index,2);finishTurn();}},430);}
- function renderReversi(){const root=$('#reversi-board');if(!root)return;const r=reversi,legal=moves(r.board,r.turn);root.innerHTML=r.board.map((v,i)=>`<button class="reversi-cell" data-action="reversiMove" data-index="${i}" aria-label="${Math.floor(i/8)+1}行${i%8+1}列 ${v===1?'黒':v===2?'白':legal.includes(i)?'置けます':'空'}">${v?`<span class="reversi-disc ${v===1?'black':'white'}"></span>`:legal.includes(i)&&!r.over&&!aiBusy?'<i class="reversi-hint"></i>':''}</button>`).join('');const black=r.board.filter(x=>x===1).length,white=r.board.filter(x=>x===2).length;$('#reversi-black').textContent=black;$('#reversi-white').textContent=white;$('#reversi-status').textContent=r.over?(black===white?'DRAW':black>white?'黒の勝ち':'白の勝ち'):aiBusy?'白が思考中':(r.pass?'パス · ':'')+(r.turn===1?'黒の番':'白の番');}
- function reversiApp(){if(!reversi){const saved=A.load('reversiState',null);if(saved?.board?.length===64)reversi=saved;else freshReversi();}aiBusy=false;shell('Reversi','jade',`<div class="arc-difficulty"><button data-action="reversiMode" data-value="cpu" class="${reversi.mode==='cpu'?'active':''}">CPU対戦</button><button data-action="reversiMode" data-value="local" class="${reversi.mode==='local'?'active':''}">2人対戦</button></div><div class="reversi-score"><div><i class="reversi-disc black"></i><strong id="reversi-black">2</strong></div><span>VS</span><div><strong id="reversi-white">2</strong><i class="reversi-disc white"></i></div></div><div class="reversi-frame"><div class="reversi-board" id="reversi-board"></div></div><div class="arc-result" id="reversi-status" role="status"></div><div class="arc-primary-controls"><button data-action="reversiUndo">一手戻す</button><button data-action="reversiRestart">もう一度</button></div>`,iconButton('reversiHelp','遊び方','document'));renderReversi();scheduleAI();disposers.push(()=>{aiBusy=false;A.save('reversiState',reversi);});}
- A.actions.reversiMove=el=>{const i=Number(el.dataset.index);if(aiBusy||reversi.over||!flips(reversi.board,i,reversi.turn).length)return;reversiHistory.push(structuredClone(reversi));reversi.board=placed(reversi.board,i,reversi.turn);finishTurn();};A.actions.reversiUndo=()=>{if(aiBusy||reversi.over||!reversiHistory.length)return;reversi=reversiHistory.pop();A.save('reversiState',reversi);renderReversi();};A.actions.reversiRestart=()=>A.confirm('新しい対局？','現在の盤面をリセットします。',()=>{const mode=reversi.mode;stop();freshReversi(mode);open('reversi');});A.actions.reversiMode=el=>A.confirm('対戦モードを変更？','新しい対局を始めます。',()=>{stop();freshReversi(el.dataset.value);open('reversi');});A.actions.reversiHelp=()=>help('Reversi','自分の石ではさんだ相手の石が裏返ります。点のあるマスに置けます。置けない場合は自動でパス。両者が置けなくなると終了し、石の多い方が勝ちです。CPU対戦ではあなたが黒です。');
+ // Reversi Atelier. The same pure rules/search run in a Worker or cooperative fallback.
+ function createReversiEngine(){
+  const directions=[[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+  const corners=[0,7,56,63];
+  const weights=[100,-24,12,5,5,12,-24,100,-24,-38,-4,-3,-3,-4,-38,-24,12,-4,8,2,2,8,-4,12,5,-3,2,1,1,2,-3,5,5,-3,2,1,1,2,-3,5,12,-4,8,2,2,8,-4,12,-24,-38,-4,-3,-3,-4,-38,-24,100,-24,12,5,5,12,-24,100];
+  const adjacent=Array.from({length:64},(_,i)=>directions.map(([dx,dy])=>[i%8+dx,(i/8|0)+dy]).filter(([x,y])=>x>=0&&x<8&&y>=0&&y<8).map(([x,y])=>y*8+x));
+  function flips(board,index,color){
+   if(!Number.isInteger(index)||index<0||index>63||board[index]||![1,2].includes(color))return [];
+   const out=[],x=index%8,y=index/8|0;
+   for(const [dx,dy] of directions){let nx=x+dx,ny=y+dy;const line=[];
+    while(nx>=0&&nx<8&&ny>=0&&ny<8&&board[ny*8+nx]===3-color){line.push(ny*8+nx);nx+=dx;ny+=dy;}
+    if(line.length&&nx>=0&&nx<8&&ny>=0&&ny<8&&board[ny*8+nx]===color)out.push(...line);
+   }return out;
+  }
+  function moves(board,color){const out=[];for(let i=0;i<64;i++)if(!board[i]&&flips(board,i,color).length)out.push(i);return out;}
+  function placed(board,index,color){const out=board.slice();out[index]=color;for(const i of flips(board,index,color))out[i]=color;return out;}
+  function stableEdges(board,color){
+   const stable=new Set();
+   for(const c of corners){if(board[c]!==color)continue;stable.add(c);
+    for(const step of [c%8===0?1:-1,c<8?8:-8])for(let n=1;n<8;n++){const i=c+step*n;if(board[i]!==color)break;stable.add(i);}
+   }return stable.size;
+  }
+  function evaluate(board,color){
+   let positional=0,discs=0,frontier=0,potential=0,empty=0,cornerScore=0;
+   for(let i=0;i<64;i++){
+    const v=board[i];if(!v){empty++;potential+=Number(adjacent[i].some(n=>board[n]===3-color))-Number(adjacent[i].some(n=>board[n]===color));continue;}
+    const sign=v===color?1:-1;discs+=sign;let weight=weights[i];
+    // C/X squares cease to be poison after their corner is secured.
+    for(const c of corners)if(board[c]&&Math.abs(i%8-c%8)<=1&&Math.abs((i/8|0)-(c/8|0))<=1&&i!==c)weight=8;
+    positional+=sign*weight;if(adjacent[i].some(n=>!board[n]))frontier+=sign;
+   }
+   for(const c of corners)cornerScore+=board[c]===color?1:board[c]===3-color?-1:0;
+   const mobility=moves(board,color).length-moves(board,3-color).length;
+   return positional+cornerScore*100+mobility*(empty>20?18:10)+potential*4-frontier*(empty>16?9:3)
+    +(stableEdges(board,color)-stableEdges(board,3-color))*24+discs*(empty<14?12:empty<30?2:-1);
+  }
+  const levels={easy:{depth:2,ms:120},normal:{depth:4,ms:400},hard:{depth:7,ms:950},expert:{depth:12,ms:1800}};
+  function* search(board,color,level='normal'){
+   const config=levels[level]||levels.normal,deadline=performance.now()+config.ms,table=new Map(),timeout={};
+   const legal=moves(board,color),empty=board.filter(v=>!v).length;
+   let nodes=0,best={index:legal[0]??null,score:0,depth:0,nodes:0,solved:false};
+   if(!legal.length)return best;
+   function order(b,list,pv){return list.sort((a,z)=>rank(z)-rank(a));function rank(i){return (i===pv?10000:0)+(corners.includes(i)?2000:0)+weights[i]*5+flips(b,i,b===board?color:0).length;}}
+   function* negamax(b,side,depth,alpha,beta){
+    nodes++;if((nodes&63)===0){yield null;if(performance.now()>=deadline)throw timeout;}
+    const key=b.join('')+side,entry=table.get(key),a0=alpha,b0=beta;
+    if(entry&&entry.depth>=depth){if(entry.flag===0)return entry.value;if(entry.flag===1)alpha=Math.max(alpha,entry.value);else beta=Math.min(beta,entry.value);if(alpha>=beta)return entry.value;}
+    const available=moves(b,side);
+    if(!available.length){
+     if(!moves(b,3-side).length){const diff=b.reduce((n,v)=>n+(v===side?1:v===3-side?-1:0),0);return diff===0?0:Math.sign(diff)*100000+diff*100;}
+     // A pass is not a placement and must not consume search depth.
+     return -(yield* negamax(b,3-side,depth,-beta,-alpha));
+    }
+    if(depth===0)return evaluate(b,side);
+    let value=-Infinity,chosen=available[0];
+    for(const index of order(b,available,entry?.index)){
+     const score=-(yield* negamax(placed(b,index,side),3-side,depth-1,-beta,-alpha));
+     if(score>value){value=score;chosen=index;}alpha=Math.max(alpha,score);if(alpha>=beta)break;
+    }
+    if(table.size<30000)table.set(key,{depth,value,index:chosen,flag:value<=a0?2:value>=b0?1:0});
+    return value;
+   }
+   const maxDepth=(level==='hard'||level==='expert')&&empty<=12?empty:Math.min(empty,config.depth);
+   for(let depth=1;depth<=maxDepth;depth++){
+    let value=-Infinity,chosen=best.index;
+    try{
+     for(const index of order(board,legal.slice(),best.index)){
+      if(performance.now()>=deadline)throw timeout;
+      const score=-(yield* negamax(placed(board,index,color),3-color,depth-1,-Infinity,-value));
+      if(score>value){value=score;chosen=index;}
+     }
+     best={index:chosen,score:value,depth,nodes,solved:depth>=empty};
+     yield {...best};if(best.solved)break;
+    }catch(error){if(error!==timeout)throw error;break;}
+   }
+   return {...best,nodes};
+  }
+  return {flips,moves,placed,evaluate,search};
+ }
+ const rvEngine=createReversiEngine();
+ const rvLevels={easy:'入門',normal:'標準',hard:'上級',expert:'達人'};
+ const rvColor=n=>n===1?'黒':'白';
+ const rvCoordinate=i=>'ABCDEFGH'[i%8]+((i/8|0)+1);
+ const rvBoardValid=b=>Array.isArray(b)&&b.length===64&&b.every(v=>v===0||v===1||v===2)&&b.filter(Boolean).length>=4;
+ let reversi=null,rvBusy=false,rvAnimating=false,rvReview=-1,rvHint=-1,rvPreview=-1,rvFocus=19,rvSearchCancel=null,rvInfo='',rvTimers=new Set();
+ const rvReduced=()=>A.settings.reduceMotion||window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+ const rvLater=(fn,ms)=>{const timer=setTimeout(()=>{rvTimers.delete(timer);fn();},ms);rvTimers.add(timer);return timer;};
+ function rvCancel(){rvSearchCancel?.();rvSearchCancel=null;for(const timer of rvTimers)clearTimeout(timer);rvTimers.clear();rvBusy=false;rvAnimating=false;rvHint=-1;rvPreview=-1;}
+ function rvSnapshot(r){return {board:r.board.slice(),turn:r.turn,over:r.over,pass:r.pass,last:r.last,mover:r.mover,flipped:r.flipped};}
+ function rvSetTurn(r,turn){
+  r.turn=turn;r.pass=0;r.over=false;
+  if(!rvEngine.moves(r.board,turn).length){if(rvEngine.moves(r.board,3-turn).length){r.pass=turn;r.turn=3-turn;}else r.over=true;}
+ }
+ function freshReversi(options={}){
+  const board=Array(64).fill(0);board[27]=board[36]=2;board[28]=board[35]=1;
+  reversi={version:2,id:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10),board,turn:1,mode:options.mode==='local'?'local':'cpu',level:Object.hasOwn(rvLevels,options.level)?options.level:'normal',human:options.human===2?2:1,showLegal:options.showLegal!==false,over:false,counted:false,assisted:false,pass:0,last:-1,mover:0,flipped:0};
+  reversi.frames=[rvSnapshot(reversi)];rvReview=-1;rvInfo='';rvFocus=19;
+ }
+ function rvRestore(){
+  const saved=A.load('reversiState',null);
+  if(!saved||!rvBoardValid(saved.board)||![1,2].includes(saved.turn)){freshReversi();if(saved)A.toast('保存された盤面を読めないため、新しい対局を開始');return;}
+  freshReversi(saved);const r=reversi;
+  r.board=saved.board.slice();rvSetTurn(r,saved.turn);
+  r.id=typeof saved.id==='string'&&/^[a-z0-9-]{1,60}$/.test(saved.id)?saved.id:r.id;
+  r.counted=saved.counted===true||(saved.version!==2&&r.over);r.assisted=saved.assisted===true;
+  r.last=Number.isInteger(saved.last)&&saved.last>=0&&saved.last<64&&r.board[saved.last]?saved.last:-1;
+  r.mover=[1,2].includes(saved.mover)?saved.mover:0;r.flipped=Number.isInteger(saved.flipped)?Math.max(0,Math.min(63,saved.flipped)):0;
+  // Only accept a bounded, replayable timeline; malformed history never drives undo.
+  const frames=[];
+  if(Array.isArray(saved.frames)&&saved.frames.length<=61){
+   for(const f of saved.frames){
+    if(!f||!rvBoardValid(f.board)||![1,2].includes(f.turn))break;
+    const clean={board:f.board.slice(),last:-1,mover:0,flipped:0};rvSetTurn(clean,f.turn);
+    if(frames.length){const prev=frames.at(-1),i=f.last;
+     if(prev.over||!rvEngine.flips(prev.board,i,prev.turn).length)break;
+     const next=rvEngine.placed(prev.board,i,prev.turn);if(next.some((v,j)=>v!==f.board[j]))break;
+     rvSetTurn(clean,3-prev.turn);if(clean.turn!==f.turn)break;
+     clean.last=i;clean.mover=prev.turn;clean.flipped=rvEngine.flips(prev.board,i,prev.turn).length;
+    }
+    frames.push(clean);
+   }
+  }
+  if(frames.length===saved.frames?.length&&frames.length&&frames.at(-1).board.every((v,i)=>v===r.board[i])&&frames.at(-1).turn===r.turn){r.frames=frames;Object.assign(r,rvSnapshot(frames.at(-1)));}
+  else r.frames=[rvSnapshot(r)];
+ }
+ function rvSave(){A.save('reversiState',reversi);}
+ function rvStats(){
+  const s=A.load('reversiStats',{}),n=v=>Number.isSafeInteger(v)&&v>=0?v:0;
+  return {wins:n(s?.wins),losses:n(s?.losses),draws:n(s?.draws),legacyWins:n(s?.legacyWins??A.load('reversiWins',0)),ids:Array.isArray(s?.ids)?s.ids.filter(id=>typeof id==='string').slice(-100):[]};
+ }
+ function rvRecord(){
+  const r=reversi;if(!r.over||r.counted)return;
+  if(r.mode==='local'){r.counted=true;return;}
+  const stats=rvStats();
+  if(!stats.ids.includes(r.id)){
+   const diff=r.board.filter(v=>v===r.human).length-r.board.filter(v=>v===3-r.human).length;
+   stats[diff>0?'wins':diff<0?'losses':'draws']++;if(diff>0)stats.legacyWins++;
+   stats.ids=[...stats.ids,r.id].slice(-100);if(!A.save('reversiStats',stats))return;
+  }
+  A.save('reversiWins',stats.legacyWins);r.counted=true;
+ }
+ function rvUndoIndex(){
+  if(!reversi||reversi.over)return -1;
+  for(let i=reversi.frames.length-2;i>=0;i--)if(reversi.mode==='local'||reversi.frames[i].turn===reversi.human)return i;
+  return -1;
+ }
+ function rvCanPlay(){return !rvBusy&&!rvAnimating&&rvReview<0&&!reversi.over&&!document.hidden&&(reversi.mode==='local'||reversi.turn===reversi.human);}
+ function rvSearch(board,turn,level,done){
+  rvSearchCancel?.();let worker=null,url=null,halted=false,fallingBack=false,watchdog=0;
+  const disposeWorker=()=>{if(worker){worker.onmessage=null;worker.onerror=null;worker.terminate();worker=null;}if(url){URL.revokeObjectURL(url);url=null;}};
+  const complete=result=>{if(halted)return;halted=true;disposeWorker();clearTimeout(watchdog);rvTimers.delete(watchdog);rvSearchCancel=null;done(result);};
+  rvSearchCancel=()=>{halted=true;disposeWorker();clearTimeout(watchdog);rvTimers.delete(watchdog);};
+  const progress=result=>{if(result?.depth){rvInfo=`${result.depth}手先まで探索 · ${number(result.nodes)}局面`;const el=$('#reversi-engine');if(el)el.textContent=rvInfo;}};
+  const fallback=()=>{
+   if(halted||fallingBack)return;fallingBack=true;disposeWorker();clearTimeout(watchdog);rvTimers.delete(watchdog);
+   const iterator=rvEngine.search(board,turn,level);
+   const slice=()=>{if(halted)return;try{const until=performance.now()+7;let next;do{next=iterator.next();if(next.done){complete(next.value);return;}progress(next.value);}while(performance.now()<until);rvLater(slice,0);}catch{complete({index:rvEngine.moves(board,turn)[0]??null,depth:0,nodes:0,solved:false,fallback:true});}};
+   rvLater(slice,0);
+  };
+  try{
+   const source=`'use strict';const engine=(${createReversiEngine.toString()})();onmessage=({data})=>{try{const it=engine.search(data.board,data.turn,data.level);let next;do{next=it.next();if(!next.done&&next.value)postMessage({progress:next.value});}while(!next.done);postMessage({result:next.value});}catch{postMessage({error:true});}};`;
+   url=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));worker=new Worker(url);
+   worker.onmessage=({data})=>{if(halted||fallingBack)return;if(data.error)fallback();else if(data.result)complete(data.result);else progress(data.progress);};
+   worker.onerror=e=>{e.preventDefault();fallback();};worker.postMessage({board,turn,level});watchdog=rvLater(fallback,5000);
+  }catch{fallback();}
+ }
+ function rvWaitForBoard(fn){if(document.hidden||!$('#overlay').hidden){rvLater(()=>rvWaitForBoard(fn),160);return;}fn();}
+ function scheduleAI(){
+  const r=reversi;if(current!=='reversi'||document.hidden||rvReview>=0||rvAnimating||rvBusy||r.over||r.mode!=='cpu'||r.turn===r.human)return;
+  rvBusy=true;rvInfo='候補を比較しています';renderReversi();
+  rvLater(()=>rvWaitForBoard(()=>{
+   rvSearch(r.board.slice(),r.turn,r.level,result=>rvWaitForBoard(()=>{
+    rvBusy=false;rvInfo=result.fallback?'簡易思考に切り替えました':`${result.solved?'終局まで読了':result.depth+'手先まで探索'} · ${number(result.nodes)}局面`;
+    const legal=rvEngine.moves(r.board,r.turn),index=legal.includes(result.index)?result.index:legal[0];
+    if(index!==undefined)rvMove(index);else{rvSetTurn(r,r.turn);rvRecord();rvSave();renderReversi();}
+   }));
+  }),120);
+ }
+ function rvMove(index){
+  const r=reversi,captured=rvEngine.flips(r.board,index,r.turn);if(!captured.length||r.over)return;
+  const before=r.board.slice(),mover=r.turn;r.board=rvEngine.placed(r.board,index,mover);r.last=index;r.mover=mover;r.flipped=captured.length;
+  rvHint=-1;rvPreview=-1;rvSetTurn(r,3-mover);r.frames.push(rvSnapshot(r));rvRecord();rvSave();
+  rvAnimating=!rvReduced();renderReversi(before);A.haptic();
+  if(rvAnimating)rvLater(()=>{rvAnimating=false;renderReversi();scheduleAI();},600);else scheduleAI();
+ }
+ function rvPreviewAt(index){
+  rvPreview=rvCanPlay()&&reversi.showLegal?index:-1;
+  const list=rvEngine.flips(reversi.board,rvPreview,reversi.turn),root=$('#reversi-board');if(!root)return;
+  [...root.children].forEach((cell,i)=>cell.classList.toggle('rv-preview',list.includes(i)));
+  $('#reversi-preview').textContent=list.length?`${rvCoordinate(index)} · ${list.length}枚を裏返せます`:'座標を選んで着手。矢印キーでも移動できます';
+ }
+ function renderReversi(before=null){
+  const root=$('#reversi-board');if(!root)return;
+  const r=reversi,view=rvReview>=0?r.frames[rvReview]:r,legal=rvEngine.moves(view.board,view.turn),canPlay=rvCanPlay(),animate=before&&!rvReduced();
+  root.classList.toggle('rv-instant',!animate);root.setAttribute('aria-busy',String(rvBusy));
+  const preview=rvPreview>=0&&canPlay?rvEngine.flips(view.board,rvPreview,view.turn):[];
+  [...root.children].forEach((cell,i)=>{
+   const v=view.board[i],was=before?.[i],isLegal=canPlay&&legal.includes(i),disc=cell.querySelector('.reversi-disc');
+   cell.dataset.value=v;cell.classList.toggle('rv-legal',isLegal&&r.showLegal);cell.classList.toggle('rv-last',view.last===i);cell.classList.toggle('rv-best',rvHint===i&&rvReview<0);cell.classList.toggle('rv-preview',preview.includes(i));
+   cell.classList.toggle('rv-new',!!animate&&!was&&!!v);cell.classList.toggle('rv-turning',!!animate&&!!was&&was!==v);
+   const distance=r.last<0?0:Math.max(Math.abs(i%8-r.last%8),Math.abs((i/8|0)-(r.last/8|0)));
+   disc.style.transitionDelay=animate&&was&&was!==v?`${distance*24}ms`:'0ms';
+   disc.style.transform=v===2?'rotateY(180deg)':'rotateY(0deg)';
+   cell.querySelector('.rv-flip-count').textContent=isLegal&&r.showLegal?rvEngine.flips(view.board,i,view.turn).length:'';
+   cell.setAttribute('aria-disabled',String(!isLegal));cell.tabIndex=i===rvFocus?0:-1;
+   cell.setAttribute('aria-label',`${rvCoordinate(i)} ${v?rvColor(v):isLegal?'着手可能、'+rvEngine.flips(view.board,i,view.turn).length+'枚返せます':'空'}${view.last===i?'、直前の着手':''}${rvHint===i?'、推奨手':''}`);
+  });
+  const black=view.board.filter(v=>v===1).length,white=view.board.filter(v=>v===2).length;
+  $('#reversi-black').textContent=black;$('#reversi-white').textContent=white;
+  $('#reversi-balance-black').style.width=`${black/(black+white)*100}%`;
+  $('#reversi-balance').setAttribute('aria-label',`石数 黒${black}、白${white}。勝率ではありません`);
+  for(const c of [1,2])$(`#reversi-player-${c}`).classList.toggle('active',!view.over&&view.turn===c);
+  const phase=view.over?'終局':64-black-white>44?'序盤':64-black-white>16?'中盤':'終盤';
+  $('#reversi-phase').textContent=`${phase} · 残り${64-black-white}マス`;
+  $('#reversi-legal').textContent=view.over?'対局終了':`合法手 ${legal.length}`;
+  $('#reversi-status').textContent=rvReview>=0?`棋譜 ${rvReview} / ${r.frames.length-1}`:view.over?(black===white?'引き分け':`${black>white?'黒':'白'}の勝ち · ${Math.abs(black-white)}枚差`):`${view.pass?rvColor(view.pass)+'は置けずパス · ':''}${rvColor(view.turn)}${rvBusy?'が思考中':rvAnimating?'の番へ':'の番'}`;
+  $('#reversi-status').classList.toggle('thinking',rvBusy);
+  $('#reversi-engine').textContent=rvReview>=0?'振り返り中は着手・NPC思考を停止':rvInfo||'端末内で思考 · 対局は自動保存';
+  $('#reversi-last').textContent=view.last>=0?`直前 ${rvColor(view.mover||view.board[view.last])} ${rvCoordinate(view.last)} · ${view.flipped}枚反転`:'黒から開始 · 四隅と置ける場所を大切に';
+  $('#reversi-undo').disabled=rvReview>=0||rvUndoIndex()<0;
+  $('#reversi-hint').disabled=!canPlay;$('#reversi-review').disabled=r.frames.length<2;
+  $('#reversi-guides').setAttribute('aria-pressed',String(r.showLegal));
+  $('#reversi-guides').textContent=r.showLegal?'候補 ON':'候補 OFF';
+  $('#reversi-review-tools').hidden=rvReview<0;$('#reversi-replay-back').disabled=rvReview<=0;$('#reversi-replay-next').disabled=rvReview>=r.frames.length-1;
+  $('#reversi-result').hidden=!view.over||rvReview>=0;
+  if(view.over){$('#reversi-result-title').textContent=black===white?'DRAW':r.mode==='cpu'?(view.board.filter(v=>v===r.human).length>view.board.filter(v=>v===3-r.human).length?'YOU WIN':'NPC WINS'):(black>white?'BLACK WINS':'WHITE WINS');$('#reversi-result-detail').textContent=`黒 ${black} : ${white} 白${r.assisted?' · ヒント／待った使用':''}。棋譜で対局を振り返れます。`;}
+  const stats=rvStats();$('#reversi-record').textContent=`NPC戦績 ${stats.wins}勝 ${stats.losses}敗 ${stats.draws}分`;
+ }
+ function reversiApp(){
+  if(!reversi)rvRestore();rvCancel();rvReview=-1;rvRecord();rvSave();
+  const r=reversi,player=c=>r.mode==='local'?rvColor(c):c===r.human?'あなた':'NPC';
+  shell('Reversi','jade',`<section class="rv-studio" aria-label="リバーシ対局"><header class="rv-heading"><div><small>REVERSI ATELIER</small><h1>一手から、変わる。</h1></div><button data-action="reversiSettings" class="rv-settings">対局設定</button></header>
+   <div class="rv-match"><span>${r.mode==='cpu'?'NPC · '+rvLevels[r.level]:'同じ端末で2人対戦'}</span><span>${r.mode==='cpu'?'あなたは'+rvColor(r.human):'黒が先手'}</span></div>
+   <div class="reversi-score"><div id="reversi-player-1" class="rv-player"><i class="rv-score-disc black" aria-hidden="true"></i><div><small>${player(1)} · 黒</small><strong id="reversi-black">2</strong></div></div><span>VS</span><div id="reversi-player-2" class="rv-player"><div><small>${player(2)} · 白</small><strong id="reversi-white">2</strong></div><i class="rv-score-disc white" aria-hidden="true"></i></div></div>
+   <div class="rv-balance" id="reversi-balance" role="img"><i id="reversi-balance-black"></i></div>
+   <div class="rv-board-meta"><span id="reversi-phase"></span><span id="reversi-legal"></span></div>
+   <div class="reversi-frame"><div class="rv-coordinates" aria-hidden="true">${[...'ABCDEFGH'].map(c=>`<span>${c}</span>`).join('')}</div><div class="rv-ranks" aria-hidden="true">${Array.from({length:8},(_,i)=>`<span>${i+1}</span>`).join('')}</div><div class="reversi-board" id="reversi-board" role="group" aria-label="8行8列のリバーシ盤。矢印キーで移動、EnterまたはSpaceで着手" aria-describedby="reversi-status">${Array.from({length:64},(_,i)=>`<button class="reversi-cell" data-action="reversiMove" data-index="${i}" tabindex="-1"><span class="rv-piece" aria-hidden="true"><span class="reversi-disc"><i class="rv-face black"></i><i class="rv-face white"></i></span></span><i class="reversi-hint" aria-hidden="true"></i><span class="rv-flip-count" aria-hidden="true"></span><i class="rv-last-mark" aria-hidden="true"></i></button>`).join('')}</div></div>
+   <p class="rv-preview-copy" id="reversi-preview">座標を選んで着手。矢印キーでも移動できます</p>
+   <div class="rv-status-panel"><strong id="reversi-status" role="status" aria-live="polite" aria-atomic="true"></strong><span id="reversi-last"></span><small id="reversi-engine"></small></div>
+   <div class="rv-tools"><button id="reversi-undo" data-action="reversiUndo">待った</button><button id="reversi-hint" data-action="reversiHint">ヒント</button><button id="reversi-guides" data-action="reversiGuides">候補 ON</button><button id="reversi-review" data-action="reversiReview">棋譜</button></div>
+   <div class="rv-review-tools" id="reversi-review-tools" hidden><button data-action="reversiReplay" data-step="-1" id="reversi-replay-back" aria-label="棋譜を一手戻る">前の手</button><button data-action="reversiLive">対局へ戻る</button><button data-action="reversiReplay" data-step="1" id="reversi-replay-next" aria-label="棋譜を一手進める">次の手</button></div>
+   <section class="rv-result" id="reversi-result" hidden><small>GAME COMPLETE</small><h2 id="reversi-result-title"></h2><p id="reversi-result-detail"></p></section>
+   <div class="rv-footer"><span id="reversi-record"></span><button data-action="reversiRestart">新しい対局</button></div></section>`,iconButton('reversiHelp','遊び方','document'));
+  renderReversi();scheduleAI();
+  const board=$('#reversi-board');
+  on(board,'pointerover',e=>{const cell=e.target.closest('.reversi-cell');if(cell&&e.pointerType!=='touch')rvPreviewAt(Number(cell.dataset.index));});
+  on(board,'pointerleave',()=>rvPreviewAt(-1));
+  on(board,'focusin',e=>{const cell=e.target.closest('.reversi-cell');if(!cell)return;rvFocus=Number(cell.dataset.index);[...board.children].forEach((b,i)=>b.tabIndex=i===rvFocus?0:-1);rvPreviewAt(rvFocus);});
+  on(board,'focusout',e=>{if(!board.contains(e.relatedTarget))rvPreviewAt(-1);});
+  on(board,'keydown',e=>{if(!$('#overlay').hidden||e.altKey||e.metaKey||e.ctrlKey)return;
+   const delta={ArrowLeft:-1,ArrowRight:1,ArrowUp:-8,ArrowDown:8};
+   if(Object.hasOwn(delta,e.key)){e.preventDefault();rvFocus=Math.max(0,Math.min(63,rvFocus+delta[e.key]));board.children[rvFocus].focus();}
+   if(e.key==='Home'||e.key==='End'){e.preventDefault();rvFocus=e.key==='Home'?0:63;board.children[rvFocus].focus();}
+  });
+  on(document,'visibilitychange',()=>{if(document.hidden){rvCancel();rvSave();renderReversi();}else{renderReversi();scheduleAI();}});
+  disposers.push(()=>{rvCancel();rvSave();});
+ }
+ A.actions.reversiMove=el=>{if(!rvCanPlay())return;rvMove(Number(el.dataset.index));};
+ A.actions.reversiUndo=()=>{const index=rvUndoIndex();if(index<0||rvReview>=0)return;rvCancel();reversi.frames=reversi.frames.slice(0,index+1);Object.assign(reversi,rvSnapshot(reversi.frames[index]));reversi.assisted=true;rvInfo='あなたの着手前まで戻しました';rvSave();renderReversi();scheduleAI();};
+ A.actions.reversiHint=()=>{
+  if(!rvCanPlay())return;rvBusy=true;reversi.assisted=true;rvSave();rvInfo='おすすめの一手を探索中';renderReversi();
+  rvSearch(reversi.board.slice(),reversi.turn,'hard',result=>rvWaitForBoard(()=>{rvBusy=false;rvHint=result.index;
+   const reason=[0,7,56,63].includes(rvHint)?'角は相手に返されない石です':'角・相手の合法手・返されやすい石を比較';
+   rvInfo=rvHint===null?'置ける場所がありません':`${rvCoordinate(rvHint)}を推奨 · ${reason}（${result.depth}手先）`;renderReversi();
+  }));
+ };
+ A.actions.reversiGuides=()=>{reversi.showLegal=!reversi.showLegal;rvPreview=-1;rvSave();renderReversi();rvPreviewAt(-1);};
+ A.actions.reversiReview=()=>{if(reversi.frames.length<2)return;rvCancel();rvReview=reversi.frames.length-1;renderReversi();rvPreviewAt(-1);};
+ A.actions.reversiReplay=el=>{if(rvReview<0)return;rvReview=Math.max(0,Math.min(reversi.frames.length-1,rvReview+Number(el.dataset.step)));renderReversi();};
+ A.actions.reversiLive=()=>{rvReview=-1;rvInfo='';renderReversi();scheduleAI();};
+ function rvStart(options){rvCancel();freshReversi(options);rvSave();open('reversi');}
+ A.actions.reversiRestart=()=>A.confirm('新しい対局を始めますか？','今の対局と棋譜を置き換えます。戦績は残ります。',()=>rvStart(reversi));
+ A.actions.reversiSettings=()=>{
+  const r=reversi;
+  A.overlay(`${A.overlayTitle('対局設定')}<div class="rv-options"><label>対戦相手<select id="rv-option-mode"><option value="cpu" ${r.mode==='cpu'?'selected':''}>NPC対戦</option><option value="local" ${r.mode==='local'?'selected':''}>同じ端末で2人対戦</option></select></label><label>NPCの強さ<select id="rv-option-level">${Object.entries(rvLevels).map(([id,label])=>`<option value="${id}" ${r.level===id?'selected':''}>${label}</option>`).join('')}</select></label><label>あなたの石（NPC戦）<select id="rv-option-human"><option value="1" ${r.human===1?'selected':''}>黒 · 先手</option><option value="2" ${r.human===2?'selected':''}>白 · 後手</option></select></label><p>入門 / 標準 / 上級 / 達人。達人の探索予算は約1.8秒。端末により探索の深さは変わります。設定を反映すると新しい対局になります。</p><button class="primary-button" data-action="reversiApplySettings">この設定で新しい対局</button></div>`);
+ };
+ A.actions.reversiApplySettings=()=>{
+  const options={mode:$('#rv-option-mode').value,level:$('#rv-option-level').value,human:Number($('#rv-option-human').value),showLegal:reversi.showLegal};
+  A.confirm('設定を変更して開始？','現在の盤面と棋譜を置き換えます。',()=>rvStart(options));
+ };
+ // Retain the old action contract for existing callers.
+ A.actions.reversiMode=el=>A.confirm('対戦モードを変更？','新しい対局を始めます。',()=>rvStart({...reversi,mode:el.dataset.value}));
+ A.actions.reversiHelp=()=>help('Reversi · 遊び方','自分の石で一直線にはさむと相手の石が裏返ります。黒から開始し、置けない側は自動パス。両者とも置けなければ空きマスが残っていても終局です。石数バーは勝率ではありません。<br><br>候補の数字は返せる枚数。マウス／キーボードフォーカスで返る石を強調します。金の輪は直前の着手、金の候補はヒントです。候補OFFでも合法手には置けます。<br><br>「待った」はNPCの応手も含め自分の着手前へ（2人対戦は一手）。思考中も取り消せますが、終局後は戦績の重複を避けるため棋譜の閲覧のみです。ヒント・待った使用の対局もNPC戦績に含みます。<br><br>「棋譜」で保存された手順を往復。「対局へ戻る」で再開。古い保存データは移行後の手順から記録します。盤面・棋譜は端末内に自動保存。音声・通信・追加画像素材は使用しません。');
 
  // Orbit Breaker: fixed-step motion, paddle angles, multi-stage brick patterns and touch drag.
  let breaker=null,breakerKeys={left:false,right:false},breakerFrame=0;
