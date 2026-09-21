@@ -353,7 +353,7 @@ const snakeStep=()=>Math.max(snakeModes[snake.mode].min,snakeModes[snake.mode].s
 function resetSnake(){
  const body=[{x:7,y:9},{x:6,y:9},{x:5,y:9},{x:4,y:9}];
  snake={body,previous:body.map(p=>({...p})),direction:{x:1,y:0},oldDirection:{x:1,y:0},queue:[],mode:snakePrefs.mode,score:0,fruit:0,gold:0,peakCombo:0,bestAtStart:snakeRecords[snakePrefs.mode].best,time:0,lastFruit:-Infinity,combo:0,bonus:null,food:null,step:snakeModes[snakePrefs.mode].step,accumulator:0,running:false,started:false,over:false,won:false,recorded:false,reason:''};
- snakeParticles=[];snakeFloats=[];snake.food=freeSnakeCell();
+ snakeParticles=[];snakeFloats=[];snake.food=freeSnakeCell();snakeText('snake-achievement-notice','');
 }
 // Saved runs are untrusted input: validate geometry before restoring a paused run.
 function restoreSnake(){
@@ -400,8 +400,9 @@ function freeSnakeCell(exclude=null){
  const cell=free[Math.floor(Math.random()*free.length)];return {x:cell%snakeSize,y:Math.floor(cell/snakeSize)};
 }
 function saveSnakeRecords(force=true){
- if(!snake||(!force&&!snakeSaveOK))return false;
+ if(!snake)return false;
  snakeBest=Math.max(snakeBest,snake.score);snakeRecords[snake.mode].best=Math.max(snakeRecords[snake.mode].best,snake.score);
+ if(!force&&!snakeSaveOK)return false;
  // Snapshot, records and completion history succeed or roll back together.
  snakeSaveOK=A.saveBatch({snakeBest,snakeRecords,snakeHistory,snakeSession:snakeSnapshot(),snakeAchievements:[...snakeAchievements]});
  snakeText('snake-save-status',snakeSaveOK?'端末内に保存済み':'未保存：容量やブラウザ設定を確認し、保存を再試行してください');
