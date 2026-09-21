@@ -337,9 +337,146 @@
       music: () => fine(line('M35 25v28c0 4-5 8-10 8M59 19v28c0 4-4 7-8 7','#fff',.5)+line('M24 65c5 2 11-1 12-5m11-5c5 2 12-2 13-5','#bc526e',.55,'opacity=".5"'))+
         path('M39 26l14-3v2l-14 3Z',paint('crystal'))
     };
-    Object.keys(art).forEach(id => {
+    // Second material pass: authored details stay attached to their moving parts.
+    // Fine engraving is optically omitted below 40px by the existing container rule.
+    // No random noise, extra blur filters, external assets, or live status indicators.
+    const engraving = (cx,cy,r,label,start,step,color='#d8e5f1') => fine([...label].map((c,i) =>
+      `<g transform="rotate(${start+i*step} ${cx} ${cy})">${text(cx,cy-r,c,2.3,color)}</g>`).join(''));
+    const seam = (d,color='#fff',width=.5) => line(d,color,width,'opacity=".65"');
+    const deboss = (x,y,label,size,color) => fine(text(x,y+.35,label,size,'#ffffff70','letter-spacing=".5"')+text(x,y,label,size,color,'letter-spacing=".5"'));
+    const stud = (x,y) => circle(x,y,1.6,metal)+rim(x,y,1.5)+circle(x-.4,y-.5,.45,'#fff');
+    const detail = {
+      calendar: () => rect(13,31,4,29,1,paint('binding'),'opacity=".13"')+
+        fine(line('M17 32h7m-7 2h4M58 58h5m-3-2v4','#a7b3c2',.5)+
+          Array.from({length:16},(_,i)=>line(`M${16+i*3.1} 27.5v.7`,'#a54061',.35)).join(''))+
+        [24,56].map(x=>line(`M${x+1} 9v5.8`,'#65798e',.55)+circle(x,8.5,1,paint('pearl'))).join('')+
+        seam('M11 34v26q0 6 5 6','#fff',.8),
+      photos: () => fine(Array.from({length:8},(_,i)=>`<g transform="rotate(${i*45} 40 40)">${path('M40 7c-7 3-11 12-8 23-1-12 3-18 8-23Z','#fff','opacity=".23"')}${line('M43 11c5 7 6 13 3 19','#fff',.5,'opacity=".5"')}${line('M34 27q1 6 6 11','#705276',.4,'opacity=".19"')}</g>`).join(''))+
+        circle(40,40,4.6,'none','stroke="#fff" stroke-opacity=".65" stroke-width=".45"')+circle(40,40,2.5,paint('pearl')),
+      camera: () => engraving(42,44,21.7,'AURA OPTICS',-48,9)+engraving(42,44,18,'35mm  1:1.8',128,9,'#d5e9f2')+
+        fine(line('M12 20h8m-7 1.5h6','#a9bacd',.4)+rect(58.8,27.8,8.4,3.4,.5,'none','stroke="#a2aeb7" stroke-width=".35"')+
+          circle(63,62,1.1,'#193346')+circle(63,61.7,.6,'#80cfca')+text(20,61.5,'HD',2.8,'#43546b','font-weight="700"'))+
+        circle(42,44,9.7,'none','stroke="#80bbce" stroke-opacity=".22" stroke-width=".35"')+
+        path('M48 36a10 10 0 0 1 3 13l-2-3a9 9 0 0 0-1-10Z','#73c9e5','opacity=".18"'),
+      weather: () => circle(51,26,14.2,'none','stroke="#fff3be" stroke-opacity=".65" stroke-width=".55"')+
+        motion('cloud',path('M8 50c2 7 8 9 17 8h31c5 0 8-2 11-5-2 7-6 9-12 9H20c-7 0-11-4-12-12Z','#82accf','opacity=".16"')+
+          seam('M26 39c4-7 13-7 18-2m6 3c5-3 10-1 12 2','#fff',1.1),'40px 40px')+
+        fine(line('M7 24h5m-2.5-2.5v5M24 11h3m-1.5-1.5v3','#e3f3ff',.55,'opacity=".55"')),
+      mail: () => fine(rect(23,17,8,1,.5,'#98b5ca')+line('M22 25h12m-12 1.8h8','#b6c8d6',.45)+
+          line('M17 58l9-8m28 0 9 8','#fff',.65)+line('M17 60h9m28 0h8','#b4c9d8',.4))+
+        path('M33 46l5 4a3 3 0 0 0 4 0l5-4-5 6a3 3 0 0 1-4 0Z','#749abd','opacity=".18"')+
+        seam('M11 36v22q0 5 4 5','#fff',.9),
+      clock: now => circle(40,40,32.1,'none','stroke="#22384e" stroke-width=".45"')+
+        fine([30,60,120,150,210,240,300,330].map(a=>rect(39.5,18.8,1,2.5,.35,metal,`transform="rotate(${a} 40 40)"`)).join(''))+
+        line('M40 40V26','#bdcddc',.65,`class="app-clock-hour" transform="rotate(${(now.getHours()%12)*30+now.getMinutes()/2} 40 40)" data-detail-hand="hour"`)+
+        path('M13 42a28 28 0 0 0 43 22c-18 6-33-3-43-22Z','#7188a5','opacity=".07"'),
+      maps: () => fine([[13,21],[19,25],[8,42],[68,70],[73,65]].map(([x,y])=>circle(x,y+1,2,'#9ab999')+circle(x,y,1.9,'#b4d19c')+circle(x-.5,y-.6,.65,'#dce9b7')).join('')+
+          line('M4 53l16-5M33 43l3-1M73 28l5-2','#fff5db',.65)+line('M24 56h6m-6 2h6m-6 2h6','#c6ccbf',.65)+
+          line('M37 7v7m-2-5 2-2 2 2','#7a9f9d',.65)+text(37,5,'N',2.5,'#729091'))+
+        seam('M60 39c-1 5-3 8-5 10','#a73358',.6),
+      notes: () => fine(line('M17 40c4-4 6 3 10-1s5 1 8-1M17 44h16','#7f96a7',.65,'opacity=".6"')+
+          line('M13 26h50','#fff',.8)+line('M12 28v31','#d4c6b2',.4))+
+        motion('pencil',fine(`<g transform="rotate(32 57 44)">${line('M54.6 31.8h5.8m-5.8 1.1h5.8','#fff',.35)}${deboss(58,47,'HB',2,'#9a7039')}${line('M54.5 58l3 5','#fff0d2',.55)}</g>`),'57px 44px'),
+      reminders: () => fine(line('M17 18h15m-15 2h9','#b2bac6',.55)+line('M62 19v43','#d6dce2',.5)+
+          [27,42,57].map((y,i)=>text(58,y+3,`0${i+1}`,2.7,'#8b98a8')).join(''))+
+        [27,42,57].map((y,i)=>circle(23,y,5.8,'none',`stroke="${['#376faa','#b88444','#84609e'][i]}" stroke-width=".4"`)+seam(`M20 ${y-3}a4 4 0 0 1 5-.5`,'#fff',.55)).join(''),
+      files: () => rect(14,46,4,15,1,'#d9f4ff','opacity=".16"')+
+        fine(deboss(56,62,'DOC',3,'#326f9f')+line('M22 22h11m-11 2h7','#6e91b2',.45)+
+          rect(37,28,11,11,2,'none','stroke="#629fce" stroke-width=".4"')+path('m39 36 2-3 2 2 2-3 1 4Z','#e8f7ff')+
+          line('M34 56h14','#3a86b9',.4))+
+        seam('M11 44l3 18q.5 3 3 3','#c4edff',.8),
+      calculator: () => fine([0,1,2,3,4].map(i=>rect(24+i*6.5,16,4.6,1.2,.3,'#496c60','opacity=".16"')).join('')+
+          [21,59].map(x=>screw(x,65)).join('')+line('M28 63h24','#8192a4',.35)+text(31,18,'M',2.5,'#496c60')+text(49,18,'DEG',2.1,'#496c60'))+
+        seam('M17 15v43','#aab8c8',.6)+seam('M63 16v44','#14283c',.65),
+      settings: () => fine([45,165,285].map(a=>`<g transform="rotate(${a} 40 40)">${circle(40,22.5,1.4,ink)}${rim(40,22.5,1.5)}${circle(40,22.2,.6,'#bac9d9')}</g>`).join('')+
+          ticks(40,40,10.3,36,'#65768c',.24))+
+        engraving(40,40,25.3,'AURA',52,9,'#b7c7d8')+engraving(40,40,25.3,'PRECISION',192,7,'#b7c7d8')+
+        circle(40,40,5.4,'none','stroke="#121e30" stroke-width=".65"')+seam('M37 36a5 5 0 0 1 6 0','#d3e5f7',.65),
+      games: () => fine([0,1,2,3].map(i=>line(`M${13+i*1.5} ${51+i*.8}l-1.2 4`,'#8588a7',.4)+line(`M${62+i*1.5} ${54-i*.8}l1.2 3`,'#8588a7',.4)).join('')+
+          text(40,28,'AURA',2.4,'#8386a2','letter-spacing=".65"')+line('m22 33 2-2 2 2m-6 3-2 2 2 2','#9aa6b9',.45)+
+          [33,47].map(x=>circle(x,48,1.8,'none','stroke="#39445c" stroke-width=".35"')).join(''))+
+        seam('M27 52h26','#a3abc4',.6),
+      health: () => fine(ticks(40,40,28,40,'#e7b2c1',.3))+
+        path('M48 22c6-4 13-1 14 5-4-4-9-4-14-5Z','#ffdbe1','opacity=".4"')+
+        line('M20 44c3 5 8 10 13 14','#ffbfcb',.7,'opacity=".6"')+
+        circle(59,58,9.3,'none','stroke="#d8a3b3" stroke-width=".4"')+fine(deboss(40,72,'CARE',2.3,'#be8295')),
+      wallet: () => fine(line('M17 17h40M18 26h42','#fff1ca',.55)+
+          [0,1,2].map(i=>line(`M${50+i*2} 18q3 3 0 6`,'#b38649',.5)).join('')+
+          line('M13 42v20q0 4 4 4h43','#8d9aab',.4,'stroke-dasharray="1 1.4"')+
+          deboss(32,59,'AURA',3.2,'#18283b'))+
+        rect(53,46,18,13,3,'none','stroke="#adbdce" stroke-opacity=".5" stroke-width=".4"')+seam('M57 51a4 4 0 0 1 6-2','#fce6af',.5),
+      recorder: () => fine([0,1,2,3,4,5].map(i=>line(`M${16+i*9} 57v1.5`,'#acb9cc',.4)).join('')+
+          text(16,64.5,'L',2.7,'#c5d0df')+text(64,64.5,'R',2.7,'#c5d0df')+line('M12 20v34m56-34v34','#12243a',.65))+
+        rect(11,14,58,44,5,'none','stroke="#a2bed7" stroke-opacity=".2" stroke-width=".5"')+
+        path('M12 16h28L16 55h-4Z','#b7ddff','opacity=".045"'),
+      today: () => fine(text(53,15.5,'TODAY',2.3,'#709a98','letter-spacing=".6"')+line('M17 65h9','#a7c0bb',.6)+
+          [38,49,60].map(y=>line(`M21 ${y+4.5}h4`,'#b4c9c3',.4)).join(''))+
+        path('M14 30h3v31q0 4 3 5h-3q-3 0-3-3Z','#9bb6b0','opacity=".12"')+
+        circle(62,60,8.7,'none','stroke="#dff4d1" stroke-width=".4" stroke-opacity=".6"'),
+      focus: () => fine(engraving(40,43,27.2,'CHRONO',-27,9,'#5e6681')+
+          [0,1,2].map(i=>line(`M${34.5+i*4} 8h1.5`,'#eef4ff',.5)).join('')+
+          [0,90,180,270].map(a=>circle(40,23,1,metal,`transform="rotate(${a} 40 43)"`)).join(''))+
+        circle(40,43,18,'none','stroke="#e4d8ff" stroke-opacity=".3" stroke-width=".4"')+
+        circle(40,43,1.3,metal)+seam('M21 51a21 21 0 0 0 10 11','#cdbcea',.7),
+      habits: () => fine(line('m22 26 1-5m3 8-6-1m12 7 1-5m14-4 1-5m4 1 7 1m-5-7 5-1','#d6edb6',.45))+
+        path('M18 20c9 0 14 4 17 10-6-4-12-5-17-10Z','#e5f7b7','opacity=".24"')+
+        path('M44 27c3-8 9-12 17-13-7 4-10 10-17 13Z','#ddf3bb','opacity=".3"')+
+        fine([[29,51],[34,50.5],[46,50.7],[50,51]].map(([x,y])=>circle(x,y,.65,'#a4aa7c')).join('')+
+          line('M28 55h23M31 64h18','#bdcebe',.45))+seam('M33 58v5','#fff',1.4),
+      expenses: () => fine(line('M27 30h25m-25 8h25m-25 8h25','#acc7bf',.3,'opacity=".5"')+
+          text(46,16,'LEDGER',2.5,'#839d96','letter-spacing=".4"')+line('M18 14v47','#336d63',.35))+
+        circle(59,57,9.5,'none','stroke="#ae793b" stroke-width=".35"')+
+        fine([30,150,270].map(a=>circle(59,47, .65,'#a97b41',`transform="rotate(${a} 59 57)"`)).join(''))+
+        path('M48 62a12 12 0 0 0 19-1c-5 3-12 4-19 1Z','#b17c3d','opacity=".22"'),
+      shopping: () => fine(line('M22 60l3-20m-1 22 2-12M60 40l-2 13','#b98a5c',.3,'opacity=".5"')+
+          line('M31 46h17m-16 10h3m9 0h3','#bbac8b',.45)+text(40,62.5,'MARKET',2.5,'#9c7047','letter-spacing=".4"'))+
+        [28,52].map(x=>circle(x,35,2.5,'none','stroke="#ffedc9" stroke-width=".5"')).join('')+
+        seam('M28 31v-5a12 12 0 0 1 10-12','#fff7dc',.65),
+      journal: () => fine([16,59].map(y=>line(`M28 ${y}h22`,'#f4c5bb',.4)).join('')+
+          [28,54].map(x=>path(`M${x} 50l1.2 1.2-1.2 1.2-1.2-1.2Z`,gold)).join('')+
+          text(41,57,'VOL. 01',2.6,'#f7d7c8','letter-spacing=".65"'))+
+        line('M15 13v49','#ecc5cd',.8,'opacity=".4"')+seam('M61 12v49','#65425e',.65)+
+        motion('ribbon',fine(line('M44 68v4','#b0824f',.45)),'42px 67px'),
+      contacts: () => fine(line('M21 14v46','#3a77a3',.45)+line('M59 16v43','#e5f5ff',.45)+
+          [18,31,44].map(y=>line(`M64 ${y+1.5}h3`,'#fff',.45)).join('')+
+          deboss(38,17,'CONTACTS',2.7,'#34759e'))+
+        circle(38,32,8.2,'none','stroke="#cadce8" stroke-width=".4"')+
+        seam('M24 56h28','#e9f8ff',.8),
+      converter: () => fine([16,56].map(x=>stud(x,26)).join('')+stud(65,58)+
+          line('M24 51h26m-26 1.5h19','#718ba1',.35)+text(41,68,'1 : 2.54',2,'#9fb8c9','letter-spacing=".5"'))+
+        rect(14,17,44,17,2,'none','stroke="#819da9" stroke-width=".4"')+
+        path('M17 19h13l-5 10h-8Z','#fff','opacity=".22"'),
+      reading: () => fine(line('M14 22q8-1 17 3m-17 0q8-1 13 2M47 55q8-3 16-2','#aa9678',.45)+
+          text(23,59,'12',2.8,'#99876b')+text(57,59,'13',2.8,'#99876b'))+
+        path('M11 16c2 12 2 29 0 45l3-.5c2-16 2-30 0-45Z','#fff','opacity=".45"')+
+        seam('M69 18c-2 13-2 25 0 41','#b6a589',.55)+
+        motion('ribbon',fine(line('M60 16v17','#a95171',.45)),'58px 14px'),
+      sketch: () => fine(`<g transform="rotate(-8 38 40)">${line('M20 20h3m-1.5-1.5v3M50 53h3m-1.5-1.5v3','#bac4ce',.4)}${line('M21 49c5-9 11-15 21-18m-17 17c4-4 9-7 17-7','#faf2e9',.65,'opacity=".65"')}${line('M19 63h13','#aaa8b1',.5)}</g>`)+
+        motion('pencil',fine(`<g transform="rotate(36 57 39)">${deboss(58,41,'2B',2.7,'#9e7136')}${line('M53.5 12v3','#ffd8df',.75)}${line('M58.5 25v28','#b68b45',.4)}</g>`),'57px 39px'),
+      phone: () => fine([[20,21],[23,24],[26,27],[53,54],[56,57],[59,60]].map(([x,y])=>circle(x,y,1.15,'none','stroke="#d6e9de" stroke-width=".35"')+circle(x,y+.25,.45,'#648d78')).join(''))+
+        line('M16 32c5 15 18 28 31 31','#bfdccc',.65)+
+        path('M16 21c1-3 4-5 7-5l6 7c-5-3-7-3-13-2Z','#fff','opacity=".55"')+
+        seam('M51 48l10 8','#fff',.85),
+      safari: () => fine(ticks(40,40,32.3,120,'#657c93',.23))+
+        engraving(40,40,21,'EXPLORE',-29,9,'#d9f4ff')+
+        circle(40,40,17.5,'none','stroke="#d8f5ff" stroke-opacity=".25" stroke-width=".35"')+
+        motion('compass',fine(`<g transform="rotate(35 40 40)">${line('M40 17v18','#ffe3df',.5)}${line('M40 46v15','#fff',.5)}${circle(40,40,1.5,metal)}</g>`),'40px 40px'),
+      messages: () => path('M9 38c1 9 7 15 14 19l-5 8 13-6c16 2 29-3 36-13-5 12-17 17-36 15l-17 8 4-12C11 52 7 45 9 38Z','#aac8b8','opacity=".16"')+
+        fine(seam('M62 63l5 3-2-6','#f0fff2',.7)+line('M71 43q2 6-2 11','#d9f6df',.65))+
+        [26,39,52].map((x,i)=>motion('dot',path(`M${x-2} 39q2 2 4 0`,'none','stroke="#4f9273" stroke-width=".45" opacity=".55"'),'40px 40px',-i*.22)).join(''),
+      music: () => fine([24,30].map(r=>circle(40,40,r,'none','stroke="#fff" stroke-width=".25" stroke-opacity=".15"')).join('')+
+          line('M39 25l14-3M22 63c3 1 6 0 8-2m17-7c3 1 6 0 8-2','#fff',.55))+
+        line('M33 35v17m24-21v13','#fff',.85,'opacity=".65"')+
+        path('M38 29l15-4v1l-15 4Z','#ffd6df','opacity=".5"')+
+        fine(text(40,73,'STEREO',2.4,'#ffe2e7','letter-spacing="1.2"'))
+    };
+    Object.keys(art).forEach((id,index) => {
       const base = art[id];
-      art[id] = now => `<g class="icon-motion motion-scene scene-${id}" style="--motion-phase:${-(Object.keys(art).indexOf(id)%7)*.47}s">${base(now)}${finish[id]()}</g>`;
+      art[id] = now => {
+        // The inset hand shares the live clock selector and starts at real time.
+        const refinement = detail[id](now);
+        return `<g class="icon-motion motion-scene scene-${id}" style="--motion-phase:${-(index%7)*.47}s">${base(now)}${finish[id]()}<g class="app-material-detail">${refinement}</g></g>`;
+      };
     });
     return art;
   })();
