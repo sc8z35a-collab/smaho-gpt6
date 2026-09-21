@@ -119,7 +119,7 @@
  function revealMine(index,fromHint=false){
   if(!mineCanPlay()||!Number.isInteger(index)||index<0||index>=mines.size**2||mines.flags.includes(index))return;
   tickMines();if(!mineCanPlay())return;
-  const m=mines;mineHint=-1;
+  const m=mines;mineHint=fromHint?index:-1;
   if(!m.started)seedMines(index);
   let targets=[index];
   if(m.open.includes(index)){
@@ -194,7 +194,7 @@
   $('#mine-flag').classList.toggle('active',mineMode==='flag');$('#mine-flag').setAttribute('aria-pressed',String(mineMode==='flag'));
   $('#mine-flag').disabled=m.paused||m.over;
   $('#mine-pause').textContent=m.paused?'再開':'一時停止';$('#mine-pause').disabled=!m.started||m.over;
-  $('#mine-hint').textContent=mineHint>=0?'このマスを開く':`安全スキャン ${3-m.hintsUsed}/3`;$('#mine-hint').disabled=m.paused||m.over||m.hintsUsed>=3;
+  $('#mine-hint').textContent=`安全スキャン ${3-m.hintsUsed}/3`;$('#mine-hint').disabled=m.paused||m.over||m.hintsUsed>=3;
   $('#mine-zoom').setAttribute('aria-pressed',String(mineZoom));$('#mine-zoom').textContent=mineZoom?'全体表示':'盤面を拡大';
   $('#mine-quality').setAttribute('aria-pressed',String(mineLite));$('#mine-quality').textContent=mineLite?'軽量描画':'高精細描画';
   A.$$('[data-action="mineDifficulty"]').forEach(el=>{el.classList.toggle('active',el.dataset.value===m.difficulty);el.setAttribute('aria-pressed',String(el.dataset.value===m.difficulty));});
@@ -218,7 +218,7 @@
    </section>`,iconButton('mineHelp','遊び方','document'));
   renderMines();
   const root=$('#mines-board');let hold=null,gesture=null,suppressIndex=-1,suppressUntil=0;
-  const cancelHold=()=>{clearTimeout(hold);hold=null;gesture=null;};
+  const cancelHold=()=>{clearTimeout(hold);hold=null;gesture=null;if(suppressUntil===Infinity)suppressUntil=performance.now()+1000;};
   on(root,'pointerdown',e=>{
    cancelHold();suppressUntil=0;
    const cell=e.target.closest('[data-index]');if(!cell||e.button!==0||!e.isPrimary||!mineCanPlay())return;
@@ -227,12 +227,12 @@
    if(e.pointerType==='mouse')return;
    hold=setTimeout(()=>{
     if(!gesture||!mineCanPlay())return;
-    suppressIndex=gesture.index;suppressUntil=performance.now()+1000;flagMine(gesture.index);A.haptic();hold=null;
+    suppressIndex=gesture.index;suppressUntil=Infinity;flagMine(gesture.index);A.haptic();hold=null;
    },440);
   });
   on(root,'pointermove',e=>{if(gesture&&(Math.abs(e.clientX-gesture.x)>10||Math.abs(e.clientY-gesture.y)>10))cancelHold();});
   on(window,'pointerup',cancelHold);on(window,'pointercancel',cancelHold);on($('#mines-scroll'),'scroll',cancelHold,{passive:true});
-  on(root,'click',e=>{const cell=e.target.closest('[data-index]');if(cell&&Number(cell.dataset.index)===suppressIndex&&performance.now()<suppressUntil){e.preventDefault();e.stopPropagation();suppressUntil=0;}},true);
+  on(root,'click',e=>{const cell=e.target.closest('[data-index]');if(cell&&Number(cell.dataset.index)===suppressIndex&&performance.now()<suppressUntil){e.preventDefault();e.stopPropagation();}},true);
   on(root,'contextmenu',e=>{
    const cell=e.target.closest('[data-index]');if(!cell)return;e.preventDefault();
    // Native touch menus can arrive before or after our long-press timer.
@@ -276,14 +276,12 @@
  A.actions.mineHint=()=>{
   if(!mineCanPlay()||mines.hintsUsed>=3)return;
   if(!mines.started){mineMessage='まず好きなマスを開いてください。初手と周囲は安全です。';renderMines();return;}
-  if(mineHint>=0){const index=mineHint;tickMines();if(!mineCanPlay())return;mines.hintsUsed++;revealMine(index,true);return;}
+  tickMines();if(!mineCanPlay())return;
   const candidates=Array.from({length:mines.size**2},(_,i)=>i).filter(i=>!mines.open.includes(i)&&!mines.flags.includes(i)&&!mines.bombs.includes(i));
   if(!candidates.length){mineMessage='安全な未開封マスに旗が残っています。旗を見直してください。';renderMines();return;}
-  mineHint=candidates.find(i=>neighbors(i,mines.size).some(n=>mines.open.includes(n)))??candidates[0];
-  mineMessage='光るマスを安全スキャンで開きます。もう一度ボタンを押すと1回消費し、アシスト記録に切り替わります。';renderMines();
-  // The preview itself reveals information; count it immediately, even if cancelled.
-  mines.hintsUsed++;saveMines();
-  const index=mineHint;mineHint=-1;revealMine(index,true);
+  const index=candidates.find(i=>neighbors(i,mines.size).some(n=>mines.open.includes(n)))??candidates[0];
+  // Charge assistance before revealing any information; never preview a free safe cell.
+  mines.hintsUsed++;revealMine(index,true);
  };
  A.actions.mineZoom=()=>{mineZoom=!mineZoom;A.save('minesPreferences',{lite:mineLite,zoom:mineZoom});renderMines();};
  A.actions.mineQuality=()=>{mineLite=!mineLite;A.save('minesPreferences',{lite:mineLite,zoom:mineZoom});renderMines();};
