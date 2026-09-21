@@ -615,7 +615,8 @@
       hero.insertAdjacentHTML('beforeend', A.scene(A.current));
     }
     if (A.current === 'music' && screen.querySelector('#music-search')) {
-      screen.querySelector('.app-title').insertAdjacentHTML('beforebegin', `<div class="music-discovery-art">${A.scene('music')}</div>`);
+      screen.querySelector('#music-search').insertAdjacentHTML('beforebegin', `<div class="music-discovery-art">${A.musicArtwork('dusk',true)}</div>`);
+      screen.querySelector('.app-content').insertAdjacentHTML('beforeend', A.musicLibraryPreview());
     }
   };
   A.overlay = (html, extra='') => { const el=A.$('#overlay');el.className='overlay '+extra;el.innerHTML=html;el.hidden=false;A.$('#phone-screen').classList.add('overlay-open'); };
