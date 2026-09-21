@@ -19,7 +19,7 @@
   if(id==='snake')shapes='<path d="M37 95V50q0-18 18-18h36q18 0 18 18v29" fill="none" stroke="#64876c" stroke-width="25" stroke-linecap="round"/><circle cx="109" cy="86" r="17" fill="#476f56"/><circle cx="103" cy="86" r="3" fill="#fff"/><circle cx="116" cy="86" r="3" fill="#fff"/><circle cx="58" cy="90" r="10" fill="#c9827d"/><path d="m57 78 7-7" stroke="#64876c" stroke-width="4"/>';
   if(id==='memory')shapes='<g transform="rotate(-12 57 65)"><rect x="27" y="26" width="54" height="77" rx="10" fill="#b5a0c4"/><path d="m54 47 10 18-10 18-10-18Z" stroke="#fff8" fill="none"/></g><g transform="rotate(10 104 68)"><rect x="77" y="30" width="54" height="77" rx="10" fill="#faf2e7"/><g fill="#c78997"><ellipse cx="104" cy="58" rx="7" ry="11"/><ellipse cx="104" cy="78" rx="7" ry="11"/><ellipse cx="94" cy="68" rx="11" ry="7"/><ellipse cx="114" cy="68" rx="11" ry="7"/></g><circle cx="104" cy="68" r="5" fill="#e6c57b"/></g>';
   if(id==='blocks')shapes=[[40,67],[66,67],[92,67],[66,41],[14,93],[40,93],[66,93],[92,93]].map(([x,y],i)=>`<rect x="${x}" y="${y}" width="23" height="23" rx="5" fill="${i<4?'#a08bb9':'#dfbfa3'}" stroke="#fff6"/>`).join('');
-  if(id==='mines')shapes='<path d="m78 20 36 25 7 42-43 30-42-30 7-42Z" fill="#82b8be"/><path d="m78 20-15 48 15 49 17-49Z" fill="#c7e5df"/><path d="m36 87 27-19-20-23m78 42L95 68l19-23" fill="#5c929f"/><circle cx="127" cy="25" r="4" fill="#fff9"/>';
+  if(id==='mines')shapes='<ellipse cx="80" cy="121" rx="43" ry="7" fill="#234f6a20"/><path d="m78 14 37 29 8 44-45 34-43-34 8-44Z" fill="#54b7c9"/><path d="m78 14-17 53 17 54 20-54Z" fill="#c9fff1"/><path d="m43 43 18 24-26 20Z" fill="#91e0e6"/><path d="m115 43-17 24 25 20Z" fill="#2588ab"/><path d="m35 87 26-20 17 54Z" fill="#53a2cb"/><path d="m123 87-25-20-20 54Z" fill="#67d7c5"/><path d="m43 43 35-29 37 29M61 67l17-53 20 53-20 54Z" stroke="#f0fff7aa" fill="none"/><path d="M128 20v12m-6-6h12M27 72v8m-4-4h8" stroke="#fcfff5" stroke-width="2"/>';
   if(id==='reversi')shapes='<rect x="25" y="20" width="110" height="100" rx="14" fill="#5a8c76"/><path d="M25 70h110M80 20v100" stroke="#c5dfc533"/><circle cx="55" cy="45" r="18" fill="#f1e9dc"/><circle cx="106" cy="95" r="18" fill="#f1e9dc"/><circle cx="55" cy="95" r="18" fill="#384a48"/><circle cx="106" cy="45" r="18" fill="#384a48"/>';
   if(id==='breaker')shapes=Array.from({length:8},(_,i)=>`<rect x="${24+(i%4)*29}" y="${22+Math.floor(i/4)*17}" width="25" height="12" rx="4" fill="${['#c7adce','#9ab8c1','#cdb48f','#92b9a9'][i%4]}"/>`).join('')+'<path d="m50 104 28-27 16 9 19-27" stroke="#e4ccad77" stroke-width="2" stroke-dasharray="3 4" fill="none"/><circle cx="112" cy="58" r="6" fill="#f8ddac"/><rect x="42" y="111" width="54" height="8" rx="4" fill="#d9dbe9"/>';
   if(id==='sudoku')shapes='<rect x="28" y="17" width="102" height="108" rx="12" fill="#faf4e8"/><path d="M62 17v108M96 17v108M28 53h102M28 89h102" stroke="#baa98c55"/><g font-family="serif" font-size="26" text-anchor="middle" fill="#8d7d68"><text x="45" y="44">3</text><text x="112" y="44">7</text><text x="79" y="81">9</text><text x="45" y="116">1</text><text x="113" y="116">4</text></g>';
@@ -82,7 +82,7 @@
   if(saved.won!==complete||(saved.won&&!saved.over))return false;
   if(saved.over&&!saved.won&&(!Number.isInteger(saved.hit)||!saved.bombs.includes(saved.hit)))return false;
   const elapsed=mineNumber(saved.elapsed),elapsedMs=Number.isFinite(saved.elapsedMs)&&saved.elapsedMs>=0?saved.elapsedMs:elapsed*1000;
-  mines={version:2,difficulty:saved.difficulty,size,count,bombs:[...saved.bombs],open:[...saved.open],flags:[...saved.flags],started:saved.started,over:saved.over,won:saved.won,hit:saved.hit,elapsed:Math.floor(elapsedMs/1000),elapsedMs,paused:saved.started&&!saved.over,hintsUsed:Math.min(3,mineNumber(saved.hintsUsed)),moves:mineNumber(saved.moves)};
+  mines={version:2,difficulty:saved.difficulty,size,count,bombs:[...saved.bombs],open:[...saved.open],flags:[...saved.flags],started:saved.started,over:saved.over,won:saved.won,hit:saved.over&&!saved.won?saved.hit:undefined,elapsed:saved.over?Math.max(1,Math.ceil(elapsedMs/1000)):Math.floor(elapsedMs/1000),elapsedMs,paused:saved.started&&!saved.over,hintsUsed:Math.min(3,mineNumber(saved.hintsUsed)),moves:mineNumber(saved.moves)};
   return true;
  }
  const saveMines=()=>A.save('minesState',mines);
@@ -108,13 +108,14 @@
   const m=mines;
   if(!m.over&&m.open.length===m.size**2-m.count){m.over=true;m.won=true;m.flags=[...m.bombs];}
   if(!m.over)return;
+  m.elapsed=Math.max(1,Math.ceil(m.elapsedMs/1000));
   if(m.won){
    A.save('minesWins',mineNumber(A.load('minesWins',0))+1);
    const key=(m.hintsUsed?'minesAssistedBest-':'minesBest-')+m.difficulty,best=mineNumber(A.load(key,0)),time=Math.max(1,Math.ceil(m.elapsedMs/1000));
    if(!best||time<best)A.save(key,time);
   }
   const stored=A.load('minesHistory',[]),history=Array.isArray(stored)?stored:[];
-  A.save('minesHistory',[{difficulty:m.difficulty,won:m.won,seconds:Math.ceil(m.elapsedMs/1000),hints:m.hintsUsed,moves:m.moves,date:new Date().toISOString()},...history].slice(0,30));
+  A.save('minesHistory',[{difficulty:m.difficulty,won:m.won,seconds:m.elapsed,hints:m.hintsUsed,moves:m.moves,date:new Date().toISOString()},...history].slice(0,30));
  }
  function revealMine(index,fromHint=false){
   if(!mineCanPlay()||!Number.isInteger(index)||index<0||index>=mines.size**2||mines.flags.includes(index))return;
@@ -190,7 +191,7 @@
   $('#mines-status').textContent=m.paused?'一時停止中':m.over?(m.won?'FIELD COMPLETE · クリア':'EXPLORATION OVER · 探索終了'):mineMode==='flag'?'旗モード · タップで旗を切替':'探索モード · タップで開く';
   $('#mines-message').textContent=mineMessage||'数字は周囲8マスの鉱石の数を表します。';
   $('#mines-result').hidden=!m.over;
-  $('#mines-result-copy').textContent=m.over?`${mineLabels[m.difficulty]} / ${mineTime(Math.ceil(m.elapsedMs/1000))} / ${m.moves}手 / ${m.hintsUsed?'アシスト '+m.hintsUsed+'回':'ノーヒント'}${m.won?' / 累計 '+mineNumber(A.load('minesWins',0))+'勝':''}`:'';
+  $('#mines-result-copy').textContent=m.over?`${mineLabels[m.difficulty]} / ${mineTime(m.elapsed)} / ${m.moves}手 / ${m.hintsUsed?'アシスト '+m.hintsUsed+'回':'ノーヒント'}${m.won?' / 累計 '+mineNumber(A.load('minesWins',0))+'勝':''}`:'';
   $('#mine-flag').classList.toggle('active',mineMode==='flag');$('#mine-flag').setAttribute('aria-pressed',String(mineMode==='flag'));
   $('#mine-flag').disabled=m.paused||m.over;
   $('#mine-pause').textContent=m.paused?'再開':'一時停止';$('#mine-pause').disabled=!m.started||m.over;
