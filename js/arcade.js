@@ -82,15 +82,429 @@
  function reversiApp(){if(!reversi){const saved=A.load('reversiState',null);if(saved?.board?.length===64)reversi=saved;else freshReversi();}aiBusy=false;shell('Reversi','jade',`<div class="arc-difficulty"><button data-action="reversiMode" data-value="cpu" class="${reversi.mode==='cpu'?'active':''}">CPU対戦</button><button data-action="reversiMode" data-value="local" class="${reversi.mode==='local'?'active':''}">2人対戦</button></div><div class="reversi-score"><div><i class="reversi-disc black"></i><strong id="reversi-black">2</strong></div><span>VS</span><div><strong id="reversi-white">2</strong><i class="reversi-disc white"></i></div></div><div class="reversi-frame"><div class="reversi-board" id="reversi-board"></div></div><div class="arc-result" id="reversi-status" role="status"></div><div class="arc-primary-controls"><button data-action="reversiUndo">一手戻す</button><button data-action="reversiRestart">もう一度</button></div>`,iconButton('reversiHelp','遊び方','document'));renderReversi();scheduleAI();disposers.push(()=>{aiBusy=false;A.save('reversiState',reversi);});}
  A.actions.reversiMove=el=>{const i=Number(el.dataset.index);if(aiBusy||reversi.over||!flips(reversi.board,i,reversi.turn).length)return;reversiHistory.push(structuredClone(reversi));reversi.board=placed(reversi.board,i,reversi.turn);finishTurn();};A.actions.reversiUndo=()=>{if(aiBusy||reversi.over||!reversiHistory.length)return;reversi=reversiHistory.pop();A.save('reversiState',reversi);renderReversi();};A.actions.reversiRestart=()=>A.confirm('新しい対局？','現在の盤面をリセットします。',()=>{const mode=reversi.mode;stop();freshReversi(mode);open('reversi');});A.actions.reversiMode=el=>A.confirm('対戦モードを変更？','新しい対局を始めます。',()=>{stop();freshReversi(el.dataset.value);open('reversi');});A.actions.reversiHelp=()=>help('Reversi','自分の石ではさんだ相手の石が裏返ります。点のあるマスに置けます。置けない場合は自動でパス。両者が置けなくなると終了し、石の多い方が勝ちです。CPU対戦ではあなたが黒です。');
 
- // Orbit Breaker: fixed-step motion, paddle angles, multi-stage brick patterns and touch drag.
- let breaker=null,breakerKeys={left:false,right:false},breakerFrame=0;
- function stageBricks(stage){const rows=Math.min(7,3+stage),items=[];for(let r=0;r<rows;r++)for(let c=0;c<7;c++){if(stage%3===2&&(r+c)%4===0)continue;items.push({x:20+c*46,y:60+r*24,w:40,h:16,hp:r===0&&stage>1?2:1,color:['#c6a5c6','#8db1c2','#a6bca4','#d5b488','#cc9294'][r%5]});}return items;}
- function resetBreaker(){breaker={paddle:180,ball:{x:180,y:440,vx:140,vy:-220},bricks:stageBricks(1),score:0,lives:3,stage:1,running:false,launched:false,over:false,trail:[],combo:0};}
- function breakerBallReset(){breaker.ball={x:breaker.paddle,y:440,vx:140,vy:-220};breaker.launched=false;breaker.trail=[];breaker.combo=0;}
- function breakerUpdate(dt){const b=breaker;if(!b.running||b.over)return;if(breakerKeys.left)b.paddle-=340*dt;if(breakerKeys.right)b.paddle+=340*dt;b.paddle=Math.max(44,Math.min(316,b.paddle));if(!b.launched){b.ball.x=b.paddle;return;}const ball=b.ball,prevX=ball.x,prevY=ball.y;ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;if(ball.x<8){ball.x=8;ball.vx=Math.abs(ball.vx);}if(ball.x>352){ball.x=352;ball.vx=-Math.abs(ball.vx);}if(ball.y<8){ball.y=8;ball.vy=Math.abs(ball.vy);}if(ball.vy>0&&prevY<=456&&ball.y>=448&&ball.x>b.paddle-48&&ball.x<b.paddle+48){const angle=(ball.x-b.paddle)/48*1.05,speed=Math.min(420,270+b.stage*15);ball.vx=Math.sin(angle)*speed;ball.vy=-Math.cos(angle)*speed;ball.y=447;b.combo=0;}for(const brick of b.bricks){if(brick.hp<=0||ball.x+7<brick.x||ball.x-7>brick.x+brick.w||ball.y+7<brick.y||ball.y-7>brick.y+brick.h)continue;if(prevX+7<=brick.x||prevX-7>=brick.x+brick.w)ball.vx=-ball.vx;else ball.vy=-ball.vy;brick.hp--;b.combo++;b.score+=10+Math.min(50,b.combo*2);break;}if(ball.y>500){b.lives--;if(b.lives===0){b.over=true;b.running=false;A.save('breakerBest',Math.max(A.load('breakerBest',0),b.score));}else breakerBallReset();}if(b.bricks.every(x=>x.hp<=0)){b.stage++;b.bricks=stageBricks(b.stage);b.score+=100;breakerBallReset();}b.trail.unshift({x:ball.x,y:ball.y});b.trail=b.trail.slice(0,12);}
- function drawBreaker(){const canvas=$('#breaker-canvas');if(!canvas)return;const ctx=canvas.getContext('2d'),b=breaker;const bg=ctx.createLinearGradient(0,0,360,500);bg.addColorStop(0,'#292b43');bg.addColorStop(1,'#48425a');ctx.fillStyle=bg;ctx.fillRect(0,0,360,500);for(let i=0;i<38;i++){ctx.fillStyle=i%3?'#ffffff30':'#e9d3aa66';ctx.beginPath();ctx.arc((i*97+31)%360,(i*67+43)%450,i%3?.7:1.2,0,Math.PI*2);ctx.fill();}ctx.strokeStyle='#b8a6c215';for(let i=0;i<3;i++){ctx.beginPath();ctx.ellipse(180,320,110+i*42,65+i*30,-.35,0,Math.PI*2);ctx.stroke();}for(const brick of b.bricks){if(brick.hp<=0)continue;ctx.shadowBlur=5;ctx.shadowColor='#0004';ctx.shadowOffsetY=3;ctx.fillStyle=brick.color;ctx.beginPath();ctx.roundRect(brick.x,brick.y,brick.w,brick.h,5);ctx.fill();ctx.shadowBlur=0;ctx.shadowOffsetY=0;ctx.strokeStyle='#ffffff50';ctx.beginPath();ctx.moveTo(brick.x+5,brick.y+2);ctx.lineTo(brick.x+brick.w-5,brick.y+2);ctx.stroke();if(brick.hp===2){ctx.fillStyle='#ffffff70';ctx.beginPath();ctx.arc(brick.x+brick.w/2,brick.y+8,2,0,Math.PI*2);ctx.fill();}}b.trail.forEach((p,i)=>{ctx.fillStyle=`rgba(244,215,171,${(1-i/12)*.2})`;ctx.beginPath();ctx.arc(p.x,p.y,6-i*.35,0,Math.PI*2);ctx.fill();});ctx.fillStyle='#f9dfb2';ctx.shadowBlur=14;ctx.shadowColor='#f1d3a966';ctx.beginPath();ctx.arc(b.ball.x,b.ball.y,6,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;const pg=ctx.createLinearGradient(b.paddle-42,450,b.paddle+42,461);pg.addColorStop(0,'#e8d9ea');pg.addColorStop(1,'#b9b5d5');ctx.fillStyle=pg;ctx.beginPath();ctx.roundRect(b.paddle-42,454,84,10,5);ctx.fill();if(!b.running||!b.launched){ctx.fillStyle='#272a3b70';ctx.fillRect(0,205,360,90);ctx.textAlign='center';ctx.fillStyle='#efe4e9';ctx.font='500 19px sans-serif';ctx.fillText(b.over?'GAME OVER':b.running?'タップして発射':'ORBIT BREAKER',180,248);ctx.font='12px sans-serif';ctx.fillStyle='#c4b7cd';ctx.fillText(b.over?number(b.score):'ドラッグでパドルを操作',180,273);}$('#breaker-score').textContent=number(b.score);$('#breaker-lives').textContent='●'.repeat(b.lives);$('#breaker-stage').textContent=String(b.stage).padStart(2,'0');$('#breaker-toggle').textContent=b.over?'もう一度':b.running?'一時停止':'開始';}
- function breakerApp(){if(!breaker)resetBreaker();shell('Orbit Breaker','night',`<div class="arc-scorebar">${score('SCORE',breaker.score,'breaker-score')}${score('LIVES','●●●','breaker-lives')}${score('STAGE',breaker.stage,'breaker-stage')}</div><canvas id="breaker-canvas" width="360" height="500" aria-label="ブロック崩しの盤面"></canvas><div class="arc-primary-controls"><button data-action="breakerToggle" id="breaker-toggle">開始</button><button data-action="breakerLaunch">発射</button><button data-action="breakerRestart">リセット</button></div>`,iconButton('breakerHelp','遊び方','document'));const canvas=$('#breaker-canvas');const aim=e=>{const r=canvas.getBoundingClientRect();breaker.paddle=Math.max(44,Math.min(316,(e.clientX-r.left)*360/r.width));};on(canvas,'pointerdown',e=>{aim(e);canvas.setPointerCapture(e.pointerId);if(breaker.running&&!breaker.launched)breaker.launched=true;});on(canvas,'pointermove',e=>{if(e.buttons||e.pointerType==='mouse')aim(e);});keys(e=>{if(e.key==='ArrowLeft'){e.preventDefault();breakerKeys.left=true;}if(e.key==='ArrowRight'){e.preventDefault();breakerKeys.right=true;}if(e.code==='Space'){e.preventDefault();breaker.running?A.actions.breakerLaunch():A.actions.breakerToggle();}});on(document,'keyup',e=>{if(e.key==='ArrowLeft')breakerKeys.left=false;if(e.key==='ArrowRight')breakerKeys.right=false;});on(window,'blur',()=>{breakerKeys={left:false,right:false};});let last=performance.now(),accumulator=0;function frame(now){const dt=Math.min(.035,(now-last)/1000);last=now;if(!document.hidden&&$('#overlay').hidden){accumulator+=dt;while(accumulator>=1/120){breakerUpdate(1/120);accumulator-=1/120;}}else accumulator=0;drawBreaker();breakerFrame=requestAnimationFrame(frame);}breakerFrame=requestAnimationFrame(frame);disposers.push(()=>{cancelAnimationFrame(breakerFrame);breaker.running=false;breakerKeys={left:false,right:false};A.save('breakerBest',Math.max(A.load('breakerBest',0),breaker.score));});}
- A.actions.breakerToggle=()=>{if(breaker.over)resetBreaker();breaker.running=!breaker.running;drawBreaker();};A.actions.breakerLaunch=()=>{if(breaker.running)breaker.launched=true;};A.actions.breakerRestart=()=>A.confirm('新しいゲーム？','現在のスコアをリセットします。',()=>{resetBreaker();drawBreaker();});A.actions.breakerHelp=()=>help('Orbit Breaker','開始して盤面をタップすると発射。ドラッグまたは←→でパドルを動かします。パドルに当たる位置で反射角が変わります。すべて壊すと次のステージ。落球3回で終了です。');
+ // Orbit Breaker: 120 Hz simulation, swept collisions and interpolated HiDPI rendering.
+ const orbitModes={
+  relaxed:{label:'リラックス',speed:235,width:104,lives:5,multiplier:1},
+  normal:{label:'スタンダード',speed:290,width:84,lives:3,multiplier:1.5},
+  expert:{label:'エキスパート',speed:345,width:70,lives:3,multiplier:2}
+ };
+ const orbitColors=['#b999ff','#6bdfff','#7ce6bf','#ffcd80','#ff93b3'];
+ const orbitPatterns=['CONSTELLATION','DIAMOND','GATEWAY','WAVE','CROSS','FORTRESS'];
+ const orbitDrops={wide:{label:'W',name:'ワイド 14秒',color:'#7ce6bf'},slow:{label:'T',name:'スロー 9秒',color:'#b999ff'},shield:{label:'S',name:'シールド +1',color:'#6bdfff'}};
+ const orbitClamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+ const orbitInteger=v=>Number.isSafeInteger(v)&&v>=0?v:0;
+ const orbitStored=A.load('breakerPreferences',{});
+ const orbitPrefs={mode:Object.hasOwn(orbitModes,orbitStored?.mode)?orbitStored.mode:'normal',quality:orbitStored?.quality==='light'?'light':'high',sound:orbitStored?.sound===true};
+ const orbitSaved=A.load('breakerRecords',{});
+ const orbitRecords=Object.fromEntries(Object.keys(orbitModes).map(mode=>[mode,{best:orbitInteger(orbitSaved?.[mode]?.best),stage:orbitInteger(orbitSaved?.[mode]?.stage),combo:orbitInteger(orbitSaved?.[mode]?.combo)}]));
+ let breaker=null,breakerKeys={left:false,right:false},breakerFrame=0,breakerView=null,breakerAudio=null;
+ const orbitReduced=()=>!!A.settings.reduceMotion||window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+ const orbitWidth=()=>orbitModes[breaker.mode].width+(breaker.wide>0?32:0);
+ const orbitSpeed=()=>Math.min(475,orbitModes[breaker.mode].speed+(breaker.stage-1)*13);
+ function stageBricks(stage){
+  const rows=Math.min(7,4+Math.floor(stage/3)),pattern=(stage-1)%6,items=[];
+  for(let r=0;r<rows;r++)for(let c=0;c<7;c++){
+   if(pattern===1&&Math.abs(c-3)+Math.abs(r-(rows-1)/2)>4)continue;
+   if(pattern===2&&c===3&&r>0)continue;
+   if(pattern===3&&(r+c)%4===0)continue;
+   if(pattern===4&&r!==Math.floor(rows/2)&&c!==3&&(r+c)%2===0)continue;
+   const hp=stage>2&&(r+c+stage)%4===0?Math.min(3,1+Math.floor(stage/3)):1;
+   const type=stage>1&&(r*7+c+stage)%13===0?'nova':'normal';
+   items.push({x:20+c*46,y:62+r*26,w:40,h:18,hp,maxHp:hp,type,color:orbitColors[(r+Math.floor((stage-1)/6))%5],flash:0});
+  }
+  return items;
+ }
+ function resetBreaker(mode=orbitPrefs.mode){
+  breaker={mode,paddle:180,previousPaddle:180,target:180,angle:18,ball:{x:180,y:442,px:180,py:442,vx:0,vy:0},
+   bricks:stageBricks(1),score:0,lives:orbitModes[mode].lives,stage:1,running:false,launched:false,over:false,
+   trail:[],particles:[],rings:[],drops:[],combo:0,maxCombo:0,destroyed:0,elapsed:0,energy:0,focus:0,wide:0,slow:0,shield:0,
+   message:'発射角を決めて、軌道へ。',messageTime:4,stageTime:0,trailClock:0};
+ }
+ function orbitSave(){
+  if(!breaker)return;
+  const b=breaker,r=orbitRecords[b.mode];
+  const next={best:Math.max(r.best,b.score),stage:Math.max(r.stage,b.stage),combo:Math.max(r.combo,b.maxCombo)};
+  if(next.best!==r.best||next.stage!==r.stage||next.combo!==r.combo){
+   const records={...orbitRecords,[b.mode]:next};
+   if(A.save('breakerRecords',records))orbitRecords[b.mode]=next;
+  }
+  const best=orbitInteger(A.load('breakerBest',0));
+  if(b.score>best)A.save('breakerBest',b.score);
+ }
+ function orbitMessage(text){breaker.message=text;breaker.messageTime=3;}
+ function orbitTone(frequency=440){
+  if(!orbitPrefs.sound||A.settings.sound===false||A.settings.volume===0)return;
+  try{
+   const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
+   if(!breakerAudio)breakerAudio=new Audio();
+   if(breakerAudio.state==='suspended')breakerAudio.resume().catch(()=>{});
+   if(breakerAudio.state!=='running')return;
+   const ctx=breakerAudio,t=ctx.currentTime;
+   if(t<(breakerView?.lastTone||0)+.035)return;
+   if(breakerView)breakerView.lastTone=t;
+   const oscillator=ctx.createOscillator(),gain=ctx.createGain();
+   oscillator.type='sine';oscillator.frequency.setValueAtTime(frequency,t);
+   oscillator.frequency.exponentialRampToValueAtTime(frequency*.65,t+.12);
+   const volume=Number.isFinite(A.settings.volume)?orbitClamp(A.settings.volume/100,0,1):.6;
+   gain.gain.setValueAtTime(.045*volume,t);gain.gain.exponentialRampToValueAtTime(.001,t+.13);
+   oscillator.connect(gain);gain.connect(ctx.destination);oscillator.start(t);oscillator.stop(t+.14);
+   oscillator.onended=()=>{oscillator.disconnect();gain.disconnect();};
+  }catch{/* Optional sound must never interrupt a game. */}
+ }
+ function orbitBurst(x,y,color,count=12){
+  if(orbitReduced())return;
+  const b=breaker,limit=orbitPrefs.quality==='high'?150:36;
+  count=orbitPrefs.quality==='high'?count:Math.ceil(count/3);
+  for(let i=0;i<count&&b.particles.length<limit;i++){
+   const angle=Math.random()*Math.PI*2,speed=24+Math.random()*95;
+   b.particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:.35+Math.random()*.4,max:.75,color,size:1+Math.random()*2});
+  }
+  if(b.rings.length<8)b.rings.push({x,y,color,life:.4});
+ }
+ function breakerBallReset(){
+  const b=breaker;
+  b.ball={x:b.paddle,y:442,px:b.paddle,py:442,vx:0,vy:0};
+  b.launched=false;b.trail=[];b.combo=0;b.focus=0;b.trailClock=0;
+ }
+ function orbitLaunch(){
+  const b=breaker;if(!b||!b.running||b.over||b.launched)return;
+  const angle=b.angle*Math.PI/180,speed=orbitSpeed();
+  b.ball.vx=Math.sin(angle)*speed;b.ball.vy=-Math.cos(angle)*speed;b.launched=true;
+  orbitMessage('連続ヒットで倍率アップ');orbitTone(540);orbitWake();
+ }
+ function orbitPause(message='一時停止 · 再開で続ける'){
+  if(!breaker)return;
+  const wasRunning=breaker.running;breaker.running=false;breakerKeys={left:false,right:false};
+  if(wasRunning){orbitMessage(message);orbitSave();}
+  orbitWake();
+ }
+ // Ray versus radius-expanded AABB: time of impact prevents tunnelling at high speeds.
+ function orbitSweep(ball,dx,dy,rect){
+  const minX=rect.x-6,maxX=rect.x+rect.w+6,minY=rect.y-6,maxY=rect.y+rect.h+6;
+  let nearX=-Infinity,farX=Infinity,nearY=-Infinity,farY=Infinity;
+  if(Math.abs(dx)<1e-9){if(ball.x<minX||ball.x>maxX)return null;}
+  else{nearX=(minX-ball.x)/dx;farX=(maxX-ball.x)/dx;if(nearX>farX)[nearX,farX]=[farX,nearX];}
+  if(Math.abs(dy)<1e-9){if(ball.y<minY||ball.y>maxY)return null;}
+  else{nearY=(minY-ball.y)/dy;farY=(maxY-ball.y)/dy;if(nearY>farY)[nearY,farY]=[farY,nearY];}
+  const entry=Math.max(nearX,nearY),exit=Math.min(farX,farY);
+  if(entry<0||entry>1||entry>exit||exit<0)return null;
+  return {time:entry,nx:nearX>nearY?(dx>0?-1:1):0,ny:nearX>nearY?0:(dy>0?-1:1)};
+ }
+ function orbitDamage(brick,explosion=false){
+  if(brick.hp<=0)return;
+  const b=breaker;brick.hp--;brick.flash=.16;
+  b.combo++;b.maxCombo=Math.max(b.maxCombo,b.combo);
+  const multiplier=1+Math.min(4,Math.floor(b.combo/5));
+  b.score+=Math.round((brick.hp?8:20)*multiplier*orbitModes[b.mode].multiplier);
+  b.energy=Math.min(100,b.energy+(brick.hp?5:9));
+  if(brick.hp===0){
+   b.destroyed++;orbitBurst(brick.x+20,brick.y+9,brick.color,18);
+   if(b.destroyed%7===0&&b.drops.length<6){
+    const type=['wide','slow','shield'][(b.destroyed/7-1)%3];
+    b.drops.push({x:brick.x+20,y:brick.y+9,py:brick.y+9,type});
+   }
+   // A nova damages immediate neighbours once, without unbounded chain recursion.
+   if(brick.type==='nova'&&!explosion){
+    orbitBurst(brick.x+20,brick.y+9,'#ffcd80',25);
+    b.bricks.filter(other=>other!==brick&&other.hp>0&&Math.hypot(other.x-brick.x,other.y-brick.y)<57).forEach(other=>orbitDamage(other,true));
+    orbitMessage('NOVA · 周囲のブロックにダメージ');
+   }
+  }else orbitBurst(brick.x+20,brick.y+9,brick.color,5);
+  if(!explosion)orbitTone(430+Math.min(b.combo,15)*32);
+ }
+ function orbitMoveBall(dt){
+  const b=breaker,ball=b.ball;
+  let remaining=dt*((b.slow>0||b.focus>0)?.64:1);
+  for(let iteration=0;iteration<6&&remaining>1e-7;iteration++){
+   const dx=ball.vx*remaining,dy=ball.vy*remaining;
+   let hit=null;
+   const consider=(candidate,type,brick=null)=>{
+    if(candidate&&candidate.time>=0&&candidate.time<=1&&(!hit||candidate.time<hit.time))hit={...candidate,type,brick};
+   };
+   if(dx<0)consider({time:(6-ball.x)/dx,nx:1,ny:0},'wall');
+   if(dx>0)consider({time:(354-ball.x)/dx,nx:-1,ny:0},'wall');
+   if(dy<0)consider({time:(6-ball.y)/dy,nx:0,ny:1},'wall');
+   if(dy>0&&ball.y<=448){
+    const time=(448-ball.y)/dy,x=ball.x+dx*time;
+    if(Math.abs(x-b.paddle)<=orbitWidth()/2+6)consider({time,nx:0,ny:-1},'paddle');
+   }
+   if(dy>0&&b.shield>0&&ball.y<=482)consider({time:(482-ball.y)/dy,nx:0,ny:-1},'shield');
+   for(const brick of b.bricks)if(brick.hp>0)consider(orbitSweep(ball,dx,dy,brick),'brick',brick);
+   if(!hit){ball.x+=dx;ball.y+=dy;break;}
+   ball.x+=dx*hit.time;ball.y+=dy*hit.time;
+   if(hit.type==='paddle'){
+    const impact=orbitClamp((ball.x-b.paddle)/(orbitWidth()/2),-1,1);
+    let angle=impact*1.05+orbitClamp((b.paddle-b.previousPaddle)*.025,-.12,.12);
+    if(Math.abs(angle)<.10)angle=(ball.vx<0?-1:1)*.10;
+    const speed=orbitSpeed();ball.vx=Math.sin(angle)*speed;ball.vy=-Math.cos(angle)*speed;b.combo=0;
+    orbitBurst(ball.x,454,'#b4efff',6);orbitTone(260);
+   }else{
+    if(hit.nx)ball.vx=-ball.vx;if(hit.ny)ball.vy=-ball.vy;
+    if(hit.type==='brick')orbitDamage(hit.brick);
+    if(hit.type==='shield'){b.shield--;orbitBurst(ball.x,484,'#6bdfff',24);orbitMessage('シールドが落球を防いだ');orbitTone(220);}
+   }
+   ball.x+=hit.nx*.02;ball.y+=hit.ny*.02;
+   remaining*=1-hit.time;
+  }
+ }
+ function breakerUpdate(dt){
+  const b=breaker;if(!b.running||b.over)return;
+  b.previousPaddle=b.paddle;b.ball.px=b.ball.x;b.ball.py=b.ball.y;
+  const direction=Number(breakerKeys.right)-Number(breakerKeys.left),half=orbitWidth()/2;
+  if(direction)b.target=orbitClamp(b.target+direction*440*dt,half+4,356-half);
+  b.target=orbitClamp(b.target,half+4,356-half);
+  b.paddle=orbitClamp(b.paddle+(b.target-b.paddle)*(1-Math.exp(-32*dt)),half+4,356-half);
+  b.messageTime=Math.max(0,b.messageTime-dt);b.stageTime=Math.max(0,b.stageTime-dt);
+  for(const p of b.particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=70*dt;p.life-=dt;}
+  b.particles=b.particles.filter(p=>p.life>0);
+  for(const ring of b.rings)ring.life-=dt;b.rings=b.rings.filter(r=>r.life>0);
+  for(const brick of b.bricks)brick.flash=Math.max(0,brick.flash-dt);
+  if(!b.launched){b.ball.x=b.paddle;b.ball.y=442;return;}
+  b.elapsed+=dt;
+  for(const key of ['wide','slow','focus'])b[key]=Math.max(0,b[key]-dt);
+  orbitMoveBall(dt);
+  for(const drop of b.drops){
+   drop.py=drop.y;drop.y+=88*dt;
+   if(drop.y>=443&&drop.py<=467&&Math.abs(drop.x-b.paddle)<=orbitWidth()/2+10){
+    if(drop.type==='wide')b.wide=14;if(drop.type==='slow')b.slow=9;if(drop.type==='shield')b.shield=Math.min(2,b.shield+1);
+    drop.y=520;orbitMessage(orbitDrops[drop.type].name);orbitBurst(drop.x,454,orbitDrops[drop.type].color);orbitTone(740);
+   }
+  }
+  b.drops=b.drops.filter(drop=>drop.y<510);
+  if(b.ball.y>514){
+   b.lives--;b.drops=[];b.wide=0;b.slow=0;b.shield=0;orbitTone(140);
+   if(b.lives<=0){b.over=true;b.running=false;orbitMessage('フライト終了');orbitSave();}
+   else{breakerBallReset();orbitMessage('残り '+b.lives+' 機 · 発射で再挑戦');orbitSave();}
+   return;
+  }
+  if(b.bricks.every(brick=>brick.hp<=0)){
+   b.score+=Math.round(150*b.stage*orbitModes[b.mode].multiplier);b.stage++;b.bricks=stageBricks(b.stage);b.drops=[];
+   if(b.stage%3===1){b.lives=Math.min(7,b.lives+1);orbitMessage('ステージクリア · 残機 +1');}
+   else orbitMessage('ステージクリア · 発射で次の軌道へ');
+   b.stageTime=2;breakerBallReset();orbitSave();orbitTone(880);return;
+  }
+  b.trailClock+=dt;
+  if(b.trailClock>=1/60){b.trailClock%=1/60;b.trail.unshift({x:b.ball.x,y:b.ball.y});if(b.trail.length>18)b.trail.pop();}
+ }
+ function orbitHud(){
+  if(!breakerView)return;
+  const b=breaker,v=breakerView,remaining=b.bricks.filter(brick=>brick.hp>0).length;
+  const text=(id,value)=>{const node=v.nodes[id];value=String(value);if(node&&node.textContent!==value)node.textContent=value;};
+  text('score',number(b.score));text('best',number(Math.max(orbitRecords[b.mode].best,b.score)));
+  text('lives',b.lives+' 機');text('stage',String(b.stage).padStart(2,'0'));text('combo','×'+(1+Math.min(4,Math.floor(b.combo/5))));
+  text('remaining',remaining+' / '+b.bricks.length);text('pattern',orbitPatterns[(b.stage-1)%6]);
+  text('effects',[b.wide>0?'W '+Math.ceil(b.wide)+'s':'',b.slow>0?'T '+Math.ceil(b.slow)+'s':'',b.shield?'S ×'+b.shield:'',b.focus>0?'FOCUS '+Math.ceil(b.focus)+'s':''].filter(Boolean).join(' · ')||'W ワイド / T スロー / S シールド');
+  const status=b.messageTime>0?b.message:(!b.launched?'発射ボタン / Space / 盤面タップで発射':'ブロックを壊してFOCUSをチャージ');
+  text('status',status);
+  text('toggle',b.over?'もう一度':b.running?'一時停止':b.launched?'再開':'開始');
+  text('focus',b.focus>0?'FOCUS 発動中':b.energy>=100?'FOCUS 発動':'FOCUS '+b.energy+'%');
+  v.nodes.focus.disabled=!b.running||!b.launched||b.energy<100||b.focus>0;
+  v.nodes.launch.disabled=!b.running||b.launched||b.over;
+  v.nodes.energy.value=b.energy;v.nodes.energy.setAttribute('aria-valuetext',b.energy+'%');
+  v.nodes.progress.value=b.bricks.length-remaining;v.nodes.progress.max=b.bricks.length;
+  v.nodes.angle.disabled=b.launched||b.over;v.nodes.angle.value=b.angle;
+  text('angle-value',(b.angle>0?'+':'')+b.angle+'°');
+  const panel=v.nodes.panel;panel.hidden=b.running;
+  text('panel-title',b.over?'FLIGHT COMPLETE':b.launched?'PAUSED':'ORBIT BREAKER');
+  text('panel-copy',b.over?`${number(b.score)} pts · STAGE ${b.stage} · ${Math.floor(b.elapsed/60)}分${Math.floor(b.elapsed%60)}秒`:'狙って、跳ね返して、星の先へ。');
+  text('panel-detail',b.over?`最大連続 ${b.maxCombo} HIT / 破壊 ${b.destroyed} 個`:orbitModes[b.mode].label+' · '+(b.launched?'再開を押すまで停止します':'ドラッグ / ← → で移動'));
+  text('panel-button',b.over?'もう一度プレイ':b.launched?'フライトを再開':'フライトを開始');
+ }
+ function orbitBackground(ctx){
+  const gradient=ctx.createLinearGradient(0,0,360,500);gradient.addColorStop(0,'#080e25');gradient.addColorStop(.6,'#192140');gradient.addColorStop(1,'#101a30');
+  ctx.fillStyle=gradient;ctx.fillRect(0,0,360,500);
+  for(const [x,y,r,color] of [[60,90,240,'#6640a947'],[320,275,240,'#248fac28']]){
+   const glow=ctx.createRadialGradient(x,y,0,x,y,r);glow.addColorStop(0,color);glow.addColorStop(1,'#00000000');ctx.fillStyle=glow;ctx.fillRect(0,0,360,500);
+  }
+  ctx.save();ctx.translate(280,315);ctx.rotate(-.4);
+  ctx.strokeStyle='#83caff22';ctx.lineWidth=1;
+  for(let i=0;i<3;i++){ctx.beginPath();ctx.ellipse(0,0,84+i*17,27+i*7,0,0,Math.PI*2);ctx.stroke();}
+  const planet=ctx.createRadialGradient(-20,-25,3,0,0,58);planet.addColorStop(0,'#46638a');planet.addColorStop(.6,'#233554');planet.addColorStop(1,'#121e39');
+  ctx.fillStyle=planet;ctx.beginPath();ctx.arc(0,0,57,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#8cbfdb33';ctx.stroke();ctx.restore();
+  ctx.strokeStyle='#80baff08';ctx.lineWidth=.7;
+  for(let y=360;y<500;y+=20){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(360,y);ctx.stroke();}
+  for(let x=-360;x<=720;x+=60){ctx.beginPath();ctx.moveTo(180+(x-180)*.15,345);ctx.lineTo(x,500);ctx.stroke();}
+  ctx.strokeStyle='#a0dfff33';ctx.strokeRect(3,3,354,494);
+ }
+ function orbitResize(){
+  const v=breakerView;if(!v)return;
+  const size=v.canvas.getBoundingClientRect(),ratio=orbitPrefs.quality==='high'?Math.min(2,window.devicePixelRatio||1):1;
+  const width=Math.max(1,Math.round((size.width||360)*ratio)),height=Math.round(width*500/360);
+  if(v.canvas.width===width&&v.canvas.height===height&&v.background)return;
+  v.canvas.width=width;v.canvas.height=height;v.scale=width/360;
+  const background=document.createElement('canvas');background.width=width;background.height=height;
+  const ctx=background.getContext('2d');ctx.scale(v.scale,v.scale);orbitBackground(ctx);v.background=background;v.sprites.clear();
+ }
+ function orbitBrickSprite(brick){
+  const v=breakerView,key=brick.color+brick.hp+brick.type;
+  if(v.sprites.has(key))return v.sprites.get(key);
+  const sprite=document.createElement('canvas');sprite.width=Math.ceil(48*v.scale);sprite.height=Math.ceil(28*v.scale);
+  const ctx=sprite.getContext('2d');ctx.scale(v.scale,v.scale);
+  ctx.fillStyle='#00000055';ctx.beginPath();ctx.roundRect(4,7,40,18,5);ctx.fill();
+  const material=ctx.createLinearGradient(4,3,4,22);material.addColorStop(0,'#f6f5ff');material.addColorStop(.12,brick.color);material.addColorStop(.65,brick.color);material.addColorStop(1,'#303550');
+  ctx.fillStyle=material;ctx.beginPath();ctx.roundRect(4,3,40,18,4);ctx.fill();
+  ctx.strokeStyle='#ffffff65';ctx.lineWidth=.7;ctx.stroke();
+  ctx.fillStyle='#ffffff24';ctx.beginPath();ctx.roundRect(7,5,34,6,2);ctx.fill();
+  ctx.strokeStyle='#0c163544';ctx.beginPath();ctx.moveTo(8,18);ctx.lineTo(39,18);ctx.stroke();
+  ctx.fillStyle='#122443';ctx.textAlign='center';ctx.font='bold 10px sans-serif';
+  if(brick.type==='nova')ctx.fillText('N',24,16);
+  else if(brick.hp>1)for(let i=0;i<brick.hp;i++){ctx.beginPath();ctx.arc(24+(i-(brick.hp-1)/2)*6,13,1.4,0,Math.PI*2);ctx.fill();}
+  v.sprites.set(key,sprite);return sprite;
+ }
+ function drawBreaker(alpha=1){
+  const v=breakerView;if(!v)return;
+  const ctx=v.ctx,b=breaker,reduced=orbitReduced(),high=orbitPrefs.quality==='high';
+  const lerp=(previous,current)=>previous+(current-previous)*alpha;
+  ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(v.background,0,0);ctx.setTransform(v.scale,0,0,v.scale,0,0);
+  const time=reduced?0:b.elapsed;
+  for(let i=0;i<(high?66:28);i++){
+   const depth=(i%3+1)/3,x=((i*97+31)%360+(reduced?0:(b.paddle-180)*depth*.025)+360)%360,y=((i*67+43)%500+time*depth*2)%500;
+   ctx.globalAlpha=.25+depth*.45+(reduced?0:Math.sin(time*.9+i)*.1);ctx.fillStyle=i%4?'#cceaff':'#f0ccff';
+   ctx.beginPath();ctx.arc(x,y,.45+depth*.65,0,Math.PI*2);ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  for(const brick of b.bricks){
+   if(brick.hp<=0)continue;ctx.drawImage(orbitBrickSprite(brick),brick.x-4,brick.y-3,48,28);
+   if(brick.flash>0&&!reduced){ctx.globalAlpha=brick.flash*3;ctx.fillStyle='#fff';ctx.fillRect(brick.x+2,brick.y+2,36,14);ctx.globalAlpha=1;}
+   if(brick.hp<brick.maxHp){ctx.strokeStyle='#23305088';ctx.beginPath();ctx.moveTo(brick.x+27,brick.y+2);ctx.lineTo(brick.x+22,brick.y+9);ctx.lineTo(brick.x+27,brick.y+15);ctx.stroke();}
+  }
+  if(!reduced){
+   for(const ring of b.rings){ctx.globalAlpha=ring.life*1.5;ctx.strokeStyle=ring.color;ctx.lineWidth=1;ctx.beginPath();ctx.arc(ring.x,ring.y,(.4-ring.life)*85+6,0,Math.PI*2);ctx.stroke();}
+   for(const p of b.particles){ctx.globalAlpha=Math.max(0,p.life/p.max);ctx.fillStyle=p.color;ctx.fillRect(p.x,p.y,p.size,p.size);}
+   ctx.globalAlpha=1;
+  }
+  for(const drop of b.drops){
+   const y=lerp(drop.py,drop.y),style=orbitDrops[drop.type];ctx.fillStyle='#10213bec';ctx.strokeStyle=style.color;ctx.lineWidth=1.4;
+   ctx.beginPath();ctx.roundRect(drop.x-10,y-10,20,20,6);ctx.fill();ctx.stroke();ctx.fillStyle=style.color;ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.fillText(style.label,drop.x,y+4);
+  }
+  if(b.shield){ctx.strokeStyle='#6bdfff';ctx.lineWidth=2;ctx.setLineDash([8,4]);ctx.beginPath();ctx.moveTo(8,484);ctx.lineTo(352,484);ctx.stroke();ctx.setLineDash([]);}
+  if(b.focus>0){ctx.strokeStyle='#b999ff99';ctx.lineWidth=3;ctx.strokeRect(5,5,350,490);}
+  const paddle=lerp(b.previousPaddle,b.paddle),width=orbitWidth(),x=lerp(b.ball.px,b.ball.x),y=lerp(b.ball.py,b.ball.y);
+  if(!b.launched&&!b.over){
+   ctx.strokeStyle='#c2ebff66';ctx.lineWidth=1.3;ctx.setLineDash([4,6]);ctx.beginPath();ctx.moveTo(x,435);
+   const angle=b.angle*Math.PI/180;ctx.lineTo(x+Math.sin(angle)*83,435-Math.cos(angle)*83);ctx.stroke();ctx.setLineDash([]);
+  }
+  if(!reduced){
+   ctx.lineCap='round';
+   for(let i=b.trail.length-1;i>0;i--){const p=b.trail[i],next=b.trail[i-1];ctx.globalAlpha=(1-i/b.trail.length)*.35;ctx.strokeStyle=b.focus>0?'#c4a5ff':'#92deff';ctx.lineWidth=(1-i/b.trail.length)*9;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(next.x,next.y);ctx.stroke();}
+   ctx.globalAlpha=1;
+  }
+  ctx.shadowBlur=high&&!reduced?16:0;ctx.shadowColor='#82dfff';
+  const glow=ctx.createRadialGradient(x-2,y-2,0,x,y,7);glow.addColorStop(0,'#ffffff');glow.addColorStop(.5,'#d8f8ff');glow.addColorStop(1,'#69beea');
+  ctx.fillStyle=glow;ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+  const metal=ctx.createLinearGradient(0,454,0,466);metal.addColorStop(0,'#effaff');metal.addColorStop(.32,b.wide>0?'#9df1c7':'#a8dce9');metal.addColorStop(1,'#4b718f');
+  ctx.fillStyle=metal;ctx.beginPath();ctx.roundRect(paddle-width/2,454,width,12,6);ctx.fill();
+  ctx.strokeStyle='#efffffaa';ctx.lineWidth=1;ctx.stroke();ctx.fillStyle='#142a45';ctx.fillRect(paddle-9,458,18,2);
+  if(!reduced&&b.running){ctx.fillStyle='#79dfff55';ctx.beginPath();ctx.ellipse(paddle,473,width*.25,3+Math.sin(time*6),0,0,Math.PI*2);ctx.fill();}
+  if(b.running&&!b.launched){ctx.fillStyle='#d8ebff';ctx.font='500 12px sans-serif';ctx.textAlign='center';ctx.fillText('発射でスタート',180,285);}
+  if(b.stageTime>0){ctx.fillStyle='#edddff';ctx.font='600 20px sans-serif';ctx.textAlign='center';ctx.fillText('SECTOR '+String(b.stage).padStart(2,'0'),180,254);}
+ }
+ function orbitWake(){if(breakerView)breakerView.wake();}
+ function breakerApp(){
+  if(!breaker)resetBreaker();
+  shell('Orbit Breaker','night',`
+   <div class="orbit-heading"><div><small>ORBIT / DEEP SPACE ARCADE</small><h1>星の先へ。</h1></div><div class="orbit-best"><small>MODE BEST</small><strong id="breaker-best">0</strong></div></div>
+   <div class="orbit-options"><label>難易度<select id="breaker-mode">${Object.entries(orbitModes).map(([key,mode])=>`<option value="${key}" ${breaker.mode===key?'selected':''}>${mode.label}</option>`).join('')}</select></label><label>描画<select id="breaker-quality"><option value="high" ${orbitPrefs.quality==='high'?'selected':''}>高画質</option><option value="light" ${orbitPrefs.quality==='light'?'selected':''}>軽量</option></select></label><button data-action="breakerSound" id="breaker-sound" aria-pressed="${orbitPrefs.sound}">音 ${orbitPrefs.sound?'ON':'OFF'}</button></div>
+   <div class="arc-scorebar orbit-scorebar">${score('SCORE',0,'breaker-score')}${score('LIVES',0,'breaker-lives')}${score('SECTOR',1,'breaker-stage')}${score('COMBO','×1','breaker-combo')}</div>
+   <div class="orbit-sector"><span id="breaker-pattern"></span><span>残り <strong id="breaker-remaining"></strong></span></div><progress id="breaker-progress" class="orbit-progress" value="0" max="1" aria-label="ステージの破壊進捗"></progress>
+   <div class="orbit-arena"><canvas id="breaker-canvas" width="360" height="500" tabindex="0" aria-label="Orbit Breakerの盤面。左右キーで移動、Spaceで発射、Pで一時停止、Fでフォーカス。" aria-describedby="breaker-instructions"></canvas>
+    <div class="orbit-panel" id="breaker-panel"><small>ORBIT FLIGHT CONTROL</small><h2 id="breaker-panel-title"></h2><p id="breaker-panel-copy"></p><p id="breaker-panel-detail"></p><button data-action="breakerToggle" id="breaker-panel-button">フライトを開始</button></div>
+   </div>
+   <div class="orbit-effects" id="breaker-effects"></div><p class="orbit-status" id="breaker-status" role="status" aria-live="polite"></p>
+   <div class="orbit-focus"><progress id="breaker-energy" value="0" max="100" aria-label="フォーカスのチャージ"></progress><button data-action="breakerFocus" id="breaker-focus">FOCUS 0%</button></div>
+   <label class="orbit-aim" for="breaker-angle">発射角 <input id="breaker-angle" type="range" min="-55" max="55" step="1" value="18"><output id="breaker-angle-value" for="breaker-angle">+18°</output></label>
+   <div class="arc-primary-controls"><button data-action="breakerToggle" id="breaker-toggle">開始</button><button data-action="breakerLaunch" id="breaker-launch">発射</button><button data-action="breakerRestart">リセット</button></div>
+   <div class="orbit-steer"><button data-orbit-steer="left" aria-label="パドルを左へ移動">← 左へ</button><button data-orbit-steer="right" aria-label="パドルを右へ移動">右へ →</button></div>
+   <p class="orbit-instructions" id="breaker-instructions">ドラッグ / ← →：移動 · Space：開始 / 発射<br>P：一時停止 · F：フォーカス（4秒スロー）<br>発射角は発射前に調整。Nブロックは周囲も破壊。</p>`,iconButton('breakerHelp','遊び方','document'));
+  const canvas=$('#breaker-canvas'),ctx=canvas.getContext('2d');
+  if(!ctx){A.toast('このブラウザではCanvasを利用できません');return;}
+  const ids=['score','best','lives','stage','combo','remaining','pattern','effects','status','toggle','focus','launch','energy','progress','angle','angle-value','panel','panel-title','panel-copy','panel-detail','panel-button'];
+  const view=breakerView={canvas,ctx,nodes:Object.fromEntries(ids.map(id=>[id,$('#breaker-'+id)])),sprites:new Map(),background:null,scale:1,lastTone:0,wake:null};
+  let disposed=false,last=0,accumulator=0,hudClock=0,activePointer=null;
+  function frame(now){
+   breakerFrame=0;if(disposed)return;
+   const dt=last?Math.min(.075,(now-last)/1000):0;last=now;
+   if(document.hidden||!$('#overlay').hidden){if(breaker.running)orbitPause('自動停止 · 再開で続ける');accumulator=0;}
+   if(breaker.running){
+    accumulator+=dt;let steps=0;
+    while(accumulator>=1/120&&steps<9){breakerUpdate(1/120);accumulator-=1/120;steps++;}
+   }else accumulator=0;
+   drawBreaker(breaker.running?accumulator*120:1);
+   hudClock+=dt;if(hudClock>=.1||!breaker.running){orbitHud();hudClock=0;}
+   if(breaker.running&&!breakerFrame)breakerFrame=requestAnimationFrame(frame);
+  }
+  view.wake=()=>{
+   if(disposed)return;
+   orbitHud();
+   if(!breakerFrame){last=0;accumulator=0;breakerFrame=requestAnimationFrame(frame);}
+  };
+  const aim=e=>{if(!breaker.running)return;const r=canvas.getBoundingClientRect();if(r.width>0){breaker.target=orbitClamp((e.clientX-r.left)*360/r.width,4+orbitWidth()/2,356-orbitWidth()/2);}};
+  on(canvas,'pointerdown',e=>{
+   if(!breaker.running||activePointer!==null||e.button!==0)return;
+   e.preventDefault();activePointer=e.pointerId;canvas.focus({preventScroll:true});canvas.setPointerCapture(e.pointerId);aim(e);
+   if(!breaker.launched){breaker.paddle=breaker.target;breaker.previousPaddle=breaker.paddle;breaker.ball.x=breaker.ball.px=breaker.paddle;orbitLaunch();}
+  });
+  on(canvas,'pointermove',e=>{if(e.pointerId===activePointer||(activePointer===null&&e.pointerType==='mouse'))aim(e);});
+  const release=e=>{if(e.pointerId===activePointer)activePointer=null;};
+  on(canvas,'pointerup',release);on(canvas,'pointercancel',release);on(canvas,'lostpointercapture',release);
+  for(const button of A.$$('[data-orbit-steer]')){
+   const direction=button.dataset.orbitSteer;
+   on(button,'pointerdown',e=>{if(!breaker.running)return;e.preventDefault();button.setPointerCapture(e.pointerId);breakerKeys[direction]=true;});
+   for(const event of ['pointerup','pointercancel','lostpointercapture'])on(button,event,()=>{breakerKeys[direction]=false;});
+   on(button,'click',e=>{if(e.detail===0&&breaker.running){breaker.target+=direction==='left'?-28:28;orbitWake();}});
+  }
+  keys(e=>{
+   if(e.ctrlKey||e.metaKey||e.altKey||e.isComposing||e.target.closest('[contenteditable]'))return;
+   if(e.code==='Space'&&e.target.closest('button'))return;
+   if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();breakerKeys[e.key==='ArrowLeft'?'left':'right']=true;return;}
+   if(['Space','KeyP','KeyF'].includes(e.code)){e.preventDefault();if(e.repeat)return;
+    if(e.code==='Space')breaker.running?orbitLaunch():A.actions.breakerToggle();
+    if(e.code==='KeyP')A.actions.breakerToggle();if(e.code==='KeyF')A.actions.breakerFocus();
+   }
+  });
+  on(document,'keyup',e=>{if(e.key==='ArrowLeft')breakerKeys.left=false;if(e.key==='ArrowRight')breakerKeys.right=false;});
+  on(window,'blur',()=>orbitPause('自動停止 · 再開で続ける'));
+  on(document,'visibilitychange',()=>{if(document.hidden)orbitPause('自動停止 · 再開で続ける');});
+  on(window,'pagehide',()=>orbitPause());
+  const overlayObserver=new MutationObserver(()=>{if(!$('#overlay').hidden)orbitPause();});
+  overlayObserver.observe($('#overlay'),{attributes:true,attributeFilter:['hidden']});
+  const resize=()=>{orbitResize();orbitWake();};
+  let observer=null;
+  if(window.ResizeObserver){observer=new ResizeObserver(resize);observer.observe(canvas);}else on(window,'resize',resize);
+  const media=window.matchMedia('(prefers-reduced-motion: reduce)');on(media,'change',()=>orbitWake());
+  on($('#breaker-angle'),'input',e=>{if(!breaker.launched&&!breaker.over){breaker.angle=orbitClamp(Number(e.target.value),-55,55);orbitWake();}});
+  on($('#breaker-mode'),'change',e=>{
+   const mode=e.target.value;e.target.value=breaker.mode;if(!Object.hasOwn(orbitModes,mode)||mode===breaker.mode)return;
+   orbitPause();A.confirm('難易度を変更？','現在のフライトを終了して新しく開始します。記録は難易度ごとに保存します。',()=>{
+    orbitSave();orbitPrefs.mode=mode;A.save('breakerPreferences',orbitPrefs);resetBreaker(mode);$('#breaker-mode').value=mode;orbitWake();
+   });
+  });
+  on($('#breaker-quality'),'change',e=>{orbitPrefs.quality=e.target.value==='light'?'light':'high';A.save('breakerPreferences',orbitPrefs);view.background=null;resize();});
+  disposers.push(()=>{
+   disposed=true;cancelAnimationFrame(breakerFrame);breakerFrame=0;observer?.disconnect();overlayObserver.disconnect();
+   breaker.running=false;breakerKeys={left:false,right:false};orbitSave();breakerView=null;
+   if(breakerAudio){breakerAudio.close().catch(()=>{});breakerAudio=null;}
+  });
+  orbitResize();orbitHud();drawBreaker();
+ }
+ A.actions.breakerToggle=()=>{
+  if(!breakerView)return;
+  if(breaker.over){orbitSave();resetBreaker(breaker.mode);}
+  if(breaker.running)orbitPause();else{breaker.running=true;orbitMessage(breaker.launched?'フライト再開':'発射ボタン / Space / 盤面タップで発射');orbitTone(360);orbitWake();}
+ };
+ A.actions.breakerLaunch=orbitLaunch;
+ A.actions.breakerFocus=()=>{
+  const b=breaker;if(!b||!b.running||!b.launched||b.energy<100||b.focus>0)return;
+  b.energy=0;b.focus=4;orbitMessage('FOCUS · 4秒間のスローモーション');orbitTone(600);orbitWake();
+ };
+ A.actions.breakerRestart=()=>{if(!breakerView)return;orbitPause();A.confirm('新しいフライト？','現在の進行をリセットします。ベスト記録は残ります。',()=>{orbitSave();resetBreaker(breaker.mode);orbitWake();});};
+ A.actions.breakerSound=()=>{orbitPrefs.sound=!orbitPrefs.sound;A.save('breakerPreferences',orbitPrefs);const button=$('#breaker-sound');if(button){button.textContent='音 '+(orbitPrefs.sound?'ON':'OFF');button.setAttribute('aria-pressed',String(orbitPrefs.sound));}if(orbitPrefs.sound)orbitTone(540);};
+ A.actions.breakerHelp=()=>{orbitPause();help('Orbit Breaker',
+  '<strong>操作</strong><br>開始 → 発射。ドラッグ・マウス・左右キー・左右ボタンで移動。発射前は角度を調整できます。Spaceで開始/発射、Pで一時停止、FでFOCUS。パドル端で斜め、中央で上向きに反射します。<br><br>'+ 
+  '<strong>スコアとステージ</strong><br>パドルに戻るまでの連続ヒット5回ごとに倍率アップ（最大5倍）。耐久ブロックの点が残り耐久、Nは周囲にダメージを与えるノヴァ。6種類の配置が巡回し、速度・耐久が段階的に上がります。3ステージクリアごとに残機+1（最大7）。<br><br>'+ 
+  '<strong>強化とFOCUS</strong><br>7個破壊ごとにW（ワイド14秒）、T（スロー9秒）、S（落球防止1回、最大2回）が順番に落下。パドルで取得します。ヒットでチャージが100%になったらFOCUSで4秒間スロー。Tとの減速は重複しません。強化の残り秒数はボール飛行中のみ進みます。<br><br>'+ 
+  '<strong>難易度・保存</strong><br>リラックスは5機・広いパドル、標準は3機、エキスパートは高速・狭いパドル。加点係数は順に1 / 1.5 / 2倍。モード別最高点・到達ステージ・最大連続ヒット、設定を端末に保存。盤面は同じページ内のみ保持し、再読み込みで新規になります。<br><br>'+ 
+  '<strong>表示と中断</strong><br>高画質/軽量を選択可能。「動きを減らす」では背景移動・軌跡・破片を抑えます。別タブ・ヘルプ・画面移動時は停止し、自動では再開しません。音は初期OFFでauraのサウンド・音量にも従います。');};
 
  // Sudoku: transformations preserve a known unique puzzle; notes, undo and daily seeds.
  const sudokuPuzzle='530070000600195000098000060800060003400803001700020006060000280000419005000080079';
