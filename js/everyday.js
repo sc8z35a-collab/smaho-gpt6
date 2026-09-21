@@ -152,29 +152,6 @@
   A.actions.evBookDelete=el=>remove('reading',el.dataset.id,readingApp);
   A.actions.evBookProgress=el=>{const x=read('reading').find(x=>x.id===el.dataset.id);if(x)A.form('読書の進捗',field('読んだページ','page',x.page,'number',`required min="0" max="${x.total}" step="1"`),v=>upsert('reading',{...x,page:Number(v.page)},readingApp));};
 
-  // Strokes use a fixed coordinate space; resizing never clears the document.
-  let drawing=null,stroke=null,penColor='#514752',penWidth=4;
-  function sketches(){drawing=null;page('sketch',`<div class="ev-sketch-grid">${read('sketches').map(x=>`<button class="ev-card ev-sketch-tile" data-action="evSketchOpen" data-id="${x.id}">${A.icon('sketch')}<strong>${esc(x.title)}</strong><small>${new Date(x.updated).toLocaleDateString('ja-JP')}</small></button>`).join('')||empty('＋でスケッチを作成')}</div>`,btn('evSketchNew','スケッチを作成','plus'));}
-  A.apps.sketch.render=sketches;
-  function paint(){const canvas=$('#ev-canvas');if(!canvas||!drawing)return;const ctx=canvas.getContext('2d');ctx.fillStyle='#fffdf8';ctx.fillRect(0,0,800,800);for(const s of [...drawing.strokes,...(stroke?[stroke]:[])]){ctx.strokeStyle=s.color;ctx.lineWidth=s.width;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();s.points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));if(s.points.length===1)ctx.lineTo(s.points[0][0]+.1,s.points[0][1]+.1);ctx.stroke();}}
-  function sketchSave(){if(!drawing)return true;const next={...drawing,updated:Date.now()};const ok=upsert('sketches',next);if(ok)drawing=next;const status=$('#ev-sketch-status');if(status)status.textContent=ok?'保存済み':'保存できません';return ok;}
-  function sketchEditor(){page('sketch',`<input class="ev-sketch-title" id="ev-sketch-title" aria-label="スケッチ名" maxlength="80" value="${esc(drawing.title)}"><div class="ev-drawing-tools">${['#514752','#ad6c82','#739686','#6f91b6','#d1a054','#fffdf8'].map(c=>`<button style="--swatch:${c}" class="ev-swatch ${penColor===c?'selected':''}" data-action="evPenColor" data-id="${c}" aria-label="${c==='#fffdf8'?'消しゴム':c}" aria-pressed="${penColor===c}"></button>`).join('')}<select id="ev-pen-width" aria-label="ペンの太さ">${[4,10,24].map(n=>`<option value="${n}" ${n===penWidth?'selected':''}>${n}</option>`).join('')}</select></div><canvas id="ev-canvas" width="800" height="800" aria-label="スケッチ用キャンバス"></canvas><div class="ev-sketch-footer"><span id="ev-sketch-status" role="status">保存済み</span><button class="ev-text-button" data-action="evSketchHome">一覧</button><button class="ev-danger" data-action="evSketchDelete" data-id="${drawing.id}">削除</button></div>`,btn('evSketchUndo','元に戻す','refresh')+btn('evSketchExport','PNGを書き出す','download'));
-    const canvas=$('#ev-canvas');const point=e=>{const r=canvas.getBoundingClientRect();return [Math.max(0,Math.min(800,(e.clientX-r.left)*800/r.width)),Math.max(0,Math.min(800,(e.clientY-r.top)*800/r.height))];};
-    let pointer=null;
-    canvas.onpointerdown=e=>{if(pointer!==null||e.button!==0)return;if(drawing.strokes.length>=1000){A.toast('新しいスケッチを作成してください');return;}pointer=e.pointerId;canvas.setPointerCapture(pointer);stroke={color:penColor,width:penWidth,points:[point(e)]};paint();};
-    canvas.onpointermove=e=>{if(!stroke||e.pointerId!==pointer)return;if(stroke.points.length<5000)stroke.points.push(point(e));paint();};
-    const finish=()=>{if(stroke){drawing.strokes.push(stroke);stroke=null;sketchSave();}pointer=null;};
-    canvas.onpointerup=finish;canvas.onpointercancel=finish;canvas.onlostpointercapture=finish;
-    $('#ev-sketch-title').oninput=e=>{drawing.title=e.target.value;sketchSave();};$('#ev-pen-width').onchange=e=>penWidth=Number(e.target.value);
-    A.cleanups.push(finish);paint();
-  }
-  A.actions.evSketchNew=()=>{drawing={id:A.id(),title:'スケッチ',strokes:[],updated:Date.now()};if(sketchSave())sketchEditor();};
-  A.actions.evSketchOpen=el=>{drawing=read('sketches').find(x=>x.id===el.dataset.id);if(drawing)sketchEditor();};
-  A.actions.evPenColor=el=>{penColor=el.dataset.id;A.$$('.ev-swatch').forEach(b=>{b.classList.toggle('selected',b===el);b.setAttribute('aria-pressed',String(b===el));});};
-  A.actions.evSketchUndo=()=>{if(drawing){drawing.strokes.pop();paint();sketchSave();}};
-  A.actions.evSketchExport=()=>$('#ev-canvas')?.toBlob(blob=>{if(blob)A.download(blob,'aura-sketch.png');},'image/png');
-  A.actions.evSketchHome=()=>{A.cleanup();sketches();};
-  A.actions.evSketchDelete=el=>remove('sketches',el.dataset.id,()=>{A.cleanup();sketches();});
   // Detailed habit history. Old boolean day records remain the canonical data.
   let habitDay=dateKey(),habitMonth=dateKey().slice(0,7),activeHabit=null;
   const monthDays = month => {const [y,m]=month.split('-').map(Number);return Array.from({length:new Date(y,m,0).getDate()},(_,i)=>`${month}-${String(i+1).padStart(2,'0')}`);};
@@ -269,44 +246,207 @@
   A.actions.evFocusLabel=()=>{const tasks=A.searchableReminders().filter(x=>!x.done);A.form('集中すること',field('内容','label',focus.label||'','text','maxlength="100"')+(tasks.length?`<div class="ev-task-options">${tasks.slice(0,8).map(t=>`<button type="button" data-action="evFocusChooseTask" data-id="${esc(t.id)}">${esc(t.text)}</button>`).join('')}</div>`:''),v=>{if(!commitFocus({...focus,label:v.label.trim()}))return false;focusApp();});};
   A.actions.evFocusChooseTask=el=>{const task=A.searchableReminders().find(x=>x.id===el.dataset.id);if(task)$('#ev-label').value=task.text;};
 
-  // Shape tools keep a vector history, including redo, without rasterizing each edit.
-  let sketchTool='pen',redoStrokes=[];
-  const paperColor=()=>drawing?.tone==='dark'?'#282633':drawing?.tone==='white'?'#ffffff':'#fffdf8';
-  paint=function(){const canvas=$('#ev-canvas');if(!canvas||!drawing)return;const ctx=canvas.getContext('2d'),paper=paperColor();ctx.fillStyle=paper;ctx.fillRect(0,0,800,800);if(drawing.paper==='grid'){ctx.strokeStyle=drawing.tone==='dark'?'#ffffff16':'#645b6517';ctx.lineWidth=1;ctx.beginPath();for(let p=40;p<800;p+=40){ctx.moveTo(p,0);ctx.lineTo(p,800);ctx.moveTo(0,p);ctx.lineTo(800,p);}ctx.stroke();}else if(drawing.paper==='dots'){ctx.fillStyle=drawing.tone==='dark'?'#ffffff35':'#73677735';for(let x=40;x<800;x+=40)for(let y=40;y<800;y+=40){ctx.beginPath();ctx.arc(x,y,1.8,0,Math.PI*2);ctx.fill();}}
-    for(const s of [...drawing.strokes,...(stroke?[stroke]:[])]){if(!s.points.length)continue;ctx.strokeStyle=s.tool==='erase'?paper:s.color;ctx.lineWidth=s.width;ctx.lineCap='round';ctx.lineJoin='round';const [x,y]=s.points[0],[endX,endY]=s.points.at(-1);ctx.beginPath();if(s.tool==='rect')ctx.rect(Math.min(x,endX),Math.min(y,endY),Math.abs(endX-x),Math.abs(endY-y));else if(s.tool==='ellipse')ctx.ellipse((x+endX)/2,(y+endY)/2,Math.abs(endX-x)/2,Math.abs(endY-y)/2,0,0,Math.PI*2);else if(s.tool==='line'){ctx.moveTo(x,y);ctx.lineTo(endX,endY);}else{s.points.forEach(([px,py],i)=>i?ctx.lineTo(px,py):ctx.moveTo(px,py));if(s.points.length===1)ctx.lineTo(x+.1,y+.1);}ctx.stroke();}
-  };
-  sketchEditor=function(){A.cleanup();page('sketch',`<input class="ev-sketch-title" id="ev-sketch-title" aria-label="スケッチ名" maxlength="80" value="${esc(drawing.title)}"><div class="ev-sketch-modes">${[['pen','ペン','✎'],['erase','消しゴム','▱'],['line','直線','╱'],['rect','四角','□'],['ellipse','円','○']].map(([id,label,glyph])=>`<button data-action="evSketchTool" data-id="${id}" class="${sketchTool===id?'selected':''}" aria-label="${label}" title="${label}" aria-pressed="${sketchTool===id}">${glyph}</button>`).join('')}${btn('evSketchUndo','元に戻す','previous')}${btn('evSketchRedo','やり直す','next')}</div><div class="ev-drawing-tools">${['#514752','#ad6c82','#739686','#6f91b6','#d1a054','#ffffff'].map(c=>`<button style="--swatch:${c}" class="ev-swatch ${penColor===c?'selected':''}" data-action="evPenColor" data-id="${c}" aria-label="色 ${c}" aria-pressed="${penColor===c}"></button>`).join('')}<input type="color" id="ev-pen-custom" aria-label="色を選択" value="${penColor}"><select id="ev-pen-width" aria-label="ペンの太さ">${[2,4,10,24,48].map(n=>`<option value="${n}" ${n===penWidth?'selected':''}>${n}</option>`).join('')}</select></div><canvas id="ev-canvas" width="800" height="800" aria-label="スケッチ用キャンバス"></canvas><div class="ev-sketch-footer"><span id="ev-sketch-status" role="status">保存済み</span><button class="ev-text-button" data-action="evSketchHome">一覧</button><button class="ev-text-button" data-action="evSketchPaper">用紙</button><button class="ev-danger" data-action="evSketchClear">クリア</button></div>`,btn('evSketchMenu','スケッチのメニュー','share'));
-    const canvas=$('#ev-canvas');let pointer=null,paintFrame=0;const point=e=>{const r=canvas.getBoundingClientRect();return [Math.max(0,Math.min(800,(e.clientX-r.left)*800/r.width)),Math.max(0,Math.min(800,(e.clientY-r.top)*800/r.height))];};
-    // Keep every distinct input point; coalesce only redundant canvas redraws.
-    const queuePaint=()=>{if(!paintFrame)paintFrame=requestAnimationFrame(()=>{paintFrame=0;if(canvas.isConnected)paint();});};
-    const appendPoint=e=>{
-      const next=point(e),last=stroke.points.at(-1);
-      if(next[0]===last[0]&&next[1]===last[1])return;
-      if(['line','rect','ellipse'].includes(stroke.tool))stroke.points=[stroke.points[0],next];
-      else if(stroke.points.length<5000)stroke.points.push(next);
+  // Sketch Studio: versioned vector documents, bounded history and local-only exports.
+  // Keep `strokes` at the top level so existing documents and backups remain readable.
+  const SK_SIZE=800, SK_MAX_STROKES=1000, SK_MAX_POINTS=100000;
+  const skTools=[['pen','ペン'],['pencil','鉛筆'],['marker','マーカー'],['erase','消しゴム'],['line','直線'],['arrow','矢印'],['rect','四角'],['ellipse','円'],['triangle','三角'],['star','星'],['text','文字'],['picker','スポイト'],['select','選択・移動']];
+  const skShapes=['line','arrow','rect','ellipse','triangle','star'];
+  const skColors=['#514752','#ad6c82','#739686','#6f91b6','#d1a054','#ffffff','#282633','#e96c58','#8464b5','#38a8a0'];
+  let drawing=null,stroke=null,skTool='pen',penColor='#514752',penWidth=4;
+  let skOpacity=1,skFill=false,skSymmetry=false,skSnap=false,skPressure=false,skSmooth=false;
+  let skZoom=1,skSelected=-1,skOffset=null,skUndo=[],skRedo=[],skFinish=null;
+  let skQuery='',skSort='updated',skFavorites=false;
+  const skDrafts=new Map();
+  const skClone=value=>JSON.parse(JSON.stringify(value));
+  const skNumber=(v,min,max,fallback)=>Number.isFinite(v)?Math.max(min,Math.min(max,v)):fallback;
+  const skColor=v=>typeof v==='string'&&/^#[0-9a-f]{6}$/i.test(v)?v:'#514752';
+  const skPaper=d=>d.tone==='dark'?'#282633':d.tone==='white'?'#ffffff':'#fffdf8';
+  const skButton=(action,label,id='',extra='')=>`<button type="button" data-action="${action}" data-id="${esc(id)}" ${extra}>${label}</button>`;
+  const skList=()=>{const list=read('sketches');for(const [id,doc] of skDrafts){const i=list.findIndex(x=>x.id===id);if(i<0)list.unshift(doc);else list[i]=doc;}return list;};
+  function skNormalize(raw){
+    if(!raw||typeof raw!=='object'||!Array.isArray(raw.strokes)||raw.strokes.length>SK_MAX_STROKES)throw Error('作品形式が不正です');
+    const layers=(Array.isArray(raw.layers)&&raw.layers.length?raw.layers:[{id:'base',name:'レイヤー 1'}]);
+    if(layers.length>8)throw Error('レイヤーは8枚までです');
+    const ids=new Set();
+    const doc={version:2,id:typeof raw.id==='string'?raw.id:A.id(),title:String(raw.title||'スケッチ').slice(0,80),updated:skNumber(raw.updated,0,1e15,Date.now()),favorite:!!raw.favorite,
+      paper:['plain','grid','dots','ruled'].includes(raw.paper)?raw.paper:'plain',tone:['cream','white','dark'].includes(raw.tone)?raw.tone:'cream',
+      layers:layers.map((l,i)=>{if(!l||typeof l.id!=='string'||ids.has(l.id))throw Error('レイヤー形式が不正です');ids.add(l.id);return {id:l.id,name:String(l.name||`レイヤー ${i+1}`).slice(0,40),visible:l.visible!==false,locked:!!l.locked,opacity:skNumber(l.opacity,0,1,1)};})};
+    doc.activeLayer=ids.has(raw.activeLayer)?raw.activeLayer:doc.layers[0].id;
+    let points=0;
+    doc.strokes=raw.strokes.map(s=>{
+      if(!s||!Array.isArray(s.points)||!s.points.length||s.points.length>5000||(points+=s.points.length)>SK_MAX_POINTS)throw Error('描画データの上限を超えています');
+      const tool=s.tool||'pen';if(!skTools.some(t=>t[0]===tool)||['select','picker'].includes(tool))throw Error('未対応の描画ツールです');
+      return {tool,color:skColor(s.color),width:skNumber(s.width,1,120,4),opacity:skNumber(s.opacity,0.01,1,1),layer:ids.has(s.layer)?s.layer:doc.layers[0].id,
+        fill:!!s.fill,symmetry:!!s.symmetry,pressure:!!s.pressure,text:String(s.text||'').slice(0,200),fontSize:skNumber(s.fontSize,12,160,48),
+        dx:skNumber(s.dx,-1600,1600,0),dy:skNumber(s.dy,-1600,1600,0),legacyErase:tool==='erase'&&(!s.layer||!!s.legacyErase),
+        points:s.points.map(p=>{if(!Array.isArray(p)||p.length<2||!Number.isFinite(p[0])||!Number.isFinite(p[1])||Math.abs(p[0])>2400||Math.abs(p[1])>2400)throw Error('座標が不正です');return p.length>2?[p[0],p[1],skNumber(p[2],.05,1,.5)]:[p[0],p[1]];})};
+    });
+    return doc;
+  }
+  function skStatus(){
+    const el=$('#ev-sketch-status');if(el)el.textContent=skDrafts.has(drawing?.id)?'未保存 — 再試行かJSON保存を':'保存済み · このブラウザ内';
+    const retry=$('[data-action=evSketchRetry]');if(retry)retry.hidden=!skDrafts.has(drawing?.id);
+    for(const [action,disabled] of [['evSketchUndo',!skUndo.length],['evSketchRedo',!skRedo.length]]){const b=$(`[data-action=${action}]`);if(b)b.disabled=disabled;}
+    const info=$('#sk-document-info');if(info&&drawing)info.textContent=`${drawing.strokes.length} / ${SK_MAX_STROKES}要素 · ${drawing.layers.length}レイヤー`;
+  }
+  function sketchSave(){
+    if(!drawing)return true;drawing.updated=Date.now();const ok=upsert('sketches',drawing);
+    if(ok)skDrafts.delete(drawing.id);else skDrafts.set(drawing.id,skClone(drawing));skStatus();return ok;
+  }
+  // Snapshots are capped both by count and bytes; history is intentionally session-only.
+  function skRemember(){skUndo.push(JSON.stringify(drawing));while(skUndo.length>30||skUndo.length>1&&skUndo.reduce((n,s)=>n+s.length,0)>3000000)skUndo.shift();skRedo=[];}
+  function skChange(fn,rerender=false){if(!drawing)return;skFinish?.();skRemember();fn();skSelected=-1;skOffset=null;sketchSave();if(rerender)sketchEditor();else{paint();skSelectionBar();}}
+  const skLayer=()=>drawing?.layers.find(l=>l.id===drawing.activeLayer);
+  function skEditable(){const l=skLayer();if(!l||l.locked||!l.visible){A.toast('表示中でロックされていないレイヤーを選んでください');return false;}return true;}
+  function skCapacity(count=1,points=1){if(drawing.strokes.length+count>SK_MAX_STROKES||drawing.strokes.reduce((n,s)=>n+s.points.length,0)+points>SK_MAX_POINTS){A.toast('描画の上限です。作品を複製して整理してください');return false;}return true;}
+  function skBackground(ctx,d,transparent){
+    ctx.clearRect(0,0,SK_SIZE,SK_SIZE);if(transparent)return;
+    ctx.fillStyle=skPaper(d);ctx.fillRect(0,0,SK_SIZE,SK_SIZE);
+    ctx.strokeStyle=d.tone==='dark'?'#ffffff20':'#645b6520';ctx.fillStyle=d.tone==='dark'?'#ffffff45':'#73677745';ctx.lineWidth=1;ctx.beginPath();
+    for(let p=40;p<SK_SIZE;p+=40){if(['grid','ruled'].includes(d.paper)){ctx.moveTo(0,p);ctx.lineTo(SK_SIZE,p);}if(d.paper==='grid'){ctx.moveTo(p,0);ctx.lineTo(p,SK_SIZE);}if(d.paper==='dots')for(let y=40;y<SK_SIZE;y+=40){ctx.moveTo(p+1.8,y);ctx.arc(p,y,1.8,0,Math.PI*2);}}
+    if(d.paper==='dots')ctx.fill();else ctx.stroke();
+  }
+  function skDrawStroke(ctx,s,d){
+    ctx.save();ctx.translate(s.dx||0,s.dy||0);
+    ctx.globalCompositeOperation=s.tool==='erase'&&!s.legacyErase?'destination-out':'source-over';
+    ctx.globalAlpha=(s.opacity??1)*(s.tool==='marker'?.32:s.tool==='pencil'?.65:1);
+    ctx.strokeStyle=ctx.fillStyle=s.legacyErase?skPaper(d):s.color;ctx.lineWidth=s.width;ctx.lineCap=ctx.lineJoin='round';
+    const draw=()=>{
+      const [x,y]=s.points[0],[ex,ey]=s.points.at(-1);ctx.beginPath();
+      if(s.tool==='text'){ctx.font=`${s.fontSize||48}px sans-serif`;ctx.textBaseline='top';s.text.split('\n').forEach((line,i)=>ctx.fillText(line,x,y+i*(s.fontSize||48)*1.2));return;}
+      if(s.tool==='rect')ctx.rect(Math.min(x,ex),Math.min(y,ey),Math.abs(ex-x),Math.abs(ey-y));
+      else if(s.tool==='ellipse')ctx.ellipse((x+ex)/2,(y+ey)/2,Math.abs(ex-x)/2,Math.abs(ey-y)/2,0,0,Math.PI*2);
+      else if(s.tool==='triangle'){ctx.moveTo((x+ex)/2,y);ctx.lineTo(ex,ey);ctx.lineTo(x,ey);ctx.closePath();}
+      else if(s.tool==='star'){const cx=(x+ex)/2,cy=(y+ey)/2,rx=Math.abs(ex-x)/2,ry=Math.abs(ey-y)/2;for(let i=0;i<10;i++){const a=i*Math.PI/5-Math.PI/2,r=i%2?.43:1;const px=cx+Math.cos(a)*rx*r,py=cy+Math.sin(a)*ry*r;i?ctx.lineTo(px,py):ctx.moveTo(px,py);}ctx.closePath();}
+      else if(['line','arrow'].includes(s.tool)){ctx.moveTo(x,y);ctx.lineTo(ex,ey);if(s.tool==='arrow'){const a=Math.atan2(ey-y,ex-x),n=Math.max(18,s.width*3);ctx.moveTo(ex-n*Math.cos(a-.5),ey-n*Math.sin(a-.5));ctx.lineTo(ex,ey);ctx.lineTo(ex-n*Math.cos(a+.5),ey-n*Math.sin(a+.5));}}
+      else if(s.pressure&&s.points.length>1){for(let i=1;i<s.points.length;i++){ctx.beginPath();ctx.lineWidth=s.width*(.2+.8*(s.points[i][2]??.5));ctx.moveTo(...s.points[i-1].slice(0,2));ctx.lineTo(...s.points[i].slice(0,2));ctx.stroke();}return;}
+      else{s.points.forEach(([px,py],i)=>i?ctx.lineTo(px,py):ctx.moveTo(px,py));if(s.points.length===1){ctx.arc(x,y,s.width/2,0,Math.PI*2);ctx.fill();return;}}
+      if(s.fill&&['rect','ellipse','triangle','star'].includes(s.tool))ctx.fill();ctx.stroke();
     };
-    canvas.onpointerdown=e=>{if(pointer!==null||e.button!==0)return;if(drawing.strokes.length>=1000){A.toast('新しいスケッチを作成してください');return;}pointer=e.pointerId;canvas.setPointerCapture(pointer);stroke={tool:sketchTool,color:penColor,width:penWidth,points:[point(e)]};paint();};
-    canvas.onpointermove=e=>{if(!stroke||pointer!==e.pointerId)return;appendPoint(e);queuePaint();};
+    draw();if(s.symmetry){ctx.translate(SK_SIZE,0);ctx.scale(-1,1);draw();}ctx.restore();
+  }
+  function skRender(canvas,d,{transparent=false,preview=false}={}){
+    const ctx=canvas.getContext('2d');ctx.save();ctx.scale(canvas.width/SK_SIZE,canvas.height/SK_SIZE);skBackground(ctx,d,transparent);
+    const buffer=document.createElement('canvas');buffer.width=canvas.width;buffer.height=canvas.height;const layerCtx=buffer.getContext('2d');
+    for(const layer of d.layers){if(!layer.visible)continue;layerCtx.setTransform(1,0,0,1,0,0);layerCtx.clearRect(0,0,buffer.width,buffer.height);layerCtx.scale(buffer.width/SK_SIZE,buffer.height/SK_SIZE);
+      d.strokes.forEach((s,i)=>{if(s.layer===layer.id)skDrawStroke(layerCtx,preview&&i===skSelected&&skOffset?{...s,dx:(s.dx||0)+skOffset[0],dy:(s.dy||0)+skOffset[1]}:s,d);});
+      if(preview&&stroke?.layer===layer.id)skDrawStroke(layerCtx,stroke,d);
+      ctx.globalAlpha=layer.opacity;ctx.drawImage(buffer,0,0,SK_SIZE,SK_SIZE);
+    }ctx.restore();
+  }
+  function skBounds(s){
+    const xs=s.points.map(p=>p[0]),ys=s.points.map(p=>p[1]);let x=Math.min(...xs),y=Math.min(...ys),w=Math.max(...xs)-x,h=Math.max(...ys)-y;
+    if(s.tool==='text'){const c=document.createElement('canvas').getContext('2d');c.font=`${s.fontSize}px sans-serif`;w=Math.max(...s.text.split('\n').map(t=>c.measureText(t).width));h=s.text.split('\n').length*s.fontSize*1.2;}
+    if(s.symmetry){const right=Math.max(x+w,SK_SIZE-x);x=Math.min(x,SK_SIZE-x-w);w=right-x;}
+    const pad=Math.max(8,s.width/2);return {x:x+(s.dx||0)-pad,y:y+(s.dy||0)-pad,w:w+pad*2,h:h+pad*2};
+  }
+  function paint(){const c=$('#ev-canvas');if(!c||!drawing)return;skRender(c,drawing,{preview:true});if(skSelected>=0&&drawing.strokes[skSelected]){const b=skBounds(drawing.strokes[skSelected]),ctx=c.getContext('2d');ctx.save();ctx.strokeStyle='#8665bd';ctx.lineWidth=2;ctx.setLineDash([10,7]);ctx.strokeRect(b.x+(skOffset?.[0]||0),b.y+(skOffset?.[1]||0),b.w,b.h);ctx.restore();}}
+  function skGallery(){
+    skFinish?.();drawing=null;skSelected=-1;
+    page('sketch',`<div class="sk-hero"><span>SKETCH STUDIO</span><h1>ひらめきを、自由に。</h1><p>描く、重ねる、残す。あなただけのアトリエ。</p><button class="primary-button" data-action="evSketchNew">新しいスケッチ</button></div>${A.search('sk-search','作品名を検索')}<div class="sk-gallery-tools">${skButton('evSketchFavorites','お気に入り','',`aria-pressed="${skFavorites}"`)}<select id="sk-sort" aria-label="作品の並べ替え"><option value="updated">更新順</option><option value="title">名前順</option><option value="oldest">古い順</option></select>${skButton('evSketchImport','JSON読込')}</div><div class="ev-sketch-grid" id="sk-gallery"></div><p class="ev-caption">自動保存はこのブラウザ内のみ。大切な作品はJSONでも保存してください。</p>`,btn('evSketchNew','スケッチを作成','plus'));
+    const render=()=>{
+      const list=skList().filter(d=>(!skFavorites||d.favorite)&&String(d.title).toLowerCase().includes(skQuery.toLowerCase())).sort((a,b)=>skSort==='title'?String(a.title).localeCompare(String(b.title),'ja'):skSort==='oldest'?a.updated-b.updated:b.updated-a.updated);
+      $('#sk-gallery').innerHTML=list.map(d=>`<button class="ev-card ev-sketch-tile sk-tile" data-action="evSketchOpen" data-id="${esc(d.id)}"><canvas width="240" height="240" aria-hidden="true"></canvas><strong>${d.favorite?'★ ':''}${esc(d.title||'スケッチ')}</strong><small>${skDrafts.has(d.id)?'未保存 · ':''}${new Date(d.updated).toLocaleDateString('ja-JP')} · ${d.strokes?.length||0}要素</small></button>`).join('')||empty(skQuery||skFavorites?'該当する作品はありません':'新しいスケッチから描き始めましょう');
+      A.$$('#sk-gallery canvas').forEach((c,i)=>{try{skRender(c,skNormalize(list[i]));}catch{c.parentElement.querySelector('small').textContent='読込できない作品';}});
+    };
+    $('#sk-search').value=skQuery;$('#sk-search').oninput=e=>{skQuery=e.target.value;render();};$('#sk-sort').value=skSort;$('#sk-sort').onchange=e=>{skSort=e.target.value;render();};render();
+  }
+  A.apps.sketch.render=skGallery;
+  function skSelectionBar(){const el=$('#sk-selection');if(!el)return;const s=drawing.strokes[skSelected];el.innerHTML=s?`<span>${esc(skTools.find(t=>t[0]===s.tool)?.[1]||'描画')}を選択</span>${skButton('evSketchObjectCopy','複製')}${skButton('evSketchObjectDelete','削除')}${s.tool==='text'?skButton('evSketchTextEdit','文字編集'):''}`:'選択ツールで要素をタップして、ドラッグで移動';}
+  function skLayerPanel(){const el=$('#sk-layers');if(!el)return;el.innerHTML=[...drawing.layers].reverse().map(l=>`<div class="sk-layer ${l.id===drawing.activeLayer?'active':''}">${skButton('evSketchLayerSelect',esc(l.name),l.id,`aria-pressed="${l.id===drawing.activeLayer}"`)}${skButton('evSketchLayerVisible',l.visible?'表示':'非表示',l.id,`aria-label="${esc(l.name)}の表示" aria-pressed="${l.visible}"`)}${skButton('evSketchLayerLock',l.locked?'固定':'自由',l.id,`aria-label="${esc(l.name)}のロック" aria-pressed="${l.locked}"`)}${btn('evSketchLayerEdit','レイヤー設定','settings',l.id)}</div>`).join('');}
+  function sketchEditor(){
+    A.cleanup();skFinish=null;if(!drawing)return;
+    page('sketch',`<div class="sk-title-row"><input class="ev-sketch-title" id="ev-sketch-title" aria-label="スケッチ名" maxlength="80" value="${esc(drawing.title)}">${skButton('evSketchFavorite','★','',`aria-label="お気に入り" aria-pressed="${drawing.favorite}"`)}</div><div class="sk-meta"><span id="sk-document-info"></span><span>800 × 800</span></div><div class="sk-toolbar" role="toolbar" aria-label="描画ツール">${skTools.map(([id,label])=>skButton('evSketchTool',label,id,`aria-pressed="${skTool===id}"`)).join('')}</div><div class="ev-drawing-tools sk-palette">${skColors.map(c=>`<button style="--swatch:${c}" class="ev-swatch ${penColor===c?'selected':''}" data-action="evPenColor" data-id="${c}" aria-label="色 ${c}" aria-pressed="${penColor===c}"></button>`).join('')}<input type="color" id="ev-pen-custom" aria-label="色を選択" value="${penColor}"></div><div class="sk-settings"><label>太さ <output id="sk-width-value">${penWidth}</output><input id="ev-pen-width" aria-label="ペンの太さ" type="range" min="1" max="120" value="${penWidth}"></label><label>不透明度 <output id="sk-opacity-value">${Math.round(skOpacity*100)}%</output><input id="sk-opacity" aria-label="不透明度" type="range" min="1" max="100" value="${skOpacity*100}"></label></div><details class="sk-options"><summary>描画オプション</summary><div class="sk-checks">${[['fill','図形を塗りつぶす',skFill],['symmetry','左右対称',skSymmetry],['snap','20px方眼に吸着',skSnap],['pressure','筆圧（対応ペン）',skPressure],['smooth','手ぶれ補正',skSmooth]].map(([id,label,value])=>`<label><input id="sk-${id}" type="checkbox" ${value?'checked':''}>${label}</label>`).join('')}</div></details><div class="sk-command-bar">${btn('evSketchUndo','元に戻す','previous')}${btn('evSketchRedo','やり直す','next')}<label>表示 <select id="sk-zoom" aria-label="表示倍率">${[1,1.5,2,3].map(n=>`<option value="${n}" ${n===skZoom?'selected':''}>${n*100}%</option>`).join('')}</select></label>${skButton('evSketchPaper','用紙')}${skButton('evSketchHelp','使い方')}</div><div class="sk-viewport" id="sk-viewport"><div id="sk-canvas-size" style="width:${skZoom*100}%"><canvas id="ev-canvas" width="800" height="800" aria-label="スケッチ用キャンバス" tabindex="0"></canvas></div></div><div class="sk-selection" id="sk-selection"></div><div class="ev-sketch-footer"><span id="ev-sketch-status" role="status"></span>${skButton('evSketchRetry','再試行')}${skButton('evSketchHome','一覧')}</div><details class="sk-options"><summary>レイヤー <span>${drawing.layers.length} / 8</span></summary><p class="ev-caption">上の行が手前。消しゴムは選択レイヤーだけに適用。</p><div id="sk-layers"></div><div class="sk-layer-actions">${skButton('evSketchLayerAdd','＋ 追加')}${skButton('evSketchLayerCopy','複製')}${skButton('evSketchLayerUp','手前へ')}${skButton('evSketchLayerDown','奥へ')}${skButton('evSketchLayerClear','内容消去')}${skButton('evSketchLayerDelete','レイヤー削除')}</div></details>`,btn('evSketchMenu','スケッチのメニュー','share'));
+    $('#ev-sketch-title').oninput=e=>{drawing.title=e.target.value;sketchSave();};
+    $('#ev-pen-width').oninput=e=>{penWidth=Number(e.target.value);$('#sk-width-value').textContent=penWidth;};
+    $('#sk-opacity').oninput=e=>{skOpacity=Number(e.target.value)/100;$('#sk-opacity-value').textContent=e.target.value+'%';};
+    $('#ev-pen-custom').oninput=e=>skSetColor(e.target.value);
+    $('#sk-fill').onchange=e=>skFill=e.target.checked;$('#sk-symmetry').onchange=e=>skSymmetry=e.target.checked;$('#sk-snap').onchange=e=>skSnap=e.target.checked;$('#sk-pressure').onchange=e=>skPressure=e.target.checked;$('#sk-smooth').onchange=e=>skSmooth=e.target.checked;
+    $('#sk-zoom').onchange=e=>{skZoom=Number(e.target.value);$('#sk-canvas-size').style.width=skZoom*100+'%';};
+    skLayerPanel();skSelectionBar();skStatus();paint();skBindCanvas();
+  }
+  function skSetColor(color){penColor=skColor(color);const custom=$('#ev-pen-custom');if(custom)custom.value=penColor;A.$$('.ev-swatch').forEach(b=>{b.classList.toggle('selected',b.dataset.id===penColor);b.setAttribute('aria-pressed',String(b.dataset.id===penColor));});}
+  function skBindCanvas(){
+    const canvas=$('#ev-canvas');let pointer=null,frame=0,start=null,limit=5000;
+    const point=e=>{const r=canvas.getBoundingClientRect();let x=Math.max(0,Math.min(SK_SIZE,(e.clientX-r.left)*SK_SIZE/r.width)),y=Math.max(0,Math.min(SK_SIZE,(e.clientY-r.top)*SK_SIZE/r.height));if(skSnap){x=Math.round(x/20)*20;y=Math.round(y/20)*20;}return skPressure&&e.pointerType==='pen'?[x,y,e.pressure||.5]:[x,y];};
+    const queue=()=>{if(!frame)frame=requestAnimationFrame(()=>{frame=0;if(canvas.isConnected)paint();});};
+    const append=e=>{let next=point(e),last=stroke.points.at(-1);if(next[0]===last[0]&&next[1]===last[1])return;if(skShapes.includes(stroke.tool))stroke.points=[stroke.points[0],next];else if(stroke.points.length<limit){if(skSmooth&&!skSnap&&e.type!=='pointerup')next=[last[0]+(next[0]-last[0])*.55,last[1]+(next[1]-last[1])*.55,...next.slice(2)];stroke.points.push(next);}};
     const finish=e=>{
-      if(e&&e.pointerId!==pointer)return;
-      if(paintFrame){cancelAnimationFrame(paintFrame);paintFrame=0;}
-      if(stroke&&drawing){if(e?.type==='pointerup')appendPoint(e);drawing.strokes.push(stroke);stroke=null;redoStrokes=[];paint();sketchSave();}
-      pointer=null;
-    };canvas.onpointerup=finish;canvas.onpointercancel=finish;canvas.onlostpointercapture=finish;A.cleanups.push(finish);
-    $('#ev-sketch-title').oninput=e=>{drawing.title=e.target.value;sketchSave();};$('#ev-pen-width').onchange=e=>penWidth=Number(e.target.value);$('#ev-pen-custom').oninput=e=>{penColor=e.target.value;A.$$('.ev-swatch').forEach(x=>{x.classList.toggle('selected',x.dataset.id===penColor);x.setAttribute('aria-pressed',String(x.dataset.id===penColor));});};paint();
+      if(e&&e.pointerId!==pointer)return;if(frame){cancelAnimationFrame(frame);frame=0;}
+      if(stroke&&drawing){if(e?.type==='pointerup')append(e);skRemember();drawing.strokes.push(stroke);stroke=null;sketchSave();}
+      if(skOffset&&drawing?.strokes[skSelected]&&(skOffset[0]||skOffset[1])){skRemember();const s=drawing.strokes[skSelected];s.dx=skNumber((s.dx||0)+skOffset[0],-1600,1600,0);s.dy=skNumber((s.dy||0)+skOffset[1],-1600,1600,0);sketchSave();}
+      skOffset=null;const id=pointer;pointer=null;if(id!==null&&canvas.hasPointerCapture(id))canvas.releasePointerCapture(id);if(canvas.isConnected){paint();skSelectionBar();}
+    };
+    skFinish=finish;A.cleanups.push(()=>{finish();skFinish=null;});
+    canvas.onpointerdown=e=>{
+      if(pointer!==null||e.button!==0||!$('#overlay').hidden)return;e.preventDefault();canvas.focus({preventScroll:true});const p=point(e);
+      if(skTool==='picker'){const c=document.createElement('canvas');c.width=c.height=SK_SIZE;skRender(c,drawing);const rgb=c.getContext('2d').getImageData(Math.min(799,Math.floor(p[0])),Math.min(799,Math.floor(p[1])),1,1).data;skSetColor('#'+[...rgb].slice(0,3).map(v=>v.toString(16).padStart(2,'0')).join(''));A.toast('色を取得しました');return;}
+      if(!skEditable())return;
+      if(skTool==='text'){skTextForm(p);return;}
+      if(skTool==='select'){
+        skSelected=-1;for(let i=drawing.strokes.length-1;i>=0;i--){const s=drawing.strokes[i];if(s.layer!==drawing.activeLayer)continue;const b=skBounds(s);if(p[0]>=b.x&&p[0]<=b.x+b.w&&p[1]>=b.y&&p[1]<=b.y+b.h){skSelected=i;break;}}start=p;paint();skSelectionBar();if(skSelected<0)return;
+      }else{if(!skCapacity())return;limit=Math.min(5000,SK_MAX_POINTS-drawing.strokes.reduce((n,s)=>n+s.points.length,0));if(skShapes.includes(skTool)&&limit<2)return;skSelected=-1;stroke={tool:skTool,color:penColor,width:penWidth,opacity:skOpacity,fill:skFill,symmetry:skSymmetry,pressure:skPressure&&e.pointerType==='pen',layer:drawing.activeLayer,points:[p]};}
+      pointer=e.pointerId;canvas.setPointerCapture(pointer);queue();
+    };
+    canvas.onpointermove=e=>{if(e.pointerId!==pointer)return;if(stroke){const events=e.getCoalescedEvents?.();for(const sample of events?.length?events:[e])append(sample);}else if(skSelected>=0){const p=point(e);skOffset=[p[0]-start[0],p[1]-start[1]];}queue();};
+    canvas.onpointerup=finish;canvas.onpointercancel=finish;canvas.onlostpointercapture=finish;
+    const flush=()=>{finish();};const leave=e=>{finish();if(skDrafts.size){e.preventDefault();e.returnValue='';}};
+    const hidden=()=>{if(document.hidden)finish();};window.addEventListener('pagehide',flush);window.addEventListener('beforeunload',leave);document.addEventListener('visibilitychange',hidden);
+    A.cleanups.push(()=>{window.removeEventListener('pagehide',flush);window.removeEventListener('beforeunload',leave);document.removeEventListener('visibilitychange',hidden);});
+  }
+  function skTextForm(point,index=-1){
+    const old=drawing.strokes[index];A.form(old?'文字を編集':'文字を配置',area('文字（200字まで）','text',old?.text||'')+field('文字サイズ','fontSize',old?.fontSize||48,'number','required min="12" max="160" step="1"'),v=>{
+      if(!v.text.trim()||v.text.length>200){A.toast('文字は1〜200字で入力してください');return false;}if(!skEditable()||(!old&&!skCapacity()))return false;
+      skChange(()=>{if(old){drawing.strokes[index]={...old,text:v.text,fontSize:Number(v.fontSize)};}else drawing.strokes.push({tool:'text',layer:drawing.activeLayer,color:penColor,width:penWidth,opacity:skOpacity,points:[point],text:v.text,fontSize:Number(v.fontSize)});});
+    });$('#ev-text').maxLength=200;
+  }
+  A.actions.evSketchNew=()=>{A.cleanup();drawing=skNormalize({id:A.id(),title:'スケッチ',strokes:[],updated:Date.now()});skUndo=[];skRedo=[];skZoom=1;skSelected=-1;sketchSave();sketchEditor();};
+  A.actions.evSketchOpen=el=>{A.cleanup();try{const raw=skList().find(d=>d.id===el.dataset.id);if(!raw)return;drawing=skNormalize(raw);skUndo=[];skRedo=[];skZoom=1;skSelected=-1;sketchEditor();}catch(e){A.toast(e.message);}};
+  A.actions.evSketchHome=()=>{A.cleanup();skGallery();};
+  A.actions.evSketchRetry=()=>sketchSave();
+  A.actions.evSketchFavorites=()=>{skFavorites=!skFavorites;skGallery();};
+  A.actions.evSketchFavorite=()=>skChange(()=>drawing.favorite=!drawing.favorite,true);
+  A.actions.evPenColor=el=>skSetColor(el.dataset.id);
+  A.actions.evSketchTool=el=>{if(!skTools.some(t=>t[0]===el.dataset.id))return;skFinish?.();skTool=el.dataset.id;skSelected=-1;A.$$('[data-action=evSketchTool]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===skTool)));skSelectionBar();paint();};
+  function skHistory(redo){skFinish?.();const from=redo?skRedo:skUndo,to=redo?skUndo:skRedo;if(!drawing||!from.length)return;to.push(JSON.stringify(drawing));drawing=JSON.parse(from.pop());skSelected=-1;sketchSave();sketchEditor();}
+  A.actions.evSketchUndo=()=>skHistory(false);A.actions.evSketchRedo=()=>skHistory(true);
+  A.actions.evSketchObjectCopy=()=>{const s=drawing?.strokes[skSelected];if(s&&skEditable()&&skCapacity(1,s.points.length))skChange(()=>drawing.strokes.push({...skClone(s),dx:Math.min(1600,(s.dx||0)+20),dy:Math.min(1600,(s.dy||0)+20)}));};
+  A.actions.evSketchObjectDelete=()=>{if(skSelected>=0&&skEditable())skChange(()=>drawing.strokes.splice(skSelected,1));};
+  A.actions.evSketchTextEdit=()=>{if(skSelected>=0&&skEditable())skTextForm(null,skSelected);};
+  A.actions.evSketchPaper=()=>A.form('用紙',select('模様','paper',[['plain','無地'],['grid','方眼'],['dots','ドット'],['ruled','罫線']],drawing.paper)+select('色','tone',[['cream','クリーム'],['white','白'],['dark','ダーク']],drawing.tone),v=>{skChange(()=>{drawing.paper=v.paper;drawing.tone=v.tone;});});
+  A.actions.evSketchClear=()=>A.confirm('すべての描画をクリア？','ロック中のレイヤーも含みます。元に戻す操作で復元できます。',()=>skChange(()=>drawing.strokes=[]));
+  A.actions.evSketchLayerSelect=el=>{skFinish?.();drawing.activeLayer=el.dataset.id;skSelected=-1;sketchSave();skLayerPanel();skSelectionBar();paint();};
+  for(const [action,key] of [['evSketchLayerVisible','visible'],['evSketchLayerLock','locked']])A.actions[action]=el=>skChange(()=>{const l=drawing.layers.find(l=>l.id===el.dataset.id);if(l)l[key]=!l[key];skLayerPanel();});
+  A.actions.evSketchLayerAdd=()=>{if(drawing.layers.length>=8)return A.toast('レイヤーは8枚までです');skChange(()=>{const id=A.id();drawing.layers.push({id,name:`レイヤー ${drawing.layers.length+1}`,visible:true,locked:false,opacity:1});drawing.activeLayer=id;skLayerPanel();});};
+  A.actions.evSketchLayerCopy=()=>{if(drawing.layers.length>=8)return A.toast('レイヤーは8枚までです');const l=skLayer(),strokes=drawing.strokes.filter(s=>s.layer===l.id);if(!skCapacity(strokes.length,strokes.reduce((n,s)=>n+s.points.length,0)))return;skChange(()=>{const id=A.id();drawing.layers.splice(drawing.layers.indexOf(l)+1,0,{...l,id,name:(l.name+' コピー').slice(0,40),locked:false});drawing.strokes.push(...skClone(strokes).map(s=>({...s,layer:id})));drawing.activeLayer=id;skLayerPanel();});};
+  function skMoveLayer(delta){const i=drawing.layers.findIndex(l=>l.id===drawing.activeLayer),j=i+delta;if(j<0||j>=drawing.layers.length)return;skChange(()=>{[drawing.layers[i],drawing.layers[j]]=[drawing.layers[j],drawing.layers[i]];skLayerPanel();});}
+  A.actions.evSketchLayerUp=()=>skMoveLayer(1);A.actions.evSketchLayerDown=()=>skMoveLayer(-1);
+  A.actions.evSketchLayerEdit=el=>{const l=drawing.layers.find(l=>l.id===el.dataset.id);if(l)A.form('レイヤー設定',field('名前','name',l.name,'text','required maxlength="40"')+field('不透明度（%）','opacity',Math.round(l.opacity*100),'number','required min="0" max="100" step="1"'),v=>{if(!v.name.trim())return false;skChange(()=>{l.name=v.name.trim();l.opacity=Number(v.opacity)/100;skLayerPanel();});});};
+  A.actions.evSketchLayerClear=()=>{if(skEditable())A.confirm('レイヤーの内容を消去？','元に戻す操作で復元できます。',()=>skChange(()=>drawing.strokes=drawing.strokes.filter(s=>s.layer!==drawing.activeLayer)));};
+  A.actions.evSketchLayerDelete=()=>{if(drawing.layers.length===1)return A.toast('最後のレイヤーは削除できません');if(skEditable())A.confirm('レイヤーを削除？','中の描画も削除します。元に戻す操作で復元できます。',()=>skChange(()=>{drawing.strokes=drawing.strokes.filter(s=>s.layer!==drawing.activeLayer);drawing.layers=drawing.layers.filter(l=>l.id!==drawing.activeLayer);drawing.activeLayer=drawing.layers.at(-1).id;skLayerPanel();}));};
+  A.actions.evSketchMenu=()=>{skFinish?.();A.overlay(`${A.overlayTitle('作品メニュー')}<div class="ev-menu-sheet">${[['evSketchExport','画像を書き出す（PNG / JPEG）'],['evSketchJSON','編集用JSONを保存'],['evSketchImport','JSONから作品を読み込む'],['evSketchPhoto','写真に追加'],['evSketchDuplicate','作品を複製'],['evSketchClear','すべての描画をクリア'],['evSketchDelete','作品を削除']].map(([a,t])=>skButton(a,t,drawing.id)).join('')}</div>`,'sheet-overlay');};
+  const skFilename=()=>((drawing?.title||'sketch').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').trim().slice(0,80)||'sketch');
+  A.actions.evSketchJSON=()=>{skFinish?.();exportText(skFilename()+'.aura-sketch.json',JSON.stringify({format:'aura-sketch',version:2,document:drawing}), 'application/json');A.toast('編集用データを書き出しました');};
+  A.actions.evSketchExport=()=>A.form('画像を書き出す',select('形式','format',[['png','PNG'],['jpeg','JPEG']],'png')+select('サイズ','size',[['800','800 × 800'],['1600','1600 × 1600'],['2400','2400 × 2400']],'1600')+select('背景（透過はPNGのみ）','background',[['paper','用紙あり'],['transparent','透過（模様なし）']],'paper'),v=>{skFinish?.();const c=document.createElement('canvas');c.width=c.height=Number(v.size);skRender(c,drawing,{transparent:v.format==='png'&&v.background==='transparent'});const name=skFilename()+'.'+(v.format==='jpeg'?'jpg':'png');c.toBlob(blob=>{if(blob)A.download(blob,name);else A.toast('画像を書き出せませんでした');},'image/'+v.format,.94);},'書き出す');
+  A.actions.evSketchPhoto=()=>{skFinish?.();const c=document.createElement('canvas');c.width=c.height=800;skRender(c,drawing);if(A.storePhoto(c.toDataURL('image/jpeg',.92),drawing.title)){A.closeOverlay();A.toast('写真に追加済み');}};
+  A.actions.evSketchDuplicate=()=>{skFinish?.();const copy={...skClone(drawing),id:A.id(),title:(drawing.title+' コピー').slice(0,80),updated:Date.now()};if(upsert('sketches',copy)){A.closeOverlay();drawing=copy;skUndo=[];skRedo=[];skSelected=-1;sketchEditor();}};
+  A.actions.evSketchDelete=el=>{const id=el.dataset.id;A.confirm('スケッチを削除？','この操作は元に戻せません。JSONを書き出しておくと復元できます。',()=>{skFinish?.();if(saveList('sketches',read('sketches').filter(d=>d.id!==id))){skDrafts.delete(id);A.cleanup();drawing=null;skGallery();}});};
+  A.actions.evSketchImport=()=>{
+    A.overlay(`${A.overlayTitle('JSONを読み込む')}<div class="ev-menu-sheet"><p>このアプリで保存した編集用JSON（4MB以下）を、新しい作品として追加します。既存の作品は上書きしません。</p><input type="file" id="sk-import" accept=".json,application/json" aria-label="スケッチJSON"><p id="sk-import-status" role="status"></p></div>`,'sheet-overlay');
+    const input=$('#sk-import'),status=$('#sk-import-status');input.onchange=async()=>{
+      const file=input.files[0];if(!file)return;input.disabled=true;status.textContent='読み込み中…';
+      try{if(file.size>4*1024*1024)throw Error('4MB以下のJSONを選択してください');const data=JSON.parse(await file.text());if(data.format!=='aura-sketch'||data.version!==2)throw Error('対応するスケッチJSONではありません');const doc=skNormalize(data.document);doc.id=A.id();doc.updated=Date.now();
+        if(!input.isConnected||A.current!=='sketch')return;if(!upsert('sketches',doc))throw Error('容量不足などで保存できません。既存作品は変更していません');A.cleanup();drawing=doc;skUndo=[];skRedo=[];skSelected=-1;skZoom=1;A.closeOverlay();sketchEditor();
+      }catch(e){if(input.isConnected){status.textContent=e instanceof SyntaxError?'JSONを読み取れませんでした':e.message;input.disabled=false;input.value='';}}
+    };
   };
-  A.actions.evSketchNew=()=>{A.cleanup();redoStrokes=[];drawing={id:A.id(),title:'スケッチ',strokes:[],updated:Date.now(),paper:'plain',tone:'cream'};if(sketchSave())sketchEditor();};
-  A.actions.evSketchOpen=el=>{A.cleanup();redoStrokes=[];drawing=read('sketches').find(x=>x.id===el.dataset.id);if(drawing)sketchEditor();};
-  A.actions.evSketchTool=el=>{sketchTool=el.dataset.id;A.$$('.ev-sketch-modes [data-action=evSketchTool]').forEach(x=>{x.classList.toggle('selected',x===el);x.setAttribute('aria-pressed',String(x===el));});};
-  A.actions.evSketchUndo=()=>{if(drawing?.strokes.length){redoStrokes.push(drawing.strokes.pop());paint();sketchSave();}};
-  A.actions.evSketchRedo=()=>{if(drawing&&redoStrokes.length){drawing.strokes.push(redoStrokes.pop());paint();sketchSave();}};
-  A.actions.evSketchClear=()=>A.confirm('描画をクリア？','やり直す操作で復元できます。',()=>{if(!drawing)return;redoStrokes=[...drawing.strokes].reverse();drawing.strokes=[];paint();sketchSave();});
-  A.actions.evSketchPaper=()=>A.form('用紙',select('模様','paper',[['plain','無地'],['grid','方眼'],['dots','ドット']],drawing.paper||'plain')+select('色','tone',[['cream','クリーム'],['white','白'],['dark','ダーク']],drawing.tone||'cream'),v=>{drawing.paper=v.paper;drawing.tone=v.tone;paint();return sketchSave();});
-  A.actions.evSketchMenu=()=>A.overlay(`${A.overlayTitle('スケッチ')}<div class="ev-menu-sheet"><button data-action="evSketchExport">${A.icon('download')}PNGを保存</button><button data-action="evSketchPhoto">${A.icon('photos')}写真に追加</button><button data-action="evSketchDuplicate">${A.icon('layers')}複製</button><button data-action="evSketchDelete" data-id="${drawing.id}" class="ev-danger">${A.icon('trash')}削除</button></div>`,'sheet-overlay');
-  A.actions.evSketchPhoto=()=>{const canvas=$('#ev-canvas');if(canvas&&A.storePhoto(canvas.toDataURL('image/jpeg',.92),drawing.title)){A.closeOverlay();A.toast('写真に追加済み');}};
-  A.actions.evSketchDuplicate=()=>{const copy={...drawing,id:A.id(),title:(drawing.title+' コピー').slice(0,80),strokes:structuredClone(drawing.strokes),updated:Date.now()};if(upsert('sketches',copy)){A.closeOverlay();drawing=copy;redoStrokes=[];sketchEditor();}};
-  A.actions.evSketchDelete=el=>A.confirm('スケッチを削除？','この操作は元に戻せません。',()=>{A.cleanup();if(saveList('sketches',read('sketches').filter(x=>x.id!==el.dataset.id))){drawing=null;sketches();}});
-  document.addEventListener('keydown',e=>{if(A.current!=='sketch'||!$('#overlay').hidden||!$('#ev-canvas')||e.target.closest('input,textarea,select,[contenteditable]')||!(e.ctrlKey||e.metaKey)||e.key.toLowerCase()!=='z')return;e.preventDefault();e.shiftKey?A.actions.evSketchRedo():A.actions.evSketchUndo();});
+  A.actions.evSketchHelp=()=>A.overlay(`${A.overlayTitle('スケッチの使い方')}<div class="ev-menu-sheet sk-help"><h3>描画と編集</h3><p>図形はドラッグ、文字は配置場所をタップ。選択ツールは現在のレイヤーの要素を囲み枠で選択し、移動・複製・削除できます。選択判定は外接矩形です。</p><h3>レイヤーと拡大</h3><p>最大8レイヤー。自由／固定でロックを切り替えます。拡大時はキャンバス周囲の余白かスクロールバーで移動します。消しゴムは現在のレイヤーだけを透明にします。旧作品の消しゴムは見た目を保つため用紙色のままです。</p><h3>ショートカット</h3><p>Ctrl / ⌘ + Z：元に戻す<br>Ctrl / ⌘ + Shift + Z、Ctrl + Y：やり直す<br>B：ペン、E：消しゴム、V：選択、I：スポイト<br>Delete：選択要素を削除<br>Shiftを押しながらツールを変更する必要はありません。</p><h3>保存の範囲</h3><p>自動保存はこのブラウザのみ。履歴は編集中のみ最大30操作（容量により減少）。1作品1,000要素・合計100,000点、1ストローク5,000点。容量不足時の未保存作品はタブ内で保持しますが、再読み込み前にJSONで退避してください。</p></div>`,'sheet-overlay');
+  document.addEventListener('keydown',e=>{
+    if(A.current!=='sketch'||!$('#overlay').hidden||!$('#ev-canvas')||e.isComposing||e.target.closest('input,textarea,select,[contenteditable]'))return;
+    const key=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
+    if(mod&&['z','y'].includes(key)){e.preventDefault();(key==='y'||e.shiftKey?A.actions.evSketchRedo:A.actions.evSketchUndo)();}
+    else if(!mod&&!e.altKey){const tool={b:'pen',e:'erase',v:'select',i:'picker'}[key];if(tool){e.preventDefault();A.actions.evSketchTool({dataset:{id:tool}});}else if(key==='delete'&&skSelected>=0){e.preventDefault();A.actions.evSketchObjectDelete();}}
+  });
 
   // Extend Spotlight without duplicating or caching the existing app models.
   A.searchAdditional = query => {
