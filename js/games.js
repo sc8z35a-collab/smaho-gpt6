@@ -30,7 +30,20 @@ const storedRecords2048=A.load('2048records',{})||{};
 let records2048={maxTile:Math.max(...tiles,count2048(storedRecords2048.maxTile)),bestCombo:Math.max(peakCombo2048,count2048(storedRecords2048.bestCombo))};
 const storedPrefs2048=A.load('2048preferences',{})||{};
 const prefs2048={theme:storedPrefs2048.theme==='aurora'?'aurora':'ceramic',speed:storedPrefs2048.speed==='quick'?'quick':'smooth'};
-let history2048=[],future2048=[],nodes2048=new Map(),animations2048=new Set();
+// Whitelist snapshots: history must never recursively embed saved histories.
+function readSnapshot2048(value){
+ if(!validTiles2048(value?.tiles)||!value.tiles.some(Boolean)||!['score','moves','combo','peakCombo','seed'].every(key=>Number.isSafeInteger(value[key])&&value[key]>=0)||value.seed>0xffffffff||typeof value.continued!=='boolean')return null;
+ return {version:2,tiles:[...value.tiles],score:value.score,moves:value.moves,combo:value.combo,peakCombo:Math.max(value.combo,value.peakCombo),continued:value.continued,seed:value.seed};
+}
+function readHistory2048(value,limit=32){
+ if(!limit||!Array.isArray(value))return [];
+ const bounded=value.slice(-limit).map(readSnapshot2048);return bounded.every(Boolean)?bounded:[];
+}
+let history2048=restored2048?readHistory2048(saved2048.history):[];
+let future2048=restored2048?readHistory2048(saved2048.future,32-history2048.length):[];
+const storedCheckpoint2048=A.load('2048checkpoint',null),checkpointState2048=readSnapshot2048(storedCheckpoint2048?.state);
+let checkpoint2048=checkpointState2048&&Number.isSafeInteger(storedCheckpoint2048.savedAt)&&storedCheckpoint2048.savedAt>0&&storedCheckpoint2048.savedAt<=8640000000000000?{state:checkpointState2048,savedAt:storedCheckpoint2048.savedAt}:null;
+let nodes2048=new Map(),animations2048=new Set();
 let busy2048=false,pending2048=null,moveTimer2048=null,finishMove2048=null,saveOK2048=true,hint2048=null;
 const reduced2048=()=>A.settings.reduceMotion||window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const active2048=()=>A.current==='games'&&gamePage==='2048'&&!!$('#board-2048')&&!document.hidden;
@@ -42,7 +55,7 @@ function snapshot2048(){return {version:2,tiles:[...tiles],score,moves:turns2048
 function restore2048(s){tiles=[...s.tiles];score=s.score;turns2048=s.moves;combo2048=s.combo;peakCombo2048=s.peakCombo;continued2048=s.continued;seed2048=s.seed;}
 function save2048(){
  best=Math.max(best,score);records2048.maxTile=Math.max(records2048.maxTile,...tiles);records2048.bestCombo=Math.max(records2048.bestCombo,peakCombo2048);
- saveOK2048=A.saveBatch({'2048best':best,'2048state':snapshot2048(),'2048records':records2048});
+ saveOK2048=A.saveBatch({'2048best':best,'2048state':{...snapshot2048(),history:history2048,future:future2048},'2048records':records2048});
 }
 // Retain the existing public mergeLine contract for other consumers.
 function mergeLine(line){const nonzero=line.filter(Boolean),out=[];let gain=0;for(let i=0;i<nonzero.length;i++){if(nonzero[i]===nonzero[i+1]){const value=nonzero[i]*2;out.push(value);gain+=value;i++;}else out.push(nonzero[i]);}while(out.length<4)out.push(0);return {line:out,gain};}
@@ -67,9 +80,29 @@ function animate2048(el,frames,options){
  const done=()=>animations2048.delete(animation);animation.onfinish=done;animation.oncancel=done;
  return animation;
 }
+function clearEffects2048(){
+ const layer=$('#effects-2048');
+ for(const animation of animations2048)if(layer?.contains(animation.effect?.target)){animation.cancel();animations2048.delete(animation);}
+ layer?.replaceChildren();
+}
+function burst2048(indices){
+ clearEffects2048();const layer=$('#effects-2048');if(!layer||reduced2048()||!layer.animate)return;
+ // At most eight merge destinations, each with one halo and four light flecks.
+ for(const index of indices.slice(0,8)){
+  const flare=document.createElement('span');flare.className='g2048-piece g2048-flare';position2048(flare,index);layer.append(flare);
+  const ring=document.createElement('i');ring.className='g2048-ring';flare.append(ring);
+  const glow=animate2048(ring,[{transform:'scale(.85)',opacity:.8},{transform:'scale(1.45)',opacity:0}],{duration:420,easing:'ease-out'});
+  if(glow){const remove=()=>{animations2048.delete(glow);flare.remove();};glow.onfinish=remove;glow.oncancel=remove;}
+  for(let n=0;n<4;n++){
+   const speck=document.createElement('i');speck.className='g2048-speck';flare.append(speck);
+   const angle=n*Math.PI/2+Math.PI/4,distance=22+Math.min(12,Math.log2(tiles[index]));
+   animate2048(speck,[{transform:'translate(-50%,-50%) scale(1)',opacity:.85},{transform:`translate(calc(-50% + ${Math.cos(angle)*distance}px),calc(-50% + ${Math.sin(angle)*distance}px)) scale(.15)`,opacity:0}],{duration:360,easing:'cubic-bezier(.1,.7,.3,1)'});
+  }
+ }
+}
 function stopMotion2048(){
  clearTimeout(moveTimer2048);moveTimer2048=null;finishMove2048=null;pending2048=null;busy2048=false;
- for(const animation of animations2048)animation.cancel();animations2048.clear();
+ for(const animation of animations2048)animation.cancel();animations2048.clear();clearEffects2048();
 }
 function position2048(el,index){el.style.left=`calc((100% + var(--g-gap)) * ${index%4} / 4)`;el.style.top=`calc((100% + var(--g-gap)) * ${Math.floor(index/4)} / 4)`;}
 function face2048(el,value){
@@ -98,12 +131,28 @@ function render2048(message=''){
  $('#hint-2048').disabled=busy2048||win||over;
  A.$$('.studio-2048 [data-action="move2048"]').forEach(el=>{el.disabled=win||over;el.classList.toggle('is-hint',hint2048===el.dataset.value);});
  $('#undo-count-2048').textContent=history2048.length;
+ renderPractice2048();
  $('#result-2048').hidden=!(over||win);$('#result-title-2048').textContent=win?'2048、達成。':'ひと休み。また、その先へ。';
  $('#result-copy-2048').textContent=win?'おめでとうございます。4096、その先も目指せます。':`${number2048(score)}点・${number2048(turns2048)}手。${history2048.length?'「戻す」で別の道を探せます。':'新しい盤面でもう一度。'}`;
  $('#continue-2048').hidden=!win;
  $('#save-2048').textContent=saveOK2048?'端末に自動保存':'未保存・保存し直す';$('#save-2048').classList.toggle('save-failed',!saveOK2048);
  $('#status-2048').textContent=message||(win?'2048達成。「続ける」でプレイを再開できます。':over?'動かせる手がありません。':empty<=2?'空きマスが少なくなっています。合体でスペースを確保。':'同じ数字を重ねて、2048へ。');
  board.setAttribute('aria-label',`2048の盤面。スコア ${score}。`+Array.from({length:4},(_,r)=>`${r+1}行目 ${tiles.slice(r*4,r*4+4).map(v=>v||'空').join('、')}`).join('。'));
+}
+function renderPractice2048(){
+ for(const direction of directions2048){
+  const row=$('#forecast-2048-'+direction),plan=plan2048(tiles,direction);
+  row.querySelector('[data-forecast="gain"]').textContent=plan.changed?'+'+number2048(plan.gain):'—';
+  row.querySelector('[data-forecast="pairs"]').textContent=plan.changed?plan.merged.length+'組':'移動不可';
+  row.querySelector('[data-forecast="space"]').textContent=plan.changed?Math.max(0,plan.tiles.filter(v=>!v).length-1)+'マス':'—';
+  row.classList.toggle('is-hint',hint2048===direction);row.classList.toggle('is-blocked',!plan.changed);
+ }
+ $('#checkpoint-save-2048').disabled=busy2048;$('#checkpoint-load-2048').disabled=busy2048||!checkpoint2048;$('#checkpoint-delete-2048').disabled=busy2048||!checkpoint2048;
+ const state=checkpoint2048?.state;
+ $('#checkpoint-copy-2048').textContent=state?`${number2048(state.score)}点 / ${number2048(state.moves)}手 / ${new Date(checkpoint2048.savedAt).toLocaleString('ja-JP')}`:'残したい局面を1つ保存できます。新しいゲームを始めても残ります。';
+ const preview=$('#checkpoint-board-2048');preview.hidden=!state;
+ preview.setAttribute('aria-label',state?'保存した局面。'+state.tiles.map((v,i)=>`${Math.floor(i/4)+1}行${i%4+1}列 ${v||'空'}`).join('。'):'保存した局面なし');
+ [...preview.children].forEach((el,i)=>{const value=state?.tiles[i]||0;el.textContent=value||'';el.dataset.filled=String(!!value);});
 }
 function slide2048(plan,spawned){
  const layer=$('#tiles-2048'),duration=reduced2048()||!layer.animate?0:prefs2048.speed==='quick'?95:150;
@@ -127,7 +176,7 @@ function slide2048(plan,spawned){
    if(plan.merged.includes(index))animate2048(el.firstElementChild,[{transform:'scale(.92)'},{transform:'scale(1.12)',offset:.45},{transform:'scale(1)'}],{duration:220,easing:'cubic-bezier(.2,.8,.3,1)'});
   }
   if(spawned>=0){const el=tile2048(spawned,tiles[spawned]);nodes2048.set(spawned,el);layer.append(el);animate2048(el.firstElementChild,[{transform:'scale(.5)',opacity:0},{transform:'scale(1)',opacity:1}],{duration:180,easing:'cubic-bezier(.16,1,.3,1)'});}
-  busy2048=false;
+  busy2048=false;burst2048(plan.merged);
   const message=waiting2048()||!movable()?'':plan.gain?`${plan.merged.length}組が合体、${number2048(plan.gain)}点獲得。${combo2048>1?combo2048+'手連続の合体。':''}`:'タイルを移動しました。';
   render2048(message);
   if(plan.gain){const gain=$('#gain-2048');gain.textContent='+'+number2048(plan.gain);animate2048(gain,[{opacity:1,transform:'translateY(5px)'},{opacity:0,transform:'translateY(-22px)'}],{duration:700,easing:'ease-out'});}
@@ -136,6 +185,7 @@ function slide2048(plan,spawned){
  };
  finishMove2048=finish;
  $('#undo-2048').disabled=true;$('#redo-2048').disabled=true;$('#hint-2048').disabled=true;
+ $('#checkpoint-save-2048').disabled=true;$('#checkpoint-load-2048').disabled=true;$('#checkpoint-delete-2048').disabled=true;
  if(duration)moveTimer2048=setTimeout(finish,duration);else finish();
 }
 function move2048(direction){
@@ -143,6 +193,7 @@ function move2048(direction){
  if(busy2048){pending2048=direction;return;}
  clearHint2048();const plan=plan2048(tiles,direction);
  if(!plan.changed){render2048(movable()?'その方向には動かせません。別の方向へ。':'動かせる手がありません。戻すか、新しく始めましょう。');return;}
+ clearEffects2048();
  // Commit logical state before any animation: leaving mid-slide cannot lose a move.
  history2048.push(snapshot2048());if(history2048.length>32)history2048.shift();future2048=[];
  tiles=plan.tiles;score+=plan.gain;turns2048++;combo2048=plan.gain?combo2048+1:0;peakCombo2048=Math.max(peakCombo2048,combo2048);
@@ -188,7 +239,7 @@ function game2048(){
   <header class="g2048-heading"><div><span class="g2048-eyebrow">THE NUMBER ATELIER</span><h2>2048<span>.</span></h2><p>重なるたび、心地いい。</p></div><span class="g2048-seal" aria-hidden="true">2<sup>11</sup></span></header>
   <div class="g2048-scores"><div><small>スコア</small><strong id="score-2048">0</strong><span id="gain-2048" aria-hidden="true"></span></div><div><small>ベスト</small><strong id="best-2048">0</strong></div></div>
   <div class="g2048-goal"><div><span>次の目標 <strong id="goal-2048">2048</strong></span><span>最大 <b id="goal-current-2048">2</b></span></div><progress id="progress-2048" value="2" max="2048"></progress></div>
-  <div class="board-2048" id="board-2048" tabindex="0" role="group" aria-label="2048の盤面" aria-describedby="instructions-2048"><div class="g2048-bed" aria-hidden="true">${'<span></span>'.repeat(16)}</div><div class="g2048-layer" id="tiles-2048" aria-hidden="true"></div></div>
+  <div class="board-2048" id="board-2048" tabindex="0" role="group" aria-label="2048の盤面" aria-describedby="instructions-2048"><div class="g2048-bed" aria-hidden="true">${'<span></span>'.repeat(16)}</div><div class="g2048-layer" id="tiles-2048" aria-hidden="true"></div><div class="g2048-effects" id="effects-2048" aria-hidden="true"></div></div>
   <div class="g2048-meta"><span><strong id="moves-2048">0</strong> 手</span><span>空き <strong id="empty-2048">14</strong></span><span>最大 <strong id="high-2048">2</strong></span></div>
   <div class="g2048-combo" id="combo-2048"></div>
   <section class="g2048-result" id="result-2048" aria-labelledby="result-title-2048" hidden><small>YOUR LITTLE MILESTONE</small><h3 id="result-title-2048"></h3><p id="result-copy-2048"></p><button id="continue-2048" data-action="continue2048">続ける</button><button data-action="restart2048">新しく始める</button></section>
@@ -196,7 +247,12 @@ function game2048(){
   <p class="g2048-status" id="status-2048" role="status" aria-live="polite" aria-atomic="true"></p>
   <div class="g2048-pad" role="group" aria-label="移動方向">${[['up','↑'],['left','←'],['down','↓'],['right','→']].map(([d,s])=>`<button data-action="move2048" data-value="${d}" aria-label="${labels2048[d]}へ動かす">${s}</button>`).join('')}</div>
   <p id="instructions-2048" class="g2048-caption">スワイプ / 矢印 / WASD<br>取り消し Z ・ やり直し Y</p>
-  <details class="g2048-settings"><summary>見た目とプレイ記録</summary><fieldset><legend>タイルの素材</legend>${[['ceramic','陶器'],['aurora','オーロラ']].map(([v,label])=>`<button data-action="theme2048" data-value="${v}" aria-pressed="${prefs2048.theme===v}">${label}</button>`).join('')}</fieldset><fieldset><legend>モーションの速さ</legend>${[['smooth','なめらか'],['quick','きびきび']].map(([v,label])=>`<button data-action="speed2048" data-value="${v}" aria-pressed="${prefs2048.speed===v}">${label}</button>`).join('')}</fieldset><p>「動きを抑える」設定と端末の動き軽減を優先します。</p><dl><div><dt>自己最大タイル</dt><dd id="record-tile-2048">2</dd></div><div><dt>最多連続合体</dt><dd><span id="record-combo-2048">0</span> 手</dd></div></dl><p>連続合体は演出・記録のみ。追加の得点倍率はありません。取り消し履歴はこのページ内で直近32手まで。</p></details>
+  <details class="g2048-settings g2048-practice"><summary>一手の予測と局面の保存</summary>
+   <p>操作前に4方向を比較。新タイル1枚の出現後に残る空きマスも表示します。</p>
+   <table class="g2048-forecast"><caption>次の一手の確定値（勝利確率ではありません）</caption><thead><tr><th scope="col">方向</th><th scope="col">加点</th><th scope="col">合体</th><th scope="col">空き</th></tr></thead><tbody>${directions2048.map(d=>`<tr id="forecast-2048-${d}"><th scope="row">${labels2048[d]}</th><td data-forecast="gain"></td><td data-forecast="pairs"></td><td data-forecast="space"></td></tr>`).join('')}</tbody></table>
+   <div class="g2048-checkpoint"><h3>この局面を、残しておく。</h3><p id="checkpoint-copy-2048"></p><div id="checkpoint-board-2048" class="g2048-mini-board" role="img" hidden>${'<span aria-hidden="true"></span>'.repeat(16)}</div><div class="g2048-checkpoint-tools"><button id="checkpoint-save-2048" data-action="checkpointSave2048">局面を保存</button><button id="checkpoint-load-2048" data-action="checkpointLoad2048">局面に戻る</button><button id="checkpoint-delete-2048" data-action="checkpointDelete2048">保存を削除</button></div><p>保存は1枠。復帰しても最高点は残ります。復帰自体も「戻す」で取り消せます。</p></div>
+  </details>
+  <details class="g2048-settings"><summary>見た目とプレイ記録</summary><fieldset><legend>タイルの素材</legend>${[['ceramic','陶器'],['aurora','オーロラ']].map(([v,label])=>`<button data-action="theme2048" data-value="${v}" aria-pressed="${prefs2048.theme===v}">${label}</button>`).join('')}</fieldset><fieldset><legend>モーションの速さ</legend>${[['smooth','なめらか'],['quick','きびきび']].map(([v,label])=>`<button data-action="speed2048" data-value="${v}" aria-pressed="${prefs2048.speed===v}">${label}</button>`).join('')}</fieldset><p>「動きを抑える」設定と端末の動き軽減を優先します。</p><dl><div><dt>自己最大タイル</dt><dd id="record-tile-2048">2</dd></div><div><dt>最多連続合体</dt><dd><span id="record-combo-2048">0</span> 手</dd></div></dl><p>連続合体は演出・記録のみ。追加の得点倍率はありません。取り消し・やり直しは合計32手分を自動保存。再読み込み後も続けられます。</p></details>
   <button class="g2048-save" id="save-2048" data-action="save2048" aria-label="進行状況を保存し直す">端末に自動保存</button>
  </div>`);
  paint2048();save2048();render2048(recoveryNotice2048?'保存された盤面を読み込めなかったため、新しい盤面で開始しました。':'');recoveryNotice2048=false;
@@ -227,6 +283,32 @@ A.actions.save2048=()=>{if(!active2048())return;save2048();render2048(saveOK2048
 A.actions.restart2048=()=>{if(!active2048())return;pending2048=null;A.confirm('新しい2048をはじめる','現在の盤面と取り消し履歴をリセットします。最高点・自己記録・見た目の設定は残ります。',()=>{
  if(!active2048())return;stopMotion2048();tiles=Array(16).fill(0);score=0;turns2048=0;combo2048=0;peakCombo2048=0;continued2048=false;history2048=[];future2048=[];seed2048=Math.floor(Math.random()*2**32);clearHint2048();spawn();spawn();save2048();paint2048();render2048('新しい盤面です。2048を目指しましょう。');
 });};
+function checkpointReady2048(){return active2048()&&!busy2048&&$('#overlay').hidden;}
+A.actions.checkpointSave2048=()=>{
+ if(!checkpointReady2048())return;pending2048=null;
+ const store=()=>{
+  if(!checkpointReady2048())return;const next={state:snapshot2048(),savedAt:Date.now()};
+  if(A.save('2048checkpoint',next)){checkpoint2048=next;render2048('局面を保存しました。あとで同じ状態から再開できます。');}
+  else render2048('局面の保存に失敗しました。以前に保存した局面は変更していません。');
+ };
+ if(checkpoint2048)A.confirm('保存した局面を置き換える？','保存は1枠です。以前の保存局面は、この局面に置き換わります。',store);else store();
+};
+A.actions.checkpointLoad2048=()=>{
+ if(!checkpointReady2048()||!checkpoint2048)return;pending2048=null;
+ A.confirm('保存した局面に戻る？','盤面・得点・手数を保存時点に戻します。最高点は残ります。復帰後の「戻す」で現在の局面へ戻れます。',()=>{
+  if(!checkpointReady2048()||!checkpoint2048)return;
+  stopMotion2048();history2048.push(snapshot2048());if(history2048.length>32)history2048.shift();future2048=[];
+  restore2048(checkpoint2048.state);clearHint2048();save2048();paint2048();render2048('保存した局面に戻りました。「戻す」で復帰前に戻れます。');
+ });
+};
+A.actions.checkpointDelete2048=()=>{
+ if(!checkpointReady2048()||!checkpoint2048)return;
+ A.confirm('保存した局面を削除する？','現在プレイしている盤面・得点・取り消し履歴は変更しません。',()=>{
+  if(!checkpointReady2048())return;
+  if(A.save('2048checkpoint',null)){checkpoint2048=null;render2048('保存した局面を削除しました。');}
+  else render2048('保存した局面を削除できませんでした。');
+ });
+};
 function preference2048(key,value){
  const allowed=key==='theme'?['ceramic','aurora']:['smooth','quick'];if(!active2048()||!allowed.includes(value))return;
  prefs2048[key]=value;const saved=A.save('2048preferences',prefs2048);
@@ -526,7 +608,7 @@ function gardenArt(symbol){const content={
 function renderMemory(){if(!$('#memory-board'))return;$('#memory-board').innerHTML=cards.map((s,i)=>{const visible=flipped.includes(i)||matched.includes(i);return `<button class="memory-card ${visible?'flipped':''} ${matched.includes(i)?'matched':''}" data-action="memoryFlip" data-index="${i}" aria-label="${matched.includes(i)?'一致したカード':visible?s:'裏向きのカード '+(i+1)}" ${matched.includes(i)?'disabled':''}><span style="${visible?'color:'+colors[symbols.indexOf(s)]:''}">${gardenArt(visible?s:'back')}</span></button>`;}).join('');$('#memory-moves').textContent=memoryMoves;$('#memory-pairs').textContent=matched.length/2;}
 function flipCard(index){if(memoryBusy||flipped.includes(index)||matched.includes(index))return;if(!memoryStart)memoryStart=Date.now();flipped.push(index);A.haptic();renderMemory();if(flipped.length===2){memoryMoves++;const [a,b]=flipped;if(cards[a]===cards[b]){matched.push(a,b);flipped=[];renderMemory();if(matched.length===16){const elapsed=Math.floor((Date.now()-memoryStart)/1000);memoryBest=memoryBest?Math.min(memoryBest,memoryMoves):memoryMoves;A.save('memoryBest',memoryBest);$('#memory-status').textContent=`お庭が完成！ ${memoryMoves}手・${elapsed}秒でクリア。`;$('#memory-best').textContent=`BEST ${memoryBest} MOVES`;A.toast('すべてのペアが見つかりました ✿');}else $('#memory-status').textContent='';}else{memoryBusy=true;renderMemory();$('#memory-status').textContent='';memoryTimeout=setTimeout(()=>{flipped=[];memoryBusy=false;if(gamePage==='memory')renderMemory();},800);}}}
 A.actions.memoryFlip=el=>flipCard(+el.dataset.index);A.actions.memoryRestart=()=>{resetMemory();renderMemory();$('#memory-time').textContent='00:00';$('#memory-status').textContent='あせらず、ひとつずつ。';};
-A.actions.gameHelp=()=>{const help=gamePage==='2048'?['2048 の遊び方','盤面を上下左右にスワイプすると、すべてのタイルが動きます。同じ数字がぶつかると合体し、数字が2倍になります。','合体した数字がスコアに加算されます。2048をつくった後も続けられます。動かせなくなったら終了です。','スワイプ・矢印キー・WASD・方向ボタンで操作。Zで戻す、YまたはShift+Zでやり直します。直近32手まで取り消せます。取り消し後に別の手を進めると、やり直し履歴は消えます。', 'ヒントは新タイルの出現と次の一手を評価した目安で、勝利を保証しません。連続合体に得点倍率はなく、合体した数字だけが得点になります。', '盤面・得点・手数・連続合体・達成後の続行状態を自動保存します。取り消し／やり直し履歴はページを再読み込みすると消えます。最高点と自己記録は取り消しても残ります。見た目と速さは「見た目とプレイ記録」から変更できます。']:gamePage==='snake'?['Little Snake の遊び方','スタートを押し、スワイプ・矢印キー・画面の方向ボタンでヘビを動かします。小さな実を食べると10点獲得します。','壁や自分の体にぶつかると終了です。来た方向へすぐに逆走することはできません。','アプリを離れると一時停止します。スペースキーでも一時停止できます。']:['Memory Garden の遊び方','カードを2枚めくり、同じ絵柄のペアを探しましょう。一致したカードは表向きのまま残ります。','8組のペアが揃えばクリア。2枚めくるたびに1手として数えます。少ない手数でのクリアに挑戦してください。','ハイスコアは最少手数です。アプリを開き直すと新しいお庭になります。'];A.overlay(`${A.overlayTitle(help[0])}<div class="about-copy">${help.slice(1).map(p=>`<p style="margin:22px 0">${p}</p>`).join('')}</div><button class="control-tile" data-action="closeOverlay" style="width:100%;margin-top:30px">遊んでみる</button>`);};
+A.actions.gameHelp=()=>{const help=gamePage==='2048'?['2048 の遊び方','盤面を上下左右にスワイプすると、すべてのタイルが動きます。同じ数字がぶつかると合体し、数字が2倍になります。','合体した数字がスコアに加算されます。2048をつくった後も続けられます。動かせなくなったら終了です。','スワイプ・矢印キー・WASD・方向ボタンで操作。Zで戻す、YまたはShift+Zでやり直します。直近32手まで取り消せます。取り消し後に別の手を進めると、やり直し履歴は消えます。', 'ヒントは新タイルの出現と次の一手を評価した目安で、勝利を保証しません。連続合体に得点倍率はなく、合体した数字だけが得点になります。', '盤面・得点・手数・連続合体・達成後の続行状態を自動保存します。取り消し／やり直し履歴は合計32手分を自動保存し、再読み込み後も復元します。「一手の予測と局面の保存」では4方向の比較と、好きな局面1つの保存・復帰ができます。最高点と自己記録は取り消しても残ります。見た目と速さは「見た目とプレイ記録」から変更できます。']:gamePage==='snake'?['Little Snake の遊び方','スタートを押し、スワイプ・矢印キー・画面の方向ボタンでヘビを動かします。小さな実を食べると10点獲得します。','壁や自分の体にぶつかると終了です。来た方向へすぐに逆走することはできません。','アプリを離れると一時停止します。スペースキーでも一時停止できます。']:['Memory Garden の遊び方','カードを2枚めくり、同じ絵柄のペアを探しましょう。一致したカードは表向きのまま残ります。','8組のペアが揃えばクリア。2枚めくるたびに1手として数えます。少ない手数でのクリアに挑戦してください。','ハイスコアは最少手数です。アプリを開き直すと新しいお庭になります。'];A.overlay(`${A.overlayTitle(help[0])}<div class="about-copy">${help.slice(1).map(p=>`<p style="margin:22px 0">${p}</p>`).join('')}</div><button class="control-tile" data-action="closeOverlay" style="width:100%;margin-top:30px">遊んでみる</button>`);};
 // Pure mechanics are exposed for regression tests; no production data hooks.
 A.gameMath={mergeLine};
 // Refresh badge counts now that every application has registered.

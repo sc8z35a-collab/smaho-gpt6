@@ -390,9 +390,15 @@
    const legal=moves(board,color),empty=board.filter(v=>!v).length;
    let nodes=0,best={index:legal[0]??null,score:0,depth:0,nodes:0,solved:false};
    if(!legal.length)return best;
-   function order(b,list,pv){return list.sort((a,z)=>rank(z)-rank(a));function rank(i){return (i===pv?10000:0)+(corners.includes(i)?2000:0)+weights[i]*5+flips(b,i,b===board?color:0).length;}}
+   function order(b,list,pv){
+    return list.map(index=>{
+     let weight=weights[index];
+     for(const c of corners)if(b[c]&&index!==c&&Math.abs(index%8-c%8)<=1&&Math.abs((index/8|0)-(c/8|0))<=1)weight=8;
+     return {index,rank:(index===pv?10000:0)+(corners.includes(index)?2000:0)+weight*5};
+    }).sort((a,z)=>z.rank-a.rank).map(item=>item.index);
+   }
    function* negamax(b,side,depth,alpha,beta){
-    nodes++;if((nodes&63)===0){yield null;if(performance.now()>=deadline)throw timeout;}
+    nodes++;if((nodes&31)===0){yield null;if(performance.now()>=deadline)throw timeout;}
     const key=b.join('')+side,entry=table.get(key),a0=alpha,b0=beta;
     if(entry&&entry.depth>=depth){if(entry.flag===0)return entry.value;if(entry.flag===1)alpha=Math.max(alpha,entry.value);else beta=Math.min(beta,entry.value);if(alpha>=beta)return entry.value;}
     const available=moves(b,side);
@@ -494,7 +500,7 @@
   for(let i=reversi.frames.length-2;i>=0;i--)if(reversi.mode==='local'||reversi.frames[i].turn===reversi.human)return i;
   return -1;
  }
- function rvCanPlay(){return !rvBusy&&!rvAnimating&&rvReview<0&&!reversi.over&&!document.hidden&&(reversi.mode==='local'||reversi.turn===reversi.human);}
+ function rvCanPlay(){return current==='reversi'&&$('#overlay').hidden&&!rvBusy&&!rvAnimating&&rvReview<0&&!reversi.over&&!document.hidden&&(reversi.mode==='local'||reversi.turn===reversi.human);}
  function rvSearch(board,turn,level,done){
   rvSearchCancel?.();let worker=null,url=null,halted=false,fallingBack=false,watchdog=0;
   const disposeWorker=()=>{if(worker){worker.onmessage=null;worker.onerror=null;worker.terminate();worker=null;}if(url){URL.revokeObjectURL(url);url=null;}};
@@ -544,6 +550,7 @@
   const r=reversi,view=rvReview>=0?r.frames[rvReview]:r,legal=rvEngine.moves(view.board,view.turn),canPlay=rvCanPlay(),animate=before&&!rvReduced();
   root.classList.toggle('rv-instant',!animate);root.setAttribute('aria-busy',String(rvBusy));
   const preview=rvPreview>=0&&canPlay?rvEngine.flips(view.board,rvPreview,view.turn):[];
+  $('#reversi-preview').textContent=preview.length?`${rvCoordinate(rvPreview)} · ${preview.length}枚を裏返せます`:'座標を選んで着手。矢印キーでも移動できます';
   [...root.children].forEach((cell,i)=>{
    const v=view.board[i],was=before?.[i],isLegal=canPlay&&legal.includes(i),disc=cell.querySelector('.reversi-disc');
    cell.dataset.value=v;cell.classList.toggle('rv-legal',isLegal&&r.showLegal);cell.classList.toggle('rv-last',view.last===i);cell.classList.toggle('rv-best',rvHint===i&&rvReview<0);cell.classList.toggle('rv-preview',preview.includes(i));
@@ -630,7 +637,7 @@
  };
  // Retain the old action contract for existing callers.
  A.actions.reversiMode=el=>A.confirm('対戦モードを変更？','新しい対局を始めます。',()=>rvStart({...reversi,mode:el.dataset.value}));
- A.actions.reversiHelp=()=>help('Reversi · 遊び方','自分の石で一直線にはさむと相手の石が裏返ります。黒から開始し、置けない側は自動パス。両者とも置けなければ空きマスが残っていても終局です。石数バーは勝率ではありません。<br><br>候補の数字は返せる枚数。マウス／キーボードフォーカスで返る石を強調します。金の輪は直前の着手、金の候補はヒントです。候補OFFでも合法手には置けます。<br><br>「待った」はNPCの応手も含め自分の着手前へ（2人対戦は一手）。思考中も取り消せますが、終局後は戦績の重複を避けるため棋譜の閲覧のみです。ヒント・待った使用の対局もNPC戦績に含みます。<br><br>「棋譜」で保存された手順を往復。「対局へ戻る」で再開。古い保存データは移行後の手順から記録します。盤面・棋譜は端末内に自動保存。音声・通信・追加画像素材は使用しません。');
+ A.actions.reversiHelp=()=>help('Reversi · 遊び方','自分の石で一直線にはさむと相手の石が裏返ります。黒から開始し、置けない側は自動パス。両者とも置けなければ空きマスが残っていても終局です。石数バーは勝率ではありません。<br><br>候補の数字は返せる枚数。マウス／キーボードフォーカスで返る石を強調します。金の小さな印は直前の着手、金の候補はヒントです。候補OFFでも合法手には置けます。<br><br>「待った」はNPCの応手も含め自分の着手前へ（2人対戦は一手）。思考中も取り消せますが、終局後は戦績の重複を避けるため棋譜の閲覧のみです。ヒント・待った使用の対局もNPC戦績に含みます。<br><br>「棋譜」で保存された手順を往復。「対局へ戻る」で再開。古い保存データは移行後の手順から記録します。盤面・棋譜は端末内に自動保存。音声・通信・追加画像素材は使用しません。');
 
  // Orbit Breaker: 120 Hz simulation, swept collisions and interpolated HiDPI rendering.
  const orbitModes={
