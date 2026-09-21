@@ -131,11 +131,11 @@
     const options=Object.entries(units[conversion.category].units).map(([id,[label]])=>[id,label]);
     page('converter',`${select('種類','unit-category',Object.entries(units).map(([id,x])=>[id,x.name]),conversion.category)}
       <div class="ev-converter">${field('数値','unit-value',conversion.value,'number','step="any"')}${select('変換元','unit-from',options,conversion.from)}
-      ${button('evUnitSwap','↑↓ 入れ替え')}${select('変換先','unit-to',options,conversion.to)}
+      ${iconButton('evUnitSwap','単位を入れ替え','converter')}${select('変換先','unit-to',options,conversion.to)}
       <output id="ev-unit-result" aria-live="polite"></output><p class="ep-muted" id="ep-unit-hint"></p>
-      <div class="ep-actions">${button('evUnitCopy','結果をコピー')}${button('epConversionRecord','履歴に残す')}</div></div>
+      <div class="ep-actions">${button('evUnitCopy','コピー')}${button('epConversionRecord','保存')}</div></div>
       ${details('よく使う換算',button('epConversionPreset','この換算を登録')+conversionSaved('conversionPresets','epConversionUsePreset','epConversionRemovePreset'))}
-      ${details('履歴（30件まで）',conversionSaved('conversionHistory','epConversionUseHistory','epConversionRemoveHistory'))}
+      ${details('履歴',conversionSaved('conversionHistory','epConversionUseHistory','epConversionRemoveHistory'))}
       ${details('表示',select('有効数字','unit-precision',[[4,'4桁'],[8,'8桁'],[12,'12桁']],precision))}`);
     $('#ep-unit-category').onchange=e=>A.actions.evUnitCategory({dataset:{id:e.target.value}});
     ['value','from','to'].forEach(key=>$('#ep-unit-'+key).oninput=e=>{conversion[key]=e.target.value;updateConversion();});
@@ -166,7 +166,7 @@
   // Reminder studio: keep one canonical model for Today, search and exports.
   let reminderFilter='pending',reminderSort='priority',reminderQuery='',reminderList='*';
   let reminderDraft='',reminderDraftDue='',reminderUndo=null;
-  let reminderSelecting=false,reminderSelected=new Set(),reminderCompact=A.load('reminderCompact',false)===true;
+  let reminderSelecting=false,reminderSelected=new Set(),reminderCompact=A.load('reminderCompact',true)===true;
   const reminders=()=>A.reminderModel.get();
   const reminderLists=()=>[...new Set(reminders().map(x=>x.list).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
   const repeatLabel=x=>x.repeat==='daily'?'毎日':x.repeat==='weekly'?'毎週':'';
@@ -224,17 +224,17 @@
     }).join(''):`<div class="rm-empty">${A.icon('check')}<h3>${reminderQuery?'見つかりませんでした':reminderList!=='*'?'このリストに該当するタスクはありません':reminderFilter==='today'?'今日までのタスクは完了':reminderFilter==='done'?'これから、ひとつずつ':'すっきり、何もありません'}</h3><p>${reminderQuery?'別の言葉で検索するか、条件をリセット。':'新しいタスクは上の入力欄から追加できます。'}</p>${button('rmResetFilters','すべてのタスクを見る')}</div>`;
   }
   function renderReminders() {
-    const list=reminders(),done=list.filter(x=>x.done).length,todayCount=list.filter(x=>matchesReminder(x,'today')).length,percent=list.length?Math.round(done/list.length*100):0;
+    const list=reminders(),done=list.filter(x=>x.done).length,percent=list.length?Math.round(done/list.length*100):0;
     const filters=[['pending','未完了'],['all','すべて'],['done','完了']];
     const smart=[['today','今日まで','calendar'],['upcoming','7日以内','clock'],['priority','優先','star']];
     const lists=reminderLists();if(reminderList!=='*'&&reminderList!==''&&!lists.includes(reminderList))reminderList='*';
-    page('reminders',`<header class="rm-hero"><div><p class="rm-eyebrow">${esc(new Date().toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'}))}</p><h1>ひとつずつ、<br>軽やかに。</h1><p class="rm-hero-copy">${todayCount?`今日までのタスク、あと <b>${todayCount}</b> 件。`:'今日も、自分のペースで。'}</p><span class="rm-progress-label">${done} / ${list.length} 件を完了</span></div>${reminderArt(percent)}</header>
+    page('reminders',`<header class="rm-hero"><div><p class="rm-eyebrow">${esc(new Date().toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'}))}</p><span class="rm-progress-label">${done} / ${list.length} 完了</span></div>${reminderArt(percent)}</header>
       <div class="rm-smart" aria-label="スマートリスト">${smart.map(([id,label,icon])=>`<button data-action="reminderFilter" data-id="${id}" aria-pressed="${reminderFilter===id}"><span>${A.icon(icon)}${label}</span><strong>${list.filter(x=>matchesReminder(x,id)).length}</strong></button>`).join('')}</div>
-      <form class="rm-compose" id="reminder-form"><div><input name="text" required maxlength="100" placeholder="何をしますか？" aria-label="タスクを追加" autocomplete="off" value="${esc(reminderDraft)}"><button type="submit" aria-label="タスクを追加">${A.icon('plus')}</button></div><div class="rm-date-chips" aria-label="新しいタスクの期限">${[['','期限なし'],[day(),'今日'],[shiftDay(day(),1),'明日']].map(([value,label])=>`<button type="button" data-action="rmQuickDue" data-id="${value}" aria-pressed="${reminderDraftDue===value}">${label}</button>`).join('')}<button type="button" class="rm-more" data-action="reminderDetails">詳細設定</button></div></form>
+      <form class="rm-compose" id="reminder-form"><div><input name="text" required maxlength="100" placeholder="タスクを追加" aria-label="タスクを追加" autocomplete="off" value="${esc(reminderDraft)}"><button type="submit" aria-label="タスクを追加">${A.icon('plus')}</button></div><div class="rm-date-chips" aria-label="新しいタスクの期限">${[['','期限なし'],[day(),'今日'],[shiftDay(day(),1),'明日']].map(([value,label])=>`<button type="button" data-action="rmQuickDue" data-id="${value}" aria-pressed="${reminderDraftDue===value}">${label}</button>`).join('')}<button type="button" class="rm-more" data-action="reminderDetails">詳細設定</button></div></form>
       ${A.search('ep-reminder-query','タスク・メモ・手順を検索')}
       <div class="rm-toolbar"><div class="rm-tabs" aria-label="表示するタスク">${filters.map(([id,label])=>`<button data-action="reminderFilter" data-id="${id}" aria-pressed="${reminderFilter===id}">${label}</button>`).join('')}</div><label class="rm-sort"><span class="rm-sr">グループ内の並び順</span><select id="ep-reminder-sort" aria-label="グループ内の並び順">${[['priority','優先度順'],['due','期限順'],['name','名前順']].map(([id,label])=>`<option value="${id}" ${reminderSort===id?'selected':''}>${label}</option>`).join('')}</select></label></div>
       <div class="rm-list-heading"><h2 id="rm-list-heading" tabindex="-1">${[...filters,...smart].find(x=>x[0]===reminderFilter)?.[1]||'タスク'} <span id="rm-result-count" aria-live="polite"></span></h2><label><span class="rm-sr">リストで絞り込み</span><select id="rm-list-filter" aria-label="リストで絞り込み">${[['*','全リスト'],['','未分類'],...lists.map(x=>[x,x])].map(([id,label])=>`<option value="${esc(id)}" ${reminderList===id?'selected':''}>${esc(label)}</option>`).join('')}</select></label></div>
-      <div class="rm-selection-entry"><button type="button" data-action="rmSelectionMode" aria-pressed="${reminderSelecting}">${reminderSelecting?'選択を終了':'タスクを選択'}</button><span>${reminderSelecting?'表示中のタスクだけをまとめて操作':'選択して、まとめて整理'}</span></div>
+      <div class="rm-selection-entry"><button type="button" data-action="rmSelectionMode" aria-pressed="${reminderSelecting}">${reminderSelecting?'選択を終了':'タスクを選択'}</button>${reminderSelecting?'<span>表示中のみ対象</span>':''}</div>
       <div id="rm-batch-tools"></div><div id="ep-reminder-results"></div>
       ${details('整理と共有',button('rmBulkAdd','まとめて追加')+button('rmCompact',reminderCompact?'ゆったり表示にする':'コンパクト表示にする')+button('shareReminders','全タスクを共有')+button('exportReminders','全タスクを書き出す')+(done?button('reminderClearDone','完了済みを削除'):''))}
       ${details('キーボード操作','<p class="rm-footnote">N：追加欄へ · /：検索へ<br>Ctrl / ⌘ + Enter：詳細を保存<br>Esc：選択を終了（選択中のみ）</p>')}
@@ -356,7 +356,7 @@
   A.actions.rmDatePreset=el=>{const input=$('#ep-due');input.value=el.dataset.id;input.dispatchEvent(new Event('input',{bubbles:true}));};
   A.actions.reminderDetails=(el={dataset:{}})=>{
     const x=reminders().find(x=>x.id===el.dataset.id);
-    A.form(x?'タスクを編集':'新しいリマインダー',field('タスク','text',x?.text||reminderDraft,'text','required maxlength="100" placeholder="何をしますか？"')+
+    A.form(x?'タスクを編集':'新しいリマインダー',field('タスク','text',x?.text||reminderDraft,'text','required maxlength="100" placeholder="タスクを追加"')+
       field('期限','due',x?.due??reminderDraftDue,'date','min="0001-01-01" max="9999-12-31"')+
       `<div class="rm-date-presets">${[[day(),'今日'],[shiftDay(day(),1),'明日'],[shiftDay(day(),7),'1週間後'],['','期限なし']].map(([id,label])=>button('rmDatePreset',label,id)).join('')}</div>`+
       `<div class="rm-form-options">${select('優先度','priority',[['0','通常'],['1','優先']],x?.priority?'1':'0')}${select('繰り返し','repeat',[['','なし'],['daily','毎日'],['weekly','毎週']],x?.repeat||'')}</div>`+
@@ -406,15 +406,15 @@
     const minutes=rows('focusHistory').filter(x=>x.date===dashboardDay).reduce((n,x)=>n+x.minutes,0),checked=habits.filter(x=>x.days.includes(dashboardDay)).length;
     const shopping=rows('shopping').filter(x=>!x.done),books=rows('reading').filter(x=>x.page>0&&x.page<x.total);
     page('today',`<div class="ev-date-switch">${button('epTodayMove','‹','-1','aria-label="前の日"')}<input type="date" id="ep-today-date" value="${dashboardDay}" aria-label="表示日">${button('epTodayMove','›','1','aria-label="次の日"')}</div>
-      ${dashboardDay!==day()?button('epTodayReset','今日に戻る'):''}<div class="ev-heading"><span>${new Date(dashboardDay+'T12:00:00').toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'})}</span><h1>${dashboardDay===day()?'今日':'この日のまとめ'}</h1></div>
-      <div class="ev-metrics"><button data-app="focus"><strong>${minutes}<small>分</small></strong><span>集中</span></button><button data-app="habits"><strong>${checked}<small>/${habits.length}</small></strong><span>習慣</span></button><button data-app="reminders"><strong>${tasks.length}</strong><span>未完了タスク</span></button></div>
-      <p class="ep-muted">未完了：表示日までの期限・期限なし</p>
+      ${dashboardDay!==day()?button('epTodayReset','今日に戻る'):''}<div class="ev-heading"><span>${new Date(dashboardDay+'T12:00:00').toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'})}</span></div>
+      <div class="ev-metrics"><button data-app="focus"><strong>${minutes}<small>分</small></strong><span>集中</span></button><button data-app="habits"><strong>${checked}<small>/${habits.length}</small></strong><span>習慣</span></button><button data-app="reminders"><strong>${tasks.length}</strong><span>タスク</span></button></div>
+      <p class="ep-muted">表示日まで＋期限なし</p>
       <button class="ev-focus-link" data-app="focus">${A.icon('focus')}<span>集中する</span>${A.icon('arrow')}</button>
-      <button class="ep-intention" data-action="epTodayIntention"><small>この日のひとこと</small><strong>${esc(rows('dailyIntentions').find(x=>x.date===dashboardDay)?.text||'大切にしたいことを一つ書く')}</strong></button>
+      <button class="ep-intention" data-action="epTodayIntention"><small>この日のひとこと</small><strong>${esc(rows('dailyIntentions').find(x=>x.date===dashboardDay)?.text||'＋ ひとこと')}</strong></button>
       ${section('予定',iconButton('evTodayEvent','予定を追加','plus')+`<div class="ev-card">${events.map(x=>`<button class="ev-timeline" data-action="epTodayEvent" data-id="${esc(x.id)}"><time>${esc(x.time)}</time><span><strong>${esc(x.title)}</strong><small>${esc(x.place)}</small></span>${A.icon('arrow')}</button>`).join('')||empty('予定はありません')}</div>`)}
       ${section('タスク',iconButton('evTodayTask','タスクを追加','plus')+`<div class="ev-card">${tasks.slice(0,8).map(x=>`<div class="ev-row"><button class="check-circle" data-action="evTodayCheck" data-id="${esc(x.id)}" aria-label="${esc(x.text)}を完了"></button><button class="ev-grow ev-plain" data-action="epTodayTask" data-id="${esc(x.id)}"><strong>${esc(x.text)}</strong><small>${esc(x.due||'期限なし')}${x.due&&x.due<dashboardDay?' · 期限超過':''}</small></button></div>`).join('')||empty('すべて完了')}</div>${tasks.length>8?'<button class="ep-button" data-app="reminders">すべてのタスクを見る</button>':''}`)}
-      ${details('この日から7日間の予定',Array.from({length:7},(_,i)=>{const date=shiftDay(dashboardDay,i),items=A.todayEvents(date);return `<button class="ep-outlook" data-action="epTodaySelect" data-id="${date}"><time>${esc(date.slice(5))}</time><span>${items.length?esc(items[0].title):'予定なし'}</span><strong>${items.length}件</strong></button>`;}).join(''))}
-      ${section('買い物の残り（現在）',`<button class="ep-summary" data-app="shopping"><strong>${shopping.length}品</strong><span>予定額 ${money(shopping.reduce((n,x)=>n+x.quantity*x.price,0))}</span><small>すべてのリストの未購入品</small></button>`)}
+      ${details('7日間の予定',Array.from({length:7},(_,i)=>{const date=shiftDay(dashboardDay,i),items=A.todayEvents(date);return `<button class="ep-outlook" data-action="epTodaySelect" data-id="${date}"><time>${esc(date.slice(5))}</time><span>${items.length?esc(items[0].title):'予定なし'}</span><strong>${items.length}件</strong></button>`;}).join(''))}
+      ${section('買い物の残り（現在）',`<button class="ep-summary" data-app="shopping"><strong>${shopping.length}品</strong><span>予定額 ${money(shopping.reduce((n,x)=>n+x.quantity*x.price,0))}</span><small>全リスト</small></button>`)}
       ${section('読書の続き（現在）',books.slice(0,3).map(x=>`<button class="ep-summary" data-action="epTodayBook" data-id="${esc(x.id)}"><strong>${esc(x.title)}</strong><span>${x.page} / ${x.total}ページ · 残り${x.total-x.page}ページ</span></button>`).join('')||'<button class="ep-button" data-app="reading">本棚を開く</button>')}
       ${section('よく使う',`<div class="ev-quick-grid">${['journal','shopping','expenses','reading'].map(id=>`<button data-app="${id}">${A.icon(id)}<span>${A.apps[id].name}</span></button>`).join('')}</div>`)}`,
       iconButton('epTodayExport','この日のまとめを書き出す','download'));
@@ -449,9 +449,9 @@
     if(!shoppingLists().some(x=>x.id===shoppingList))shoppingList='default';
     const list=listItems(),pending=list.filter(x=>!x.done),purchased=list.filter(x=>x.done),total=items=>items.reduce((n,x)=>n+x.price*x.quantity,0),budget=shoppingBudget(),combined=total(list);
     page('shopping',`<div class="ev-list-picker"><select id="ev-shopping-list" aria-label="買い物リスト">${shoppingLists().map(x=>`<option value="${esc(x.id)}" ${x.id===shoppingList?'selected':''}>${esc(x.name)}</option>`).join('')}</select>${iconButton('evShoppingListNew','リストを追加','plus')}${iconButton('evShoppingListEdit','リストを編集','edit')}</div>
-      <div class="ev-hero sand"><span>買うもの</span><strong>${pending.length}<small>品</small></strong><span>未購入の予定額 ${money(total(pending))}</span><div class="ev-hero-foot"><span>購入済み ${money(total(purchased))}</span><span>全品合計 ${money(combined)}</span></div></div>
-      <button class="ev-budget" data-action="epShoppingBudget"><span>このリストの予算</span><strong>${budget?money(budget):'設定する'}</strong></button>
-      ${budget?`<p class="ep-budget-state ${combined>budget?'ep-over':''}">${combined>budget?'予算を '+money(combined-budget)+' 超過':'全品購入後の残り '+money(budget-combined)}</p>`:''}<p class="ep-muted">単価×数量。価格未入力は0円</p>
+      <div class="ev-hero sand"><span>買うもの</span><strong>${pending.length}<small>品</small></strong><span>予定額 ${money(total(pending))}</span><div class="ev-hero-foot"><span>購入済み ${money(total(purchased))}</span><span>全品合計 ${money(combined)}</span></div></div>
+      <button class="ev-budget" data-action="epShoppingBudget"><span>予算</span><strong>${budget?money(budget):'設定する'}</strong></button>
+      ${budget?`<p class="ep-budget-state ${combined>budget?'ep-over':''}">${combined>budget?'予算を '+money(combined-budget)+' 超過':'全品購入後の残り '+money(budget-combined)}</p>`:''}<p class="ep-muted">未入力の価格は0円</p>
       ${A.search('ep-shopping-query','このリストの品名を検索')}${tabs([['all','すべて'],['pending','未購入']],shoppingFilter,'evShoppingFilter')}
       ${details('並べ替え',select('各分類の並び順','shopping-sort',[['status','未購入を先に'],['name','名前順'],['price','合計金額が高い順']],shoppingSort))}
       <div id="ep-shopping-results"></div>${shoppingUndo?`<div class="ep-undo" role="status"><span>${shoppingUndo.length}品を削除しました</span>${button('epShoppingUndo','元に戻す')}</div>`:''}
@@ -513,7 +513,7 @@
     if(A.save('shopping',[...list,...restored])){if(restored.length)shoppingList=restored[0].listId;shoppingQuery='';shoppingFilter='all';shoppingUndo=null;renderShopping();A.toast('元に戻済み');}
   };
   A.actions.evShoppingShare=()=>download(listName().replace(/[\\/:*?"<>|]/g,'_')+'.txt',listItems().map(x=>`${x.done?'☑':'☐'} ${x.name} ×${x.quantity} ${money(x.price*x.quantity)}`).join('\n'));
-  A.actions.epShoppingBudget=()=>A.form('このリストの予算',field('金額（円）・0で解除','amount',shoppingBudget(),'number','required min="0" max="999999999" step="1"'),v=>{
+  A.actions.epShoppingBudget=()=>A.form('予算',field('金額（円）・0で解除','amount',shoppingBudget(),'number','required min="0" max="999999999" step="1"'),v=>{
     if(!integer(v.amount,0,999999999))return false;return put('shoppingBudgets',{id:shoppingList,amount:Number(v.amount)},renderShopping);
   });
   A.actions.epShoppingTemplateSave=()=>{

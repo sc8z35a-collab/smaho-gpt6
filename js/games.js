@@ -127,7 +127,7 @@ function render2048(message=''){
  let goal=2048;while(goal<=high)goal*=2;
  $('#score-2048').textContent=number2048(score);$('#best-2048').textContent=number2048(best);
  $('#moves-2048').textContent=number2048(turns2048);$('#empty-2048').textContent=empty;
- $('#high-2048').textContent=number2048(high);$('#combo-2048').textContent=combo2048>1?`${combo2048} 連続合体`:'次の一手を、じっくり。';
+ $('#high-2048').textContent=number2048(high);$('#combo-2048').textContent=combo2048>1?`${combo2048} 連続合体`:'';
  $('#goal-2048').textContent=number2048(goal);$('#goal-current-2048').textContent=number2048(high);
  const progress=$('#progress-2048');progress.max=goal;progress.value=high;progress.setAttribute('aria-label',`最大タイル ${high}、次の目標 ${goal}`);
  $('#record-tile-2048').textContent=number2048(records2048.maxTile);$('#record-combo-2048').textContent=number2048(records2048.bestCombo);
@@ -242,7 +242,7 @@ function game2048(){
  stopMotion2048();
  A.view(A.nav('2048',`<button data-action="gameHelp" aria-label="遊び方">?</button>`,'gamesLibrary','ゲーム')+`
  <div class="app-content arcade-play arc-legacy arc-2048 studio-2048" data-material="${prefs2048.theme}">
-  <header class="g2048-heading"><div><span class="g2048-eyebrow">THE NUMBER ATELIER</span><h2>2048<span>.</span></h2><p>重なるたび、心地いい。</p></div><span class="g2048-seal" aria-hidden="true">2<sup>11</sup></span></header>
+  
   <div class="g2048-scores"><div><small>スコア</small><strong id="score-2048">0</strong><span id="gain-2048" aria-hidden="true"></span></div><div><small>ベスト</small><strong id="best-2048">0</strong></div></div>
   <div class="g2048-goal"><div><span>次の目標 <strong id="goal-2048">2048</strong></span><span>最大 <b id="goal-current-2048">2</b></span></div><progress id="progress-2048" value="2" max="2048"></progress></div>
   <div class="board-2048" id="board-2048" tabindex="0" role="group" aria-label="2048の盤面" aria-describedby="instructions-2048"><div class="g2048-bed" aria-hidden="true">${'<span></span>'.repeat(16)}</div><div class="g2048-layer" id="tiles-2048" aria-hidden="true"></div><div class="g2048-effects" id="effects-2048" aria-hidden="true"></div></div>
@@ -252,7 +252,7 @@ function game2048(){
   <div class="g2048-tools"><button id="undo-2048" data-action="undo2048" aria-label="一手戻す">${icon('arrow','style="transform:rotate(180deg)"')}<span>戻す <small id="undo-count-2048">0</small></span></button><button id="redo-2048" data-action="redo2048">${icon('arrow')}<span>やり直す</span></button><button id="hint-2048" data-action="hint2048">${icon('sun')}<span>ヒント</span></button><button data-action="restart2048">${icon('refresh')}<span>新しく</span></button></div>
   <p class="g2048-status" id="status-2048" role="status" aria-live="polite" aria-atomic="true"></p>
   <div class="g2048-pad" role="group" aria-label="移動方向">${[['up','↑'],['left','←'],['down','↓'],['right','→']].map(([d,s])=>`<button data-action="move2048" data-value="${d}" aria-label="${labels2048[d]}へ動かす">${s}</button>`).join('')}</div>
-  <p id="instructions-2048" class="g2048-caption">スワイプ / 矢印 / WASD<br>取り消し Z ・ やり直し Y</p>
+  <details class="ui-help"><summary>操作方法</summary><p id="instructions-2048" class="g2048-caption">スワイプ / 矢印 / WASD<br>取り消し Z ・ やり直し Y</p></details>
   <details class="g2048-settings g2048-practice"><summary>一手の予測と局面の保存</summary>
    <p>操作前に4方向を比較。新タイル1枚の出現後に残る空きマスも表示します。</p>
    <table class="g2048-forecast"><caption>次の一手の確定値（勝利確率ではありません）</caption><thead><tr><th scope="col">方向</th><th scope="col">加点</th><th scope="col">合体</th><th scope="col">空き</th></tr></thead><tbody>${directions2048.map(d=>`<tr id="forecast-2048-${d}"><th scope="row">${labels2048[d]}</th><td data-forecast="gain"></td><td data-forecast="pairs"></td><td data-forecast="space"></td></tr>`).join('')}</tbody></table>
@@ -531,8 +531,8 @@ function updateSnakeUi(){
  snakeText('snake-bonus',snake.bonus?`金の実 ${Math.max(0,Math.ceil((snake.bonus.until-snake.time)/1000))}秒`:'金の実は30点');
  const meter=$('#snake-combo-meter');if(meter)meter.style.width=(snake.mode==='rush'&&snake.combo?Math.max(0,1-(snake.time-snake.lastFruit)/6000)*100:0)+'%';
  const card=$('#snake-curtain');card.hidden=snake.running;
- snakeText('snake-curtain-title',snake.over?snake.won?'GARDEN COMPLETE':'NICE JOURNEY':snake.started?'ひとやすみ':'小さな庭、大きな冒険。');
- snakeText('snake-curtain-copy',snake.over?`${snake.score>snake.bestAtStart?'自己ベスト更新 · ':''}${snake.score}点 · 実${snake.fruit}個 · ${seconds}秒`:snake.started?'再開を押すまで、庭の時間は止まります。':'実を食べて、少しずつ長く。');
+ snakeText('snake-curtain-title',snake.over?snake.won?'GARDEN COMPLETE':'NICE JOURNEY':snake.started?'ひとやすみ':'Little Snake');
+ snakeText('snake-curtain-copy',snake.over?`${snake.score>snake.bestAtStart?'自己ベスト更新 · ':''}${snake.score}点 · 実${snake.fruit}個 · ${seconds}秒`:snake.started?'再開で続ける':'実を集めよう');
  snakeText('snake-curtain-action',snake.over?'もう一度遊ぶ':snake.started?'続きから':'庭に入る');
  snakeText('snake-record-summary',`${snakeModes[snake.mode].label} · ${r.plays}回終了 · 累計${r.fruit}個 · 最長${r.length}マス`);
  const historyKey=snakeHistory.map(r=>`${r.mode}:${r.score}:${r.seconds}:${r.fruit}:${r.won}`).join('|');
@@ -622,7 +622,7 @@ function gameSnake(){
   if(!restoreSnake(saved)){resetSnake();if(saved!==null)snake.reason='保存した盤面を復元できなかったため、新しい庭を用意しました';}
  }
  A.view(A.nav('Little Snake',`<button data-action="snakeHelp" aria-label="リトルスネークの遊び方">?</button>`,'gamesLibrary','ゲーム')+`<div class="app-content snake-studio">
- <header class="snake-heading"><div><small>THE LITTLE GARDEN</small><h2>Little Snake<span>.</span></h2><p>実を集めて、自分だけの長い旅へ。</p></div><span class="snake-edition">18 × 18<br>GARDEN</span></header>
+ 
  <div class="snake-modes" role="group" aria-label="プレイモード">${Object.entries(snakeModes).map(([id,m])=>`<button data-action="snakeMode" data-value="${id}" aria-pressed="${id===snake.mode}">${m.label}</button>`).join('')}</div>
  <div class="snake-scorebar"><div><small>SCORE</small><strong id="snake-score">0</strong></div><div><small>MODE BEST</small><strong id="snake-best">0</strong></div><div><small>LEVEL</small><strong id="snake-level">1</strong></div><div><small>LENGTH</small><strong id="snake-length">4</strong></div></div>
  <div class="snake-stage"><canvas class="snake-board" id="snake-board" width="648" height="648" tabindex="0" aria-label="18行18列のスネーク盤面。矢印キーまたはWASDで操作" aria-describedby="snake-status snake-instructions">Canvasに対応したブラウザが必要です。</canvas>
@@ -633,7 +633,7 @@ function gameSnake(){
  <p class="snake-status" id="snake-status" role="status" aria-live="polite"></p>
  <div class="snake-goal"><div><span id="snake-goal"></span><small id="snake-best-note"></small></div><progress id="snake-goal-progress" max="5" value="0" aria-label="今回の成長目標の達成度"></progress></div>
  <div class="snake-pad" role="group" aria-label="方向操作">${[['up','↑','上'],['left','←','左'],['down','↓','下'],['right','→','右']].map(([id,symbol,label])=>`<button data-action="snakeDirection" data-value="${id}" aria-label="${label}へ進む">${symbol}</button>`).join('')}</div>
- <p class="snake-instructions" id="snake-instructions">スワイプ / 矢印 / WASD · Space / Pで一時停止<br>一時停止後は「再開」で続けます</p>
+ <details class="ui-help"><summary>操作方法</summary><p class="snake-instructions" id="snake-instructions">スワイプ / 矢印 / WASD · Space / Pで一時停止<br>一時停止後は「再開」で続けます</p></details>
  <p class="snake-achievement-notice" id="snake-achievement-notice" role="status" aria-live="polite"></p>
  <details class="snake-settings"><summary>庭の見た目と記録</summary><div class="snake-options"><button data-action="snakeTheme" id="snake-theme"></button><button data-action="snakeQuality" id="snake-quality"></button><button data-action="snakeGrid" id="snake-grid"></button></div><p id="snake-record-summary"></p><h3>6つの実績</h3><ul id="snake-badges" class="snake-badges"></ul><h3>最近の8プレイ</h3><ol id="snake-history"></ol><div class="snake-save-row"><p id="snake-save-status" role="status"></p><button data-action="snakeSave">今すぐ保存</button></div><p class="snake-save-note">盤面も端末内に自動保存。再読み込み後は一時停止から再開できます。保存は1プレイ分です。</p></details></div>`);
  snakeCanvas=$('#snake-board');const canvas=snakeCanvas;
@@ -695,7 +695,7 @@ const symbols=['✿','☀','☾','♧','♡','✦','☁','♫'];const colors=['#
 let cards=[],flipped=[],matched=[],memoryMoves=0,memoryBusy=false,memoryTimeout=null,memoryBest=A.load('memoryBest',0),memoryStart=0,memorySeconds=0,memoryClock=null;
 function shuffle(list){for(let i=list.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[list[i],list[j]]=[list[j],list[i]];}return list;}
 function resetMemory(){clearTimeout(memoryTimeout);cards=shuffle([...symbols,...symbols]);flipped=[];matched=[];memoryMoves=0;memoryBusy=false;memoryStart=0;memorySeconds=0;}
-function gameMemory(){resetMemory();gameCleanups.push(()=>{clearTimeout(memoryTimeout);clearInterval(memoryClock);memoryBusy=false;});A.view(A.nav('Memory Garden',`<button data-action="gameHelp" aria-label="遊び方">?</button>`,'gamesLibrary','ゲーム')+`<div class="app-content"><div class="game-heading"><h2 style="font-size:28px;color:#9a88ac">Memory Garden<span style="font-size:15px">.</span></h2></div><p class="game-instructions" style="color:#a293ac">同じペア</p><div class="memory-meta" style="margin-top:25px"><span>MOVES <strong id="memory-moves">0</strong></span><span id="memory-time">00:00</span><span><strong id="memory-pairs">0</strong> / 8 PAIRS</span></div><div class="memory-board" id="memory-board"></div><div class="game-status" id="memory-status" style="color:#a08baa"></div><div class="game-toolbar"><button data-action="memoryRestart" style="background:#ad9abd">↻ 新しいお庭</button><span style="font-size:10px;color:#ad9abd;align-self:center" id="memory-best">BEST ${memoryBest?memoryBest+' MOVES':'—'}</span></div><p class="notes-footer"></p></div>`);renderMemory();memoryClock=setInterval(()=>{if(memoryStart&&matched.length<16){memorySeconds=Math.floor((Date.now()-memoryStart)/1000);if($('#memory-time'))$('#memory-time').textContent=`${String(Math.floor(memorySeconds/60)).padStart(2,'0')}:${String(memorySeconds%60).padStart(2,'0')}`;}},1000);}
+function gameMemory(){resetMemory();gameCleanups.push(()=>{clearTimeout(memoryTimeout);clearInterval(memoryClock);memoryBusy=false;});A.view(A.nav('Memory Garden',`<button data-action="gameHelp" aria-label="遊び方">?</button>`,'gamesLibrary','ゲーム')+`<div class="app-content"><p class="game-instructions" style="color:#a293ac">同じペア</p><div class="memory-meta" style="margin-top:25px"><span>MOVES <strong id="memory-moves">0</strong></span><span id="memory-time">00:00</span><span><strong id="memory-pairs">0</strong> / 8 PAIRS</span></div><div class="memory-board" id="memory-board"></div><div class="game-status" id="memory-status" style="color:#a08baa"></div><div class="game-toolbar"><button data-action="memoryRestart" style="background:#ad9abd">↻ 新しいお庭</button><span style="font-size:10px;color:#ad9abd;align-self:center" id="memory-best">BEST ${memoryBest?memoryBest+' MOVES':'—'}</span></div><p class="notes-footer"></p></div>`);renderMemory();memoryClock=setInterval(()=>{if(memoryStart&&matched.length<16){memorySeconds=Math.floor((Date.now()-memoryStart)/1000);if($('#memory-time'))$('#memory-time').textContent=`${String(Math.floor(memorySeconds/60)).padStart(2,'0')}:${String(memorySeconds%60).padStart(2,'0')}`;}},1000);}
 
 function gardenArt(symbol){const content={
 '✿':'<g fill="currentColor" opacity=".85"><ellipse cx="40" cy="25" rx="10" ry="16"/><ellipse cx="40" cy="55" rx="10" ry="16"/><ellipse cx="25" cy="40" rx="16" ry="10"/><ellipse cx="55" cy="40" rx="16" ry="10"/></g><circle cx="40" cy="40" r="8" fill="#e4c67e"/><circle cx="38" cy="37" r="2" fill="#fff5"/>',

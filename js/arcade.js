@@ -26,7 +26,7 @@
   return `<svg viewBox="0 0 160 140" aria-hidden="true">${shapes}</svg>`;
  }
  let category='all';
- function library(){stop();current='library';const favorites=A.load('arcadeFavorites',[]),recent=A.load('arcadeRecent',[]);const list=catalog.filter(x=>category==='all'||category==='favorites'&&favorites.includes(x[0])||category==='puzzle'&&['2048','memory','mines','sudoku','reversi'].includes(x[0])||category==='action'&&['snake','blocks','breaker'].includes(x[0]));shell('ゲーム','library',`<div class="arcade-header"><h1>Arcade<span>08</span></h1></div><button class="arcade-feature" data-action="gameOpen" data-game="${recent[0]||'breaker'}"><div><small>${recent.length?'最近のゲーム':'おすすめ'}</small><strong>${catalog.find(x=>x[0]===(recent[0]||'breaker'))?.[1]||'Orbit Breaker'}</strong><span>プレイ ${A.icon('play')}</span></div>${art(recent[0]||'breaker')}</button><div class="arcade-filters">${[['all','すべて'],['favorites','お気に入り'],['puzzle','パズル'],['action','アクション']].map(([id,label])=>`<button data-action="arcFilter" data-value="${id}" class="${category===id?'active':''}">${label}</button>`).join('')}</div><div class="arcade-grid">${list.map(([id,title,detail,tone,key])=>`<article class="arcade-card arc-${tone}"><button class="arc-favorite ${favorites.includes(id)?'active':''}" data-action="arcFavorite" data-game="${id}" aria-label="${title}をお気に入りに" aria-pressed="${favorites.includes(id)}">${A.icon('heart')}</button><button class="arcade-launch" data-action="gameOpen" data-game="${id}"><div class="arcade-art">${art(id)}</div><div class="arcade-card-copy"><h2>${title}</h2><p>${detail}</p><span>${['mines','reversi','sudoku'].includes(id)?'WIN':'BEST'} <strong>${A.load(key,0).toLocaleString()}</strong>${A.icon('arrow')}</span></div></button></article>`).join('')||'<div class="arcade-empty">♡でゲームを追加</div>'}</div>`);}
+ function library(){stop();current='library';const favorites=A.load('arcadeFavorites',[]),recent=A.load('arcadeRecent',[]);const list=catalog.filter(x=>category==='all'||category==='favorites'&&favorites.includes(x[0])||category==='puzzle'&&['2048','memory','mines','sudoku','reversi'].includes(x[0])||category==='action'&&['snake','blocks','breaker'].includes(x[0]));shell('ゲーム','library',`<button class="arcade-feature" data-action="gameOpen" data-game="${recent[0]||'breaker'}"><div><small>${recent.length?'最近のゲーム':'おすすめ'}</small><strong>${catalog.find(x=>x[0]===(recent[0]||'breaker'))?.[1]||'Orbit Breaker'}</strong><span>プレイ ${A.icon('play')}</span></div>${art(recent[0]||'breaker')}</button><div class="arcade-filters">${[['all','すべて'],['favorites','お気に入り'],['puzzle','パズル'],['action','アクション']].map(([id,label])=>`<button data-action="arcFilter" data-value="${id}" class="${category===id?'active':''}">${label}</button>`).join('')}</div><div class="arcade-grid">${list.map(([id,title,detail,tone,key])=>`<article class="arcade-card arc-${tone}"><button class="arc-favorite ${favorites.includes(id)?'active':''}" data-action="arcFavorite" data-game="${id}" aria-label="${title}をお気に入りに" aria-pressed="${favorites.includes(id)}">${A.icon('heart')}</button><button class="arcade-launch" data-action="gameOpen" data-game="${id}"><div class="arcade-art">${art(id)}</div><div class="arcade-card-copy"><h2>${title}</h2><span>${['mines','reversi','sudoku'].includes(id)?'WIN':'BEST'} <strong>${A.load(key,0).toLocaleString()}</strong>${A.icon('arrow')}</span></div></button></article>`).join('')||'<div class="arcade-empty">♡でゲームを追加</div>'}</div>`);}
  function open(id){if(!catalog.some(x=>x[0]===id))return library();stop();current=id;A.save('arcadeRecent',[id,...A.load('arcadeRecent',[]).filter(x=>x!==id)].slice(0,8));if(['2048','snake','memory'].includes(id)){legacy(id);const content=$('.app-content');content.classList.add('arcade-play','arc-legacy','arc-'+id);$('.app-screen').classList.add('arcade-screen');A.cleanups.push(stop);return;}({blocks:blocksApp,mines:minesApp,reversi:reversiApp,breaker:breakerApp,sudoku:sudokuApp})[id]();}
  A.apps.games.render=arg=>arg?open(arg):library();A.actions.gamesLibrary=library;A.actions.gameOpen=el=>open(el.dataset.game);A.actions.arcFilter=el=>{category=el.dataset.value;library();};A.actions.arcFavorite=el=>{const favorites=A.load('arcadeFavorites',[]),id=el.dataset.game;A.save('arcadeFavorites',favorites.includes(id)?favorites.filter(x=>x!==id):[...favorites,id]);library();};
  const help=(title,text)=>A.overlay(`${A.overlayTitle(title)}<div class="arc-help">${text}</div>`);
@@ -263,7 +263,7 @@
   $('#mine-theme').setAttribute('aria-label',`結晶色：${mineThemes[mineTheme]}。押すと次の色に切り替え`);
   $('#mine-quality').setAttribute('aria-label',`${mineLite?'軽量':'高精細'}描画。押すと${mineLite?'高精細':'軽量'}に切り替え`);
   $('#mine-daily').setAttribute('aria-pressed',String(!!m.day));$('#mine-free').setAttribute('aria-pressed',String(!m.day));
-  $('#mines-mode-label').textContent=m.day?`DAILY · ${m.day} · 同じ鉱脈を何度でも`:'FREE EXPLORE · 毎回、新しい鉱脈';
+  $('#mines-mode-label').textContent=m.day?`DAILY · ${m.day} · 同じ鉱脈を何度でも`:'';
   A.$$('[data-action="mineDifficulty"]').forEach(el=>{el.classList.toggle('active',el.dataset.value===m.difficulty);el.setAttribute('aria-pressed',String(el.dataset.value===m.difficulty));});
   mineHighlight(m.paused||m.over?-1:mineFocus);renderMineSave();
  }
@@ -272,7 +272,7 @@
   mineHint=-1;mineClock=performance.now();
   shell('Crystal Field','aqua',`
    <section class="crystal-game" id="mines-scene" aria-label="クリスタルフィールド">
-    <header class="crystal-hero"><div><small>CRYSTAL FIELD</small><h1>光の鉱脈を、探そう。</h1><p>数字を読み、結晶を避けて進む探索パズル</p></div><div class="crystal-emblem" aria-hidden="true">${mineGem}</div></header>
+    
     <div class="crystal-modes"><button id="mine-free" data-action="mineFree" aria-pressed="true">フリー探索</button><button id="mine-daily" data-action="mineDaily" aria-pressed="false">今日の鉱脈</button></div><p class="crystal-mode-label" id="mines-mode-label"></p>
     <div class="arc-difficulty crystal-difficulty" aria-label="難易度">${Object.entries(mineDifficulties).map(([id,[size,count]])=>`<button data-action="mineDifficulty" data-value="${id}">${mineLabels[id]}<small>${size}×${size} · 鉱石${count}</small></button>`).join('')}</div>
     <div class="arc-scorebar crystal-scores">${score('残りの旗',0,'mines-left')}${score('探索時間','00:00','mines-time')}<div><small id="mines-best-label">最短記録</small><strong id="mines-best">—</strong></div></div>
@@ -286,7 +286,7 @@
     <div class="crystal-tools"><button data-action="mineZoom" id="mine-zoom" aria-pressed="false">盤面を拡大</button><button data-action="mineQuality" id="mine-quality" aria-pressed="false">高精細描画</button><button data-action="mineRecords">成績</button><button data-action="mineRestart">新しい盤面</button></div>
     <div class="crystal-preferences"><button data-action="mineTheme" id="mine-theme">結晶色：アクア</button><button data-action="mineSound" id="mine-sound" aria-pressed="false">効果音 OFF</button></div>
     <div class="crystal-save"><span id="mines-save-status" role="status" aria-live="polite"></span><button id="mine-save-retry" data-action="mineSaveRetry" hidden>進行の保存を再試行</button></div>
-    <p class="crystal-help" id="mines-controls-help">タップで探索 · 長押し / 右クリックで旗<br>PC：矢印で移動 · Enter / Spaceで操作 · Fで旗 · Pで一時停止<br>旗を数字と同じ数だけ置き、数字をタップすると周囲を一括探索。</p>
+    <details class="ui-help"><summary>操作方法</summary><p class="crystal-help" id="mines-controls-help">タップで探索 · 長押し / 右クリックで旗<br>PC：矢印で移動 · Enter / Spaceで操作 · Fで旗 · Pで一時停止<br>旗を数字と同じ数だけ置き、数字をタップすると周囲を一括探索。</p></details>
    </section>`,iconButton('mineHelp','遊び方','document'));
   renderMines();
   const root=$('#mines-board');let hold=null,gesture=null,suppressIndex=-1,suppressUntil=0;
@@ -593,7 +593,7 @@
   rvPreview=rvCanPlay()&&reversi.showLegal?index:-1;
   const list=rvEngine.flips(reversi.board,rvPreview,reversi.turn),root=$('#reversi-board');if(!root)return;
   [...root.children].forEach((cell,i)=>cell.classList.toggle('rv-preview',list.includes(i)));
-  $('#reversi-preview').textContent=list.length?`${rvCoordinate(index)} · ${list.length}枚を裏返せます`:'座標を選んで着手。矢印キーでも移動できます';
+  $('#reversi-preview').textContent=list.length?`${rvCoordinate(index)} · ${list.length}枚を裏返せます`:'マスを選んで着手';
  }
  function renderReversi(before=null){
   const root=$('#reversi-board');if(!root)return;
@@ -601,7 +601,7 @@
   $('.rv-studio').dataset.theme=r.theme;
   if(updateMotion)root.classList.toggle('rv-instant',!animate);root.setAttribute('aria-busy',String(rvBusy));
   const preview=rvPreview>=0&&canPlay?rvEngine.flips(view.board,rvPreview,view.turn):[];
-  $('#reversi-preview').textContent=preview.length?`${rvCoordinate(rvPreview)} · ${preview.length}枚を裏返せます`:'座標を選んで着手。矢印キーでも移動できます';
+  $('#reversi-preview').textContent=preview.length?`${rvCoordinate(rvPreview)} · ${preview.length}枚を裏返せます`:'マスを選んで着手';
   [...root.children].forEach((cell,i)=>{
    const v=view.board[i],was=before?.[i],isLegal=canPlay&&legal.includes(i),disc=cell.querySelector('.reversi-disc');
    cell.dataset.value=v;cell.classList.toggle('rv-legal',isLegal&&r.showLegal);cell.classList.toggle('rv-last',view.last===i);cell.classList.toggle('rv-best',rvHint===i);cell.classList.toggle('rv-preview',preview.includes(i));
@@ -648,13 +648,13 @@
  function reversiApp(){
   if(!reversi)rvRestore();rvCancel();rvReview=-1;rvRecord();rvSave();
   const r=reversi,player=c=>r.mode==='local'?rvColor(c):c===r.human?'あなた':'NPC';
-  shell('Reversi','jade',`<section class="rv-studio" aria-label="リバーシ対局"><header class="rv-heading"><div><small>REVERSI ATELIER</small><h1>一手から、変わる。</h1></div><button data-action="reversiSettings" class="rv-settings">対局設定</button></header>
+  shell('Reversi','jade',`<section class="rv-studio" aria-label="リバーシ対局"><header class="rv-heading"><button data-action="reversiSettings" class="rv-settings">対局設定</button></header>
    <div class="rv-match"><span>${r.mode==='cpu'?'NPC · '+rvLevels[r.level]:'同じ端末で2人対戦'}</span><span>${r.mode==='cpu'?'あなたは'+rvColor(r.human):'黒が先手'}</span></div>
    <div class="reversi-score"><div id="reversi-player-1" class="rv-player"><i class="rv-score-disc black" aria-hidden="true"></i><div><small>${player(1)} · 黒</small><strong id="reversi-black">2</strong></div></div><span>VS</span><div id="reversi-player-2" class="rv-player"><div><small>${player(2)} · 白</small><strong id="reversi-white">2</strong></div><i class="rv-score-disc white" aria-hidden="true"></i></div></div>
    <div class="rv-balance" id="reversi-balance" role="img"><i id="reversi-balance-black"></i></div>
    <div class="rv-board-meta"><span id="reversi-phase"></span><span id="reversi-legal"></span></div>
    <div class="reversi-frame"><div class="rv-coordinates" aria-hidden="true">${[...'ABCDEFGH'].map(c=>`<span>${c}</span>`).join('')}</div><div class="rv-ranks" aria-hidden="true">${Array.from({length:8},(_,i)=>`<span>${i+1}</span>`).join('')}</div><div class="reversi-board" id="reversi-board" role="group" aria-label="8行8列のリバーシ盤。矢印キーで移動、EnterまたはSpaceで着手" aria-describedby="reversi-status">${Array.from({length:64},(_,i)=>`<button class="reversi-cell" data-action="reversiMove" data-index="${i}" tabindex="-1"><span class="rv-piece" aria-hidden="true"><span class="reversi-disc"><i class="rv-face black"></i><i class="rv-face white"></i></span></span><i class="reversi-hint" aria-hidden="true"></i><span class="rv-flip-count" aria-hidden="true"></span><i class="rv-last-mark" aria-hidden="true"></i></button>`).join('')}</div></div>
-   <p class="rv-preview-copy" id="reversi-preview">座標を選んで着手。矢印キーでも移動できます</p>
+   <p class="rv-preview-copy" id="reversi-preview">マスを選んで着手</p>
    <div class="rv-status-panel"><strong id="reversi-status" role="status" aria-live="polite" aria-atomic="true"></strong><span id="reversi-last"></span><small id="reversi-engine"></small></div>
    <p class="rv-coach" id="reversi-coach" hidden role="status"></p>
    <div class="rv-tools"><button id="reversi-undo" data-action="reversiUndo">待った</button><button id="reversi-hint" data-action="reversiHint">ヒント</button><button id="reversi-guides" data-action="reversiGuides">候補 ON</button><button id="reversi-review" data-action="reversiReview">棋譜</button></div>
@@ -1037,7 +1037,7 @@
   const count=v.nodes.countdown;count.hidden=!b.running||b.countdown<=0;
   text('countdown',b.countdown>0?Math.ceil(b.countdown):'');
   text('panel-title',b.over?'FLIGHT COMPLETE':b.restored?'FLIGHT SAVED':b.launched?'PAUSED':'ORBIT BREAKER');
-  text('panel-copy',b.over?`${number(b.score)} pts · STAGE ${b.stage} · ${Math.floor(b.elapsed/60)}分${Math.floor(b.elapsed%60)}秒`:'狙って、跳ね返して、星の先へ。');
+  text('panel-copy',b.over?`${number(b.score)} pts · STAGE ${b.stage} · ${Math.floor(b.elapsed/60)}分${Math.floor(b.elapsed%60)}秒`:'ブロックをすべて壊そう');
   text('panel-detail',b.over?`最大連続 ${b.maxCombo} HIT / 破壊 ${b.destroyed} 個 / ミッション ${b.missions} / ノーミス ${b.perfects}`:orbitModes[b.mode].label+' · '+(b.launched?'再開を押すまで停止します':'ドラッグ / ← → で移動'));
   text('panel-button',b.over?'もう一度プレイ':b.launched?'フライトを再開':'フライトを開始');
  }
@@ -1146,22 +1146,22 @@
  function breakerApp(){
   if(!breaker&&!orbitRestore())resetBreaker();
   shell('Orbit Breaker','night',`
-   <div class="orbit-heading"><div><small>ORBIT / DEEP SPACE ARCADE</small><h1>星の先へ。</h1></div><div class="orbit-best"><small>MODE BEST</small><strong id="breaker-best">0</strong></div></div>
+   <div class="orbit-heading"><div class="orbit-best"><small>MODE BEST</small><strong id="breaker-best">0</strong></div></div>
    <div class="orbit-toolbar"><button data-action="breakerCockpit" id="breaker-cockpit" aria-pressed="${orbitPrefs.cockpit}">${orbitPrefs.cockpit?'通常表示':'盤面重視'}</button><button data-action="breakerSave">保存して停止</button><span id="breaker-save-status" role="status"></span></div>
    <div class="orbit-options"><label>難易度<select id="breaker-mode">${Object.entries(orbitModes).map(([key,mode])=>`<option value="${key}" ${breaker.mode===key?'selected':''}>${mode.label}</option>`).join('')}</select></label><label>描画<select id="breaker-quality"><option value="high" ${orbitPrefs.quality==='high'?'selected':''}>高画質</option><option value="light" ${orbitPrefs.quality==='light'?'selected':''}>軽量</option></select></label><button data-action="breakerSound" id="breaker-sound" aria-pressed="${orbitPrefs.sound}">音 ${orbitPrefs.sound?'ON':'OFF'}</button></div>
    <div class="arc-scorebar orbit-scorebar">${score('SCORE',0,'breaker-score')}${score('LIVES',0,'breaker-lives')}${score('SECTOR',1,'breaker-stage')}${score('COMBO','×1','breaker-combo')}</div>
    <div class="orbit-sector"><span id="breaker-pattern"></span><span>残り <strong id="breaker-remaining"></strong></span></div><progress id="breaker-progress" class="orbit-progress" value="0" max="1" aria-label="ステージの破壊進捗"></progress>
    <div class="orbit-arena"><canvas id="breaker-canvas" width="360" height="500" tabindex="0" aria-label="Orbit Breakerの盤面。左右キーで移動、Spaceで発射、Pで一時停止、Fでフォーカス。" aria-describedby="breaker-instructions"></canvas>
     <div class="orbit-countdown" id="breaker-countdown" role="status" aria-label="再開カウントダウン" hidden></div>
-    <div class="orbit-panel" id="breaker-panel"><small>ORBIT FLIGHT CONTROL</small><h2 id="breaker-panel-title"></h2><p id="breaker-panel-copy"></p><p id="breaker-panel-detail"></p><button data-action="breakerToggle" id="breaker-panel-button">フライトを開始</button></div>
+    <div class="orbit-panel" id="breaker-panel"><h2 id="breaker-panel-title"></h2><p id="breaker-panel-copy"></p><p id="breaker-panel-detail"></p><button data-action="breakerToggle" id="breaker-panel-button">フライトを開始</button></div>
    </div>
    <div class="orbit-focus"><progress id="breaker-energy" value="0" max="100" aria-label="フォーカスのチャージ"></progress><button data-action="breakerFocus" id="breaker-focus">FOCUS 0%</button></div>
    <label class="orbit-aim" for="breaker-angle">発射角 <input id="breaker-angle" type="range" min="-55" max="55" step="1" value="18"><output id="breaker-angle-value" for="breaker-angle">+18°</output></label>
    <div class="arc-primary-controls"><button data-action="breakerToggle" id="breaker-toggle">開始</button><button data-action="breakerLaunch" id="breaker-launch">発射</button><button data-action="breakerRestart">リセット</button></div>
-   <div class="orbit-steer"><button data-orbit-steer="left" aria-label="パドルを左へ移動">← 左へ</button><button data-orbit-steer="right" aria-label="パドルを右へ移動">右へ →</button></div>
+   <div class="orbit-steer"><button data-orbit-steer="left" aria-label="パドルを左へ移動">←</button><button data-orbit-steer="right" aria-label="パドルを右へ移動">→</button></div>
    <div class="orbit-effects" id="breaker-effects"></div><p class="orbit-status" id="breaker-status" role="status" aria-live="polite"></p>
    <details class="orbit-missions"><summary id="breaker-mission-summary">セクターミッション</summary>${['hits','combo','collect'].map(id=>`<div><span id="breaker-mission-${id}"></span><small id="breaker-reward-${id}"></small></div>`).join('')}<p>達成ごとに加点とFOCUS +20。落球なしでクリアすると追加ボーナス。</p></details>
-   <p class="orbit-instructions" id="breaker-instructions">ドラッグ / ← →：移動 · Space：開始 / 発射<br>P：一時停止 · F：フォーカス（4秒スロー）<br>発射角は発射前に調整。Nブロックは周囲にダメージ。</p>
+   <details class="ui-help"><summary>操作方法</summary><p class="orbit-instructions" id="breaker-instructions">ドラッグ / ← →：移動 · Space：開始 / 発射<br>P：一時停止 · F：フォーカス（4秒スロー）<br>発射角は発射前に調整。Nブロックは周囲にダメージ。</p></details>
    <details class="orbit-records"><summary>フライト記録と保存について</summary><p id="breaker-record"></p><p>難易度別の記録と設定は端末内に保存。進行は10秒ごと・停止時・区切りで保存し、再読み込み後は停止状態から続けられます。保存枠は1つです。ゲーム一覧のBESTは旧記録を含む全難易度の最高点です。</p></details>`,iconButton('breakerHelp','遊び方','document'));
   const canvas=$('#breaker-canvas'),ctx=canvas.getContext('2d');
   if(!ctx){A.toast('このブラウザではCanvasを利用できません');return;}

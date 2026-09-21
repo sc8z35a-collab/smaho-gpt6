@@ -257,7 +257,7 @@
       const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'}).addTo(map);
       let failed = false;
       tiles.on('tileerror', () => { if (!failed && results.isConnected) { failed = true; results.innerHTML = stateBox('地図タイルを取得できません。通信を確認して再読み込みしてください。', 'mapRetry') + N.link('https://www.openstreetmap.org/', 'OpenStreetMapを開く'); } });
-      results.innerHTML = `<p>地図をドラッグ・ピンチして探索。地名や住所を入力すると実在する場所を検索できます。</p><p class="connected-caption">検索：Nominatim / 地図：OpenStreetMap。現在地は許可時のみ</p>`;
+      results.innerHTML = `<details class="ui-help"><summary>操作方法</summary><p>ドラッグ・ピンチで移動・拡大。地名や住所で検索。</p></details><p class="connected-caption">Nominatim / OpenStreetMap・現在地は許可時のみ</p>`;
       resize = new ResizeObserver(() => map.invalidateSize()); resize.observe(canvas); map.invalidateSize();
     } catch (error) { if (results.isConnected) results.innerHTML = stateBox(N.errorText(error), 'mapRetry'); }
   }
@@ -294,7 +294,7 @@
     };
     const root = $('#web-content');
     if (state.type === 'home') {
-      root.innerHTML = `<div class="connection-grid">${N.link('https://www.google.com/', 'Google')}${N.link('https://www.youtube.com/', 'YouTube')}${N.link('https://www3.nhk.or.jp/news/', 'NHK NEWS')}${N.link('https://ja.wikipedia.org/', 'Wikipedia')}</div><h3>履歴</h3>${browserHistory.filter(s => s.type !== 'home').slice(-10).reverse().map((s, i) => `<button class="list-row" data-history-item="${i}">${esc(s.title || s.query || s.url)}</button>`).join('') || '<p class="connected-caption">履歴なし</p>'}${button('webClearHistory', '履歴を消去')}<p class="connected-caption">検索語・URLは選択先に送信。履歴は一時保存、ブックマークは端末内</p>`;
+      root.innerHTML = `<div class="connection-grid">${N.link('https://www.google.com/', 'Google')}${N.link('https://www.youtube.com/', 'YouTube')}${N.link('https://www3.nhk.or.jp/news/', 'NHK NEWS')}${N.link('https://ja.wikipedia.org/', 'Wikipedia')}</div><h3>履歴</h3>${browserHistory.filter(s => s.type !== 'home').slice(-10).reverse().map((s, i) => `<button class="list-row" data-history-item="${i}">${esc(s.title || s.query || s.url)}</button>`).join('') || '<p class="connected-caption">履歴なし</p>'}${button('webClearHistory', '履歴を消去')}<p class="connected-caption">検索語・URLを選択先へ送信。履歴は一時保存</p>`;
       const history = browserHistory.filter(s => s.type !== 'home').slice(-10).reverse(); root.querySelectorAll('[data-history-item]').forEach(el => el.onclick = () => browserNavigate(history[Number(el.dataset.historyItem)]));
     } else if (state.type === 'url') {
       root.innerHTML = `<h2>${esc(new URL(state.url).hostname)}</h2><p class="web-url">${esc(state.url)}</p><div class="connection-toolbar">${N.link(state.url, '外部で開く', 'primary-button')}${button('webBookmark', '保存')}${button('webShare', '共有')}</div><div class="connection-card">${button('webPreview', '制限付きプレビュー')}</div><div id="web-preview"></div>`;

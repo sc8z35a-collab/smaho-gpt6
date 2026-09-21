@@ -13,7 +13,7 @@
   };
   const phoneNumber = raw => String(raw).replace(/[\s()-]/g, '');
   const validPhone = value => /^\+?[0-9]{3,15}$/.test(value);
-  const handoffNote = '<details class="ui-help"><summary>連携について</summary><p class="connected-caption">対応アプリが必要。発信・送信は移動先で確認。送受信・通話状況は取得しません。</p></details>';
+  const handoffNote = '<details class="ui-help"><summary>連携の詳細</summary><p class="connected-caption">対応アプリが必要。発信・送信は移動先で確認。送受信・通話状況は取得しません。</p></details>';
   const originals = Object.fromEntries(['phone','messages','mail','music'].map(id => [id, A.apps[id].render]));
   // Native inboxes cannot be read here; never badge them with seeded demo counts.
   A.mailUnread = () => 0; A.messageUnread = () => 0;
@@ -25,7 +25,7 @@
 
   A.apps.mail.render = () => {
     A.statusTheme(false); const draft = A.load('externalMailDraft', {}) || {};
-    A.view(A.nav('メール', button('mailDemo', 'デモ')) + `<div class="app-content"><p class="app-subtitle">送信はメールアプリで</p><form id="external-mail"><label class="form-label">宛先</label><input class="text-input" type="email" name="to" required maxlength="254" placeholder="name@example.com" value="${esc(draft.to || '')}"><label class="form-label">件名</label><input class="text-input" name="subject" maxlength="200" value="${esc(draft.subject || '')}"><label class="form-label">本文</label><textarea class="text-input" name="body" rows="7" maxlength="6000">${esc(draft.body || '')}</textarea><div class="connection-toolbar"><button class="primary-button" type="submit">作成先へ</button>${button('saveExternalDraft', '下書きを保存')}</div></form><div id="mail-handoff" aria-live="polite"></div>${handoffNote}<div class="connection-card"><h3>受信トレイ</h3><div class="connection-toolbar">${N.link('https://mail.google.com/', 'Gmail')}${N.link('https://outlook.live.com/mail/', 'Outlook')}</div><p>受信同期なし</p></div></div>`);
+    A.view(A.nav('メール', button('mailDemo', 'デモ')) + `<div class="app-content"><p class="app-subtitle">送信はメールアプリで</p><form id="external-mail"><label class="form-label">宛先</label><input class="text-input" type="email" name="to" required maxlength="254" placeholder="name@example.com" value="${esc(draft.to || '')}"><label class="form-label">件名</label><input class="text-input" name="subject" maxlength="200" value="${esc(draft.subject || '')}"><label class="form-label">本文</label><textarea class="text-input" name="body" rows="7" maxlength="6000">${esc(draft.body || '')}</textarea><div class="connection-toolbar"><button class="primary-button" type="submit">作成先へ</button>${button('saveExternalDraft', '下書き保存')}</div></form><div id="mail-handoff" aria-live="polite"></div>${handoffNote}<div class="connection-card"><h3>受信トレイ</h3><div class="connection-toolbar">${N.link('https://mail.google.com/', 'Gmail')}${N.link('https://outlook.live.com/mail/', 'Outlook')}</div><p>受信同期なし</p></div></div>`);
     $('#external-mail').onsubmit = e => {
       e.preventDefault(); if (!e.currentTarget.reportValidity()) return;
       const v = Object.fromEntries(new FormData(e.currentTarget));
@@ -50,7 +50,7 @@
     $('#external-message').oninput = () => { $('#message-handoff').textContent = ''; };
   };
   A.apps.phone.render = () => {
-    A.view(A.nav('電話', button('phoneDemo', 'デモ')) + `<div class="app-content"><form id="external-phone"><label class="form-label">電話番号</label><input id="live-phone-number" class="text-input" type="tel" name="number" required maxlength="25" placeholder="電話番号を入力" autocomplete="tel"><div class="dial-keypad" style="margin-top:20px">${['1','2','3','4','5','6','7','8','9','+','0','⌫'].map(n => `<button type="button" class="dial-key" data-live-key="${n}" aria-label="${n === '⌫' ? '一文字削除' : n}">${n}</button>`).join('')}</div><button class="primary-button" type="submit" style="margin-top:18px">番号を確認</button></form><div id="phone-handoff" aria-live="polite"></div>${handoffNote}<p class="connected-caption">通話は契約料金。auraに緊急通報機能はありません。緊急時は標準電話アプリへ</p></div>`);
+    A.view(A.nav('電話', button('phoneDemo', 'デモ')) + `<div class="app-content"><form id="external-phone"><label class="form-label">電話番号</label><input id="live-phone-number" class="text-input" type="tel" name="number" required maxlength="25" placeholder="電話番号を入力" autocomplete="tel"><div class="dial-keypad" style="margin-top:20px">${['1','2','3','4','5','6','7','8','9','+','0','⌫'].map(n => `<button type="button" class="dial-key" data-live-key="${n}" aria-label="${n === '⌫' ? '一文字削除' : n}">${n}</button>`).join('')}</div><button class="primary-button" type="submit" style="margin-top:18px">番号を確認</button></form><div id="phone-handoff" aria-live="polite"></div>${handoffNote}<p class="connected-caption">通話料は契約に準拠。緊急通報は標準電話アプリへ</p></div>`);
     const input = $('#live-phone-number');
     A.$$('[data-live-key]').forEach(el => el.onclick = () => { const key = el.dataset.liveKey; input.value = key === '⌫' ? input.value.slice(0,-1) : (input.value + key).slice(0,25); $('#phone-handoff').textContent = ''; });
     $('#external-phone').oninput = () => { $('#phone-handoff').textContent = ''; };
@@ -65,7 +65,7 @@
   A.apps.music.render = arg => {
     if (arg === 'player') return originals.music(arg);
     A.statusTheme(false); $('#app-screen').classList.remove('music-app');
-    A.view(A.nav('ミュージック', button('musicOriginals', '音源')) + `<div class="app-content"><form id="music-search" class="connected-search"><input class="text-input" type="search" required maxlength="100" aria-label="曲名やアーティスト" placeholder="曲名やアーティスト"><button class="primary-button" type="submit">検索</button></form><div id="music-results" aria-live="polite"><p class="connected-caption">Apple iTunes · 地域・権利による試聴制限あり</p></div><div class="connection-toolbar">${N.link('https://music.apple.com/jp/', 'Apple Music')}${N.link('https://open.spotify.com/', 'Spotify')}</div><p class="connected-caption">フル再生は公式サービスへ。試聴は画面移動で停止</p></div>`);
+    A.view(A.nav('ミュージック', button('musicOriginals', '音源')) + `<div class="app-content"><form id="music-search" class="connected-search"><input class="text-input" type="search" required maxlength="100" aria-label="曲名やアーティスト" placeholder="曲名やアーティスト"><button class="primary-button" type="submit">検索</button></form><div id="music-results" aria-live="polite"><p class="connected-caption">iTunes試聴・地域制限あり</p></div><div class="connection-toolbar">${N.link('https://music.apple.com/jp/', 'Apple Music')}${N.link('https://open.spotify.com/', 'Spotify')}</div><p class="connected-caption">試聴のみ・画面移動で停止</p></div>`);
     const root = $('#music-results');
     A.cleanups.push(() => { musicController?.abort(); root.querySelectorAll('audio').forEach(a => { a.pause(); a.removeAttribute('src'); a.load(); }); });
     $('#music-search').onsubmit = async e => {
@@ -117,7 +117,7 @@
   };
   const nav = A.nav;
   const localApps = new Set(['today','focus','habits','expenses','shopping','journal','contacts','converter','reading','sketch']);
-  A.nav = (title, right = '', ...args) => nav(title, right + (A.current && !localApps.has(A.current) ? button('appConnections','連携') : ''), ...args);
+  A.nav = (title, right = '', ...args) => nav(title, right + (A.current && !localApps.has(A.current) ? `<button type="button" class="connection-link connection-info" data-action="appConnections" aria-label="連携と対応状況" title="連携と対応状況">${A.icon('info')}</button>` : ''), ...args);
   A.actions.appConnections = () => {
     const id = A.current, [title, detail] = capabilities[id] || capabilities.settings;
     const tools = {calendar:button('calendarExchange','予定を書き出す'), notes:button('shareNotes','メモを共有'), reminders:button('shareReminders','リストを共有') + button('exportReminders','タスクを書き出す'), files:button('fileURLImport','URLから読む') + button('shareFile','ファイルを共有'), photos:button('photoShare','写真を共有'), camera:'<button class="connection-link" data-app="photos">写真を開く</button>', calculator:button('currencyOpen','為替換算'), clock:button('clockNotifyPermission','端末通知を有効に'), health:button('healthExport','記録をJSONで書き出す')};

@@ -564,7 +564,7 @@
   };
   A.home = () => { A.finishHomeEditing?.();A.cleanup();A.closeOverlay();A.current=null;A.locked=false;A.$('#app-screen').hidden=true;A.$('#lock-screen').hidden=true;A.$('#home-screen').hidden=false;A.$('#phone-screen').classList.remove('in-app','app-dark','locked');A.$('#status-bar').classList.remove('dark');A.renderHome();A.updateWidgets(); };
   A.lock = () => { A.home();A.locked=true;A.$('#home-screen').hidden=true;A.$('#lock-screen').hidden=false;A.$('#phone-screen').classList.add('locked');A.$('#notification-banner')?.remove();A.renderLockNotices?.();A.updateClock(); };
-  A.nav = (title, right='', backApp='', backText='') => `<nav class="app-nav"><button class="nav-action" ${backApp?`data-action="${backApp}"`:'data-action="home"'} aria-label="${backText||'ホームに戻る'}"><span class="back-chevron">‹</span>${backText}</button><h2>${title}</h2><div class="nav-action">${right}</div></nav>`;
+  A.nav = (title, right='', backApp='', backText='') => `<nav class="app-nav"><button class="nav-action" ${backApp?`data-action="${backApp}"`:'data-action="home"'} aria-label="${backText||'ホームに戻る'}"><span class="back-chevron">‹</span></button><h2>${title}</h2><div class="nav-action">${right}</div></nav>`;
   A.tabs = (tabs,selected) => `<nav class="app-tabs">${tabs.map(t=>`<button class="tab-button ${t.id===selected?'active':''}" data-action="${t.action}" ${t.value?`data-value="${t.value}"`:''}>${A.icon(t.icon)}<span>${t.name}</span></button>`).join('')}</nav>`;
   A.search = (id,placeholder='検索') => `<label class="search-field">${A.icon('search')}<input id="${id}" placeholder="${placeholder}" autocomplete="off" aria-label="${placeholder}"></label>`;
   A.row = (icon,title,detail='',action='',value='',color='') => `<button class="list-row" ${action?`data-action="${action}"`:''}>${icon?`<span class="row-icon" ${color?`style="background:${color};color:white"`:''}>${A.icon(icon)}</span>`:''}<span class="row-main"><strong>${title}</strong>${detail?`<small>${detail}</small>`:''}</span>${value?`<span class="row-value">${value}</span>`:''}${action?'<span class="chevron">›</span>':''}</button>`;
@@ -606,9 +606,6 @@
     const navTitle=screen.querySelector('.app-nav h2')?.textContent;
     screen.querySelectorAll('.app-title').forEach(title=>{if(!title.id&&title.textContent===navTitle)title.classList.add('redundant-title');});
     // Enhance existing content, never replace controls, data, or event targets.
-    if (A.current === 'journal' && screen.querySelector('#ev-journal-list')) {
-      screen.querySelector('.everyday').insertAdjacentHTML('afterbegin', '<div class="ev-heading"><span></span><h1>日々の記録</h1></div>');
-    }
     const hero = screen.querySelector('.ev-hero, .ev-heading');
     if (hero && ['today','habits','expenses','reading','journal','shopping'].includes(A.current)) {
       hero.classList.add('illustrated-hero');
