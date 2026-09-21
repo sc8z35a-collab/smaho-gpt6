@@ -27,7 +27,9 @@ const url = process.env.AURA_TEST_URL || 'http://127.0.0.1:8765/';
       assert.ok(apps.every(app => app.svg.includes('app-material-detail')));
       for (const action of ['spotlight','library']) {
         await page.evaluate(action => { Aura.home(); Aura[action](); }, action);
-        assert.equal(await page.locator('#overlay .app-material-detail').count(),30);
+        // Search can repeat recent apps; verify every identity, not instance count.
+        const identities=await page.locator('#overlay .app-artwork').evaluateAll(svgs => svgs.filter(svg=>svg.querySelector('.app-material-detail')).map(svg=>svg.dataset.appArt));
+        assert.deepEqual([...new Set(identities)].sort(),apps.map(app=>app.id).sort());
       }
       await page.evaluate(() => { Aura.home(); Aura.actions.iconMotionGallery(); });
       assert.equal(await page.locator('.motion-gallery .app-material-detail').count(),30);
