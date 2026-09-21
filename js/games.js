@@ -574,18 +574,21 @@ function drawSnake(){
  const alpha=reduced?1:Math.min(1,snake.accumulator/snake.step);
  const points=snake.body.map((p,i)=>{const from=snake.previous[Math.min(i,snake.previous.length-1)];return {x:(from.x+snakeDelta(from.x,p.x)*alpha+.5)*36,y:(from.y+snakeDelta(from.y,p.y)*alpha+.5)*36};});
  // Split strokes at wrapped edges; translated copies keep the seam continuous.
- const wraps=snakeModes[snake.mode].wrap?[-648,0,648]:[0];
+ const xCopies=[0],yCopies=[0];
+ if(snakeModes[snake.mode].wrap){
+  if(points.some(p=>p.x<36))xCopies.push(648);if(points.some(p=>p.x>612))xCopies.push(-648);
+  if(points.some(p=>p.y<36))yCopies.push(648);if(points.some(p=>p.y>612))yCopies.push(-648);
+ }
  ctx.lineCap='round';ctx.lineJoin='round';
- const bodyPath=()=>{
-  ctx.beginPath();
-  for(let i=points.length-1;i>0;i--){const a=points[i],b=points[i-1];let dx=b.x-a.x,dy=b.y-a.y;if(Math.abs(dx)>324)dx-=Math.sign(dx)*648;if(Math.abs(dy)>324)dy-=Math.sign(dy)*648;ctx.moveTo(a.x,a.y);ctx.lineTo(a.x+dx,a.y+dy);}
- };
- for(const ox of wraps)for(const oy of wraps){
+ // Construct the tube once per frame, reuse it for its material layers.
+ const bodyPath=new Path2D();
+ for(let i=points.length-1;i>0;i--){const a=points[i],b=points[i-1];let dx=b.x-a.x,dy=b.y-a.y;if(Math.abs(dx)>324)dx-=Math.sign(dx)*648;if(Math.abs(dy)>324)dy-=Math.sign(dy)*648;bodyPath.moveTo(a.x,a.y);bodyPath.lineTo(a.x+dx,a.y+dy);}
+ for(const ox of xCopies)for(const oy of yCopies){
   ctx.save();ctx.translate(ox,oy);
-  if(rich){ctx.save();ctx.translate(1,5);bodyPath();ctx.strokeStyle='#001f2280';ctx.lineWidth=29;ctx.stroke();ctx.restore();}
-  bodyPath();ctx.strokeStyle=snakePrefs.theme==='moon'?'#4cabb2':'#549777';ctx.lineWidth=27;ctx.stroke();
-  bodyPath();const skin=ctx.createLinearGradient(0,0,648,648);skin.addColorStop(0,snakePrefs.theme==='moon'?'#ccfff1':'#e0f4a9');skin.addColorStop(.5,snakePrefs.theme==='moon'?'#7eddd6':'#a5d28a');skin.addColorStop(1,snakePrefs.theme==='moon'?'#5eb3c2':'#72b58c');ctx.strokeStyle=skin;ctx.lineWidth=22;ctx.stroke();
-  if(rich){ctx.save();ctx.translate(-1.5,-3);bodyPath();ctx.strokeStyle='#efffd733';ctx.lineWidth=5;ctx.stroke();ctx.restore();}
+  if(rich){ctx.save();ctx.translate(1,5);ctx.strokeStyle='#001f2280';ctx.lineWidth=29;ctx.stroke(bodyPath);ctx.restore();}
+  ctx.strokeStyle=snakePrefs.theme==='moon'?'#4cabb2':'#549777';ctx.lineWidth=27;ctx.stroke(bodyPath);
+  const skin=ctx.createLinearGradient(0,0,648,648);skin.addColorStop(0,snakePrefs.theme==='moon'?'#ccfff1':'#e0f4a9');skin.addColorStop(.5,snakePrefs.theme==='moon'?'#7eddd6':'#a5d28a');skin.addColorStop(1,snakePrefs.theme==='moon'?'#5eb3c2':'#72b58c');ctx.strokeStyle=skin;ctx.lineWidth=22;ctx.stroke(bodyPath);
+  if(rich){ctx.save();ctx.translate(-1.5,-3);ctx.strokeStyle='#efffd733';ctx.lineWidth=5;ctx.stroke(bodyPath);ctx.restore();}
   for(let i=points.length-1;i>0;i--){const p=points[i];if(i%2===0&&rich){snakeCircle(ctx,p.x-2,p.y-2,2,'#f4ffe14d');snakeCircle(ctx,p.x+3,p.y+3,1.5,'#1f725329');}}
   const h=points[0],from=Math.atan2(snake.oldDirection.y,snake.oldDirection.x),to=Math.atan2(snake.direction.y,snake.direction.x),angle=from+Math.atan2(Math.sin(to-from),Math.cos(to-from))*alpha;
   ctx.save();ctx.translate(h.x,h.y);ctx.rotate(angle);
