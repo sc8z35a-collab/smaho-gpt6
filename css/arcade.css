@@ -127,6 +127,30 @@
  .studio-2048 *,.studio-2048 *::before,.studio-2048 *::after,.studio-2048 progress::-webkit-progress-value { animation:none!important; transition:none!important; }
 }
 [data-reduce-motion="true"] .studio-2048 *,[data-reduce-motion="true"] .studio-2048 progress::-webkit-progress-value { animation:none!important; transition:none!important; }
+/* 2048 practice desk: bounded merge effects and a saved-position miniature. */
+.g2048-effects { position:absolute; inset:var(--g-inset); pointer-events:none; z-index:5; }
+.g2048-flare { color:#fff0c3; }
+.g2048-ring { position:absolute; inset:2px; border:2px solid currentColor; border-radius:14px; box-shadow:0 0 10px #ffe6a64d; opacity:0; }
+.g2048-speck { position:absolute; left:50%; top:50%; width:5px; height:5px; border-radius:1px; background:currentColor; box-shadow:0 0 6px #fff4cf70; opacity:0; }
+.g2048-practice { margin-bottom:10px; }
+.g2048-forecast { width:100%; border-collapse:separate; border-spacing:0 4px; font-size:11px; font-variant-numeric:tabular-nums; }
+.g2048-forecast caption { text-align:left; color:var(--g-muted); font-size:9px; line-height:1.7; padding:0 0 10px; }
+.g2048-forecast th,.g2048-forecast td { padding:10px 6px; text-align:center; }
+.g2048-forecast thead th { color:var(--g-muted); font-weight:500; font-size:9px; }
+.g2048-forecast tbody th,.g2048-forecast tbody td { background:var(--g-card); border-block:1px solid var(--g-edge); }
+.g2048-forecast tbody th { border-left:1px solid var(--g-edge); border-radius:10px 0 0 10px; }
+.g2048-forecast tbody td:last-child { border-right:1px solid var(--g-edge); border-radius:0 10px 10px 0; }
+.g2048-forecast .is-hint>* { color:var(--g-accent); border-color:var(--g-accent); font-weight:700; }
+.g2048-forecast .is-blocked { color:var(--g-muted); }
+.g2048-checkpoint { margin:16px 0 18px; padding:16px 12px; border:1px solid var(--g-edge); border-radius:16px; background:var(--g-paper); }
+.g2048-checkpoint h3 { margin:0 0 10px; font-size:13px; font-weight:600; }
+.g2048-mini-board { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; width:min(100%,184px); padding:7px; border-radius:12px; background:var(--g-rim); margin:14px auto; }
+.g2048-mini-board[hidden] { display:none; }
+.g2048-mini-board span { display:grid; place-items:center; aspect-ratio:1; min-width:0; border-radius:5px; font-size:10px; font-weight:600; font-variant-numeric:tabular-nums; background:var(--g-well); color:var(--g-ink); overflow-wrap:anywhere; }
+.g2048-mini-board span[data-filled="true"] { background:var(--g-card); box-shadow:0 2px 2px #0001; }
+.g2048-checkpoint-tools { display:flex; flex-wrap:wrap; gap:6px; }
+.g2048-checkpoint-tools button { flex:1 1 72px; min-height:44px; padding:7px 4px; font-size:10px; }
+.g2048-checkpoint-tools button:first-child { border-color:var(--g-accent); color:var(--g-accent); }
 /* Block Atelier. */
 .blocks-layout{display:flex;align-items:flex-start;gap:12px;max-width:440px;margin:auto}.blocks-layout>canvas{width:calc(100% - 86px);height:auto;aspect-ratio:5/9;border-radius:15px;border:5px solid #83738d;box-shadow:inset 0 0 0 1px #fff2,0 12px 28px #59416630;touch-action:none;display:block}.blocks-layout aside{flex:1;min-width:0;display:flex;flex-direction:column;gap:15px}.blocks-layout aside>div,.blocks-layout aside>button{padding:12px 0 3px;background:var(--arc-surface);border:1px solid var(--arc-line);border-radius:14px;text-align:center;display:block;width:100%;color:inherit}.blocks-layout aside small{font-size:8px;letter-spacing:2px;color:var(--arc-muted)}.blocks-layout aside canvas{display:block;width:100%;height:auto}.blocks-controls{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;max-width:440px;margin:auto}.blocks-controls button{font-size:24px;min-height:48px;background:linear-gradient(#f1eaf6,#e2d6ea);border:1px solid #d0bfdc;border-radius:14px;color:#8b719f;box-shadow:0 4px 0 #af93bc26}
 /* Crystal Field: vector-cut crystal, glazed tiles and compositor-friendly reveal waves. */

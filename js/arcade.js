@@ -57,18 +57,51 @@
  const mineDifficulties={easy:[8,10],normal:[10,18],hard:[12,28]};
  const mineLabels={easy:'初級',normal:'中級',hard:'上級'};
  const minePrefs=A.load('minesPreferences',{});
- let mineLite=minePrefs?.lite===true,mineZoom=minePrefs?.zoom===true;
+ let mineLite=minePrefs?.lite===true,mineZoom=minePrefs?.zoom===true,mineSound=minePrefs?.sound===true;
+ const mineThemes={aqua:'アクア',amethyst:'アメジスト',amber:'アンバー'};
+ let mineTheme=Object.hasOwn(mineThemes,minePrefs?.theme)?minePrefs.theme:'aqua',mineAudio=null,mineToneAt=-Infinity;
+ const saveMinePrefs=()=>A.save('minesPreferences',{lite:mineLite,zoom:mineZoom,sound:mineSound,theme:mineTheme});
+ const mineDay=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+ const validMineDay=day=>typeof day==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(day)&&Number.isFinite(Date.parse(day+'T00:00:00Z'))&&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day;
+ const mineStart=()=>Math.floor(mines.size/2)*mines.size+Math.floor(mines.size/2);
+ function mineDailyRandom(day,difficulty){
+  // Versioned seed and a fixed starting cell make retries reproducible.
+  let seed=2166136261;for(const c of `crystal-v1/${day}/${difficulty}`)seed=Math.imul(seed^c.charCodeAt(0),16777619)>>>0;
+  return ()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
+ }
+ function mineDailyRecords(){
+  const saved=A.load('minesDailyRecords',[]);
+  return (Array.isArray(saved)?saved:[]).filter(r=>r&&validMineDay(r.day)&&Object.hasOwn(mineDifficulties,r.difficulty)).slice(0,90).map(r=>({day:r.day,difficulty:r.difficulty,best:mineNumber(r.best),assistedBest:mineNumber(r.assistedBest)}));
+ }
+ function mineBest(){
+  if(mines.day){const record=mineDailyRecords().find(r=>r.day===mines.day&&r.difficulty===mines.difficulty);return mineNumber(record?.[mines.hintsUsed?'assistedBest':'best']);}
+  return mineNumber(A.load((mines.hintsUsed?'minesAssistedBest-':'minesBest-')+mines.difficulty,0));
+ }
+ function closeMineAudio(){const audio=mineAudio;mineAudio=null;mineToneAt=-Infinity;if(audio)audio.close().catch(()=>{});}
+ function mineTone(kind='open'){
+  if(!mineSound||A.settings.sound===false||A.settings.volume===0||document.hidden||!$('#overlay').hidden)return;
+  try{
+   const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
+   if(!mineAudio)mineAudio=new Audio();
+   if(mineAudio.state==='suspended'){mineAudio.resume().catch(()=>{});return;}
+   if(mineAudio.state!=='running'||performance.now()-mineToneAt<65)return;
+   mineToneAt=performance.now();
+   const ctx=mineAudio,frequencies=kind==='win'?[523,659,784]:kind==='loss'?[220,165]:kind==='flag'?[440]:kind==='scan'?[659,880]:[587];
+   const volume=Number.isFinite(A.settings.volume)?Math.max(0,Math.min(100,A.settings.volume))/100:.6;
+   frequencies.forEach((hz,i)=>{const oscillator=ctx.createOscillator(),gain=ctx.createGain(),at=ctx.currentTime+i*.085;oscillator.type='sine';oscillator.frequency.value=hz;gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.075*volume,at+.012);gain.gain.exponentialRampToValueAtTime(.0001,at+.16);oscillator.connect(gain);gain.connect(ctx.destination);oscillator.onended=()=>{oscillator.disconnect();gain.disconnect();};oscillator.start(at);oscillator.stop(at+.18);});
+  }catch{closeMineAudio();}
+ }
  const mineGem='<svg viewBox="0 0 48 56" aria-hidden="true"><path d="M24 2 42 15 45 37 24 54 3 37 6 15Z" fill="#54b7c9"/><path d="m24 2-9 25 9 27 10-27Z" fill="#c9fff1"/><path d="M6 15 15 27 3 37Z" fill="#91e0e6"/><path d="m42 15-8 12 11 10Z" fill="#2588ab"/><path d="m3 37 12-10 9 27Z" fill="#53a2cb"/><path d="m45 37-11-10-10 27Z" fill="#67d7c5"/><path d="m6 15 18-13 18 13M15 27l9-25 10 25-10 27Z" fill="none" stroke="#edfff9" stroke-opacity=".65"/></svg>';
  const mineFlagArt='<svg viewBox="0 0 24 28" aria-hidden="true"><path d="M7 24V3l13 3-13 9" fill="#e6b879" stroke="#ffe7bb" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 25h11" stroke="#ffe7bb" stroke-width="2" stroke-linecap="round"/></svg>';
  const neighbors=(index,size)=>{const out=[],x=index%size,y=Math.floor(index/size);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const nx=x+dx,ny=y+dy;if(nx>=0&&ny>=0&&nx<size&&ny<size)out.push(ny*size+nx);}return out;};
  const nearBombs=i=>neighbors(i,mines.size).filter(n=>mines.bombs.includes(n)).length;
  const mineTime=value=>{const seconds=Math.floor(value);return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;};
  const mineNumber=value=>Number.isFinite(value)&&value>=0?Math.floor(value):0;
- function resetMines(difficulty='easy'){
+ function resetMines(difficulty='easy',day=''){
   if(!Object.hasOwn(mineDifficulties,difficulty))difficulty='easy';
   const [size,count]=mineDifficulties[difficulty];
-  mines={version:2,difficulty,size,count,bombs:[],open:[],flags:[],started:false,over:false,won:false,elapsed:0,elapsedMs:0,paused:false,hintsUsed:0,moves:0};
-  mineMode='open';mineFocus=0;mineHint=-1;mineMessage='最初のマスと、その周囲は必ず安全です。';mineClock=performance.now();
+  mines={version:3,difficulty,size,count,day:validMineDay(day)?day:'',bombs:[],open:[],flags:[],started:false,over:false,won:false,elapsed:0,elapsedMs:0,paused:false,hintsUsed:0,moves:0};
+  mineMode='open';mineFocus=mines.day?mineStart():0;mineHint=-1;mineMessage=mines.day?'中央の＋マスからスタート。同じ日・難易度なら同じ鉱脈に挑戦できます。':'最初のマスと、その周囲は必ず安全です。';mineClock=performance.now();
  }
  function restoreMines(saved){
   // Validate old and current saves without modifying unrelated application data.
@@ -81,8 +114,9 @@
   const complete=saved.open.length===size*size-count;
   if(saved.won!==complete||(saved.won&&!saved.over))return false;
   if(saved.over&&!saved.won&&(!Number.isInteger(saved.hit)||!saved.bombs.includes(saved.hit)))return false;
+  if(saved.day&&!validMineDay(saved.day))return false;
   const elapsed=mineNumber(saved.elapsed),elapsedMs=Number.isFinite(saved.elapsedMs)&&saved.elapsedMs>=0?saved.elapsedMs:elapsed*1000;
-  mines={version:2,difficulty:saved.difficulty,size,count,bombs:[...saved.bombs],open:[...saved.open],flags:[...saved.flags],started:saved.started,over:saved.over,won:saved.won,hit:saved.over&&!saved.won?saved.hit:undefined,elapsed:saved.over?Math.max(1,Math.ceil(elapsedMs/1000)):Math.floor(elapsedMs/1000),elapsedMs,paused:saved.started&&!saved.over,hintsUsed:Math.min(3,mineNumber(saved.hintsUsed)),moves:mineNumber(saved.moves)};
+  mines={version:3,difficulty:saved.difficulty,size,count,day:validMineDay(saved.day)?saved.day:'',bombs:[...saved.bombs],open:[...saved.open],flags:[...saved.flags],started:saved.started,over:saved.over,won:saved.won,hit:saved.over&&!saved.won?saved.hit:undefined,elapsed:saved.over?Math.max(1,Math.ceil(elapsedMs/1000)):Math.floor(elapsedMs/1000),elapsedMs,paused:saved.started&&!saved.over,hintsUsed:Math.min(3,mineNumber(saved.hintsUsed)),moves:mineNumber(saved.moves)};
   return true;
  }
  const saveMines=()=>A.save('minesState',mines);
@@ -97,11 +131,12 @@
  }
  function pauseMines(){
   if(!mines?.started||mines.over||mines.paused)return;
-  mines.paused=true;mineHint=-1;saveMines();renderMines();
+  mines.paused=true;mineHint=-1;closeMineAudio();saveMines();renderMines();
  }
  function seedMines(first){
   const safe=new Set([first,...neighbors(first,mines.size)]),pool=Array.from({length:mines.size**2},(_,i)=>i).filter(i=>!safe.has(i));
-  for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
+  const random=mines.day?mineDailyRandom(mines.day,mines.difficulty):Math.random;
+  for(let i=pool.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
   mines.bombs=pool.slice(0,mines.count);mines.started=true;mineClock=performance.now();
  }
  function finishMines(){
@@ -109,18 +144,24 @@
   if(!m.over&&m.open.length===m.size**2-m.count){m.over=true;m.won=true;m.flags=[...m.bombs];}
   if(!m.over)return;
   m.elapsed=Math.max(1,Math.ceil(m.elapsedMs/1000));
-  if(m.won){
+  if(m.won&&m.day){
+   const records=mineDailyRecords(),previous=records.find(r=>r.day===m.day&&r.difficulty===m.difficulty),record=previous||{day:m.day,difficulty:m.difficulty,best:0,assistedBest:0};
+   const key=m.hintsUsed?'assistedBest':'best';if(!record[key]||m.elapsed<record[key])record[key]=m.elapsed;
+   // Daily retries never inflate free-play wins or free-play best times.
+   A.save('minesDailyRecords',[record,...records.filter(r=>r!==previous)].slice(0,90));
+  }else if(m.won){
    A.save('minesWins',mineNumber(A.load('minesWins',0))+1);
-   const key=(m.hintsUsed?'minesAssistedBest-':'minesBest-')+m.difficulty,best=mineNumber(A.load(key,0)),time=Math.max(1,Math.ceil(m.elapsedMs/1000));
-   if(!best||time<best)A.save(key,time);
+   const key=(m.hintsUsed?'minesAssistedBest-':'minesBest-')+m.difficulty,best=mineNumber(A.load(key,0));
+   if(!best||m.elapsed<best)A.save(key,m.elapsed);
   }
   const stored=A.load('minesHistory',[]),history=Array.isArray(stored)?stored:[];
-  A.save('minesHistory',[{difficulty:m.difficulty,won:m.won,seconds:m.elapsed,hints:m.hintsUsed,moves:m.moves,date:new Date().toISOString()},...history].slice(0,30));
+  A.save('minesHistory',[{day:m.day,difficulty:m.difficulty,won:m.won,seconds:m.elapsed,hints:m.hintsUsed,moves:m.moves,date:new Date().toISOString()},...history].slice(0,30));
  }
  function revealMine(index,fromHint=false){
   if(!mineCanPlay()||!Number.isInteger(index)||index<0||index>=mines.size**2||mines.flags.includes(index))return;
   tickMines();if(!mineCanPlay())return;
   const m=mines;mineHint=fromHint?index:-1;
+  if(!m.started&&m.day&&index!==mineStart()){mineMessage='今日の鉱脈は中央の＋マスから開始します。';renderMines();return;}
   if(!m.started)seedMines(index);
   let targets=[index];
   if(m.open.includes(index)){
@@ -139,16 +180,19 @@
   }
   finishMines();
   mineMessage=m.over?(m.won?'すべての安全なマスを探索しました。':'鉱石に触れました。旗の位置と数字を見直してみましょう。'):fromHint?'スキャンで安全なマスを開きました。今回はアシスト記録になります。':changed.length>1?`${changed.length}マスを連続探索しました。`:'数字を手がかりに、安全なルートを探しましょう。';
-  saveMines();renderMines(changed,index);
+  saveMines();renderMines(changed,index);mineTone(m.over?(m.won?'win':'loss'):fromHint?'scan':'open');
+  if(fromHint)rootMineScan(index);
  }
+ function rootMineScan(index){const cell=$('#mines-board')?.children[index];if(mineZoom)cell?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});}
  function flagMine(index){
   if(!mineCanPlay()||!Number.isInteger(index)||index<0||index>=mines.size**2||mines.open.includes(index))return;
   tickMines();if(!mineCanPlay())return;
+  if(mines.day&&!mines.started){mineMessage='日替わりは中央の＋を開いてから旗を置けます。';renderMines();return;}
   const removing=mines.flags.includes(index);
   if(!removing&&mines.flags.length>=mines.count){mineMessage='旗は鉱石の数まで置けます。不要な旗を外してください。';renderMines();return;}
   mines.flags=removing?mines.flags.filter(i=>i!==index):[...mines.flags,index];mines.moves++;mineHint=-1;
   mineMessage=removing?'旗を外しました。':'旗を立てました。旗の正しさはクリア時まで確定しません。';
-  saveMines();renderMines();
+  saveMines();renderMines();mineTone('flag');
  }
  function mineHighlight(index){
   const root=$('#mines-board');if(!root)return;
@@ -165,39 +209,43 @@
   }
   for(let i=0;i<root.children.length;i++){
    const cell=root.children[i],isOpen=opened.has(i),flag=flags.has(i),bomb=m.over&&bombs.has(i),n=isOpen?nearBombs(i):0,wrong=m.over&&flag&&!bomb;
-   const signature=`${isOpen}/${flag}/${bomb}/${n}/${wrong}`;
+   const start=!!m.day&&!m.started&&i===mineStart(),signature=`${isOpen}/${flag}/${bomb}/${n}/${wrong}/${start}`;
    if(cell.dataset.state!==signature){
-    cell.querySelector('.mine-face').innerHTML=bomb?mineGem:wrong?'<span class="mine-wrong">×</span>':flag?mineFlagArt:isOpen&&n?String(n):'';
+    cell.querySelector('.mine-face').innerHTML=bomb?mineGem:wrong?'<span class="mine-wrong">×</span>':flag?mineFlagArt:isOpen&&n?String(n):start?'+':'';
     cell.dataset.state=signature;
    }
-   for(const [name,active] of Object.entries({open:isOpen,flag,bomb,hit:m.hit===i,wrong,hint:mineHint===i}))cell.classList.toggle(name,active);
+   for(const [name,active] of Object.entries({open:isOpen,flag,bomb,hit:m.hit===i,wrong,start,hint:mineHint===i}))cell.classList.toggle(name,active);
    cell.dataset.near=n;cell.tabIndex=i===mineFocus?0:-1;
-   cell.setAttribute('aria-label',`${Math.floor(i/m.size)+1}行${i%m.size+1}列 ${bomb?'鉱石':wrong?'誤った旗':isOpen?`開封済み・周囲の鉱石${n}個`:flag?'旗・未開封':'未開封'}${mineHint===i?'・スキャン対象':''}`);
+   cell.setAttribute('aria-label',`${Math.floor(i/m.size)+1}行${i%m.size+1}列 ${bomb?'鉱石':wrong?'誤った旗':isOpen?`開封済み・周囲の鉱石${n}個`:flag?'旗・未開封':'未開封'}${mineHint===i?'・スキャン済み':''}${start?'・日替わりスタート地点':''}`);
    if(fresh.has(i)){
     const distance=Math.abs(i%m.size-origin%m.size)+Math.abs(Math.floor(i/m.size)-Math.floor(origin/m.size));
     cell.style.setProperty('--reveal-delay',`${Math.min(280,distance*24)}ms`);cell.classList.add('revealing');
    }
   }
   scene.dataset.paused=String(m.paused);scene.dataset.result=m.over?(m.won?'won':'lost'):'';
-  scene.dataset.lite=String(mineLite);scene.dataset.zoom=String(mineZoom);
+  scene.dataset.lite=String(mineLite);scene.dataset.zoom=String(mineZoom);scene.dataset.theme=mineTheme;
   root.inert=m.paused;root.setAttribute('aria-hidden',String(m.paused));
   $('#mines-pause-cover').hidden=!m.paused;
   $('#mines-left').textContent=m.count-m.flags.length;$('#mines-time').textContent=mineTime(m.elapsed);
-  const best=mineNumber(A.load((m.hintsUsed?'minesAssistedBest-':'minesBest-')+m.difficulty,0));
-  $('#mines-best').textContent=best?mineTime(best):'—';$('#mines-best-label').textContent=m.hintsUsed?'アシスト最短':'最短記録';
+  const best=mineBest();
+  $('#mines-best').textContent=best?mineTime(best):'—';$('#mines-best-label').textContent=(m.day?'日替わり・':'')+(m.hintsUsed?'アシスト':'最短記録');
   const total=m.size**2-m.count,percent=Math.round(m.open.length/total*100);
   $('#mines-progress').value=m.open.length;$('#mines-progress').max=total;
   $('#mines-progress-label').textContent=`探索 ${m.open.length} / ${total} · ${percent}%`;
   $('#mines-status').textContent=m.paused?'一時停止中':m.over?(m.won?'FIELD COMPLETE · クリア':'EXPLORATION OVER · 探索終了'):mineMode==='flag'?'旗モード · タップで旗を切替':'探索モード · タップで開く';
   $('#mines-message').textContent=mineMessage||'数字は周囲8マスの鉱石の数を表します。';
   $('#mines-result').hidden=!m.over;
-  $('#mines-result-copy').textContent=m.over?`${mineLabels[m.difficulty]} / ${mineTime(m.elapsed)} / ${m.moves}手 / ${m.hintsUsed?'アシスト '+m.hintsUsed+'回':'ノーヒント'}${m.won?' / 累計 '+mineNumber(A.load('minesWins',0))+'勝':''}`:'';
+  $('#mines-result-copy').textContent=m.over?`${mineLabels[m.difficulty]} / ${mineTime(m.elapsed)} / ${m.moves}手 / ${m.hintsUsed?'アシスト '+m.hintsUsed+'回':'ノーヒント'}${m.day?' / 日替わり '+m.day:m.won?' / フリー累計 '+mineNumber(A.load('minesWins',0))+'勝':''}`:'';
   $('#mine-flag').classList.toggle('active',mineMode==='flag');$('#mine-flag').setAttribute('aria-pressed',String(mineMode==='flag'));
   $('#mine-flag').disabled=m.paused||m.over;
   $('#mine-pause').textContent=m.paused?'再開':'一時停止';$('#mine-pause').disabled=!m.started||m.over;
   $('#mine-hint').textContent=`安全スキャン ${3-m.hintsUsed}/3`;$('#mine-hint').disabled=m.paused||m.over||m.hintsUsed>=3;
   $('#mine-zoom').setAttribute('aria-pressed',String(mineZoom));$('#mine-zoom').textContent=mineZoom?'全体表示':'盤面を拡大';
   $('#mine-quality').setAttribute('aria-pressed',String(mineLite));$('#mine-quality').textContent=mineLite?'軽量描画':'高精細描画';
+  $('#mine-sound').setAttribute('aria-pressed',String(mineSound));$('#mine-sound').textContent=mineSound?'効果音 ON':'効果音 OFF';
+  $('#mine-theme').textContent='結晶色：'+mineThemes[mineTheme];
+  $('#mine-daily').setAttribute('aria-pressed',String(!!m.day));$('#mine-free').setAttribute('aria-pressed',String(!m.day));
+  $('#mines-mode-label').textContent=m.day?`DAILY · ${m.day} · 同じ鉱脈を何度でも`:'FREE EXPLORE · 毎回、新しい鉱脈';
   A.$$('[data-action="mineDifficulty"]').forEach(el=>{el.classList.toggle('active',el.dataset.value===m.difficulty);el.setAttribute('aria-pressed',String(el.dataset.value===m.difficulty));});
  }
  function minesApp(){
@@ -206,6 +254,7 @@
   shell('Crystal Field','aqua',`
    <section class="crystal-game" id="mines-scene" aria-label="クリスタルフィールド">
     <header class="crystal-hero"><div><small>CRYSTAL FIELD</small><h1>光の鉱脈を、探そう。</h1><p>数字を読み、結晶を避けて進む探索パズル</p></div><div class="crystal-emblem" aria-hidden="true">${mineGem}</div></header>
+    <div class="crystal-modes"><button id="mine-free" data-action="mineFree" aria-pressed="true">フリー探索</button><button id="mine-daily" data-action="mineDaily" aria-pressed="false">今日の鉱脈</button></div><p class="crystal-mode-label" id="mines-mode-label"></p>
     <div class="arc-difficulty crystal-difficulty" aria-label="難易度">${Object.entries(mineDifficulties).map(([id,[size,count]])=>`<button data-action="mineDifficulty" data-value="${id}">${mineLabels[id]}<small>${size}×${size} · 鉱石${count}</small></button>`).join('')}</div>
     <div class="arc-scorebar crystal-scores">${score('残りの旗',0,'mines-left')}${score('探索時間','00:00','mines-time')}<div><small id="mines-best-label">最短記録</small><strong id="mines-best">—</strong></div></div>
     <div class="crystal-progress"><span id="mines-progress-label"></span><progress id="mines-progress" aria-label="安全マスの探索進捗" max="1" value="0"></progress></div>
@@ -215,6 +264,7 @@
     <div id="mines-result" class="crystal-result" hidden><strong>探索レポート</strong><p id="mines-result-copy"></p><button data-action="mineRestart">新しい鉱脈へ</button></div>
     <div class="crystal-controls"><button data-action="mineFlag" id="mine-flag" aria-pressed="false">旗モード</button><button data-action="mineHint" id="mine-hint">安全スキャン 3/3</button><button data-action="minePause" id="mine-pause">一時停止</button></div>
     <div class="crystal-tools"><button data-action="mineZoom" id="mine-zoom" aria-pressed="false">盤面を拡大</button><button data-action="mineQuality" id="mine-quality" aria-pressed="false">高精細描画</button><button data-action="mineRecords">成績</button><button data-action="mineRestart">新しい盤面</button></div>
+    <div class="crystal-preferences"><button data-action="mineTheme" id="mine-theme">結晶色：アクア</button><button data-action="mineSound" id="mine-sound" aria-pressed="false">効果音 OFF</button></div>
     <p class="crystal-help" id="mines-controls-help">タップで探索 · 長押し / 右クリックで旗<br>PC：矢印で移動 · Enter / Spaceで操作 · Fで旗 · Pで一時停止<br>旗を数字と同じ数だけ置き、数字をタップすると周囲を一括探索。</p>
    </section>`,iconButton('mineHelp','遊び方','document'));
   renderMines();
@@ -265,7 +315,7 @@
   on(window,'blur',suspend);on(window,'pagehide',suspend);
   const overlays=new MutationObserver(()=>{if(!$('#overlay').hidden)suspend();else mineClock=performance.now();});
   overlays.observe($('#overlay'),{attributes:true,attributeFilter:['hidden']});
-  disposers.push(()=>{cancelHold();overlays.disconnect();tickMines();if(mines.started&&!mines.over)mines.paused=true;saveMines();});
+  disposers.push(()=>{cancelHold();overlays.disconnect();closeMineAudio();tickMines();if(mines.started&&!mines.over)mines.paused=true;saveMines();});
  }
  A.actions.mineCell=el=>{mineFocus=Number(el.dataset.index);mineMode==='flag'?flagMine(mineFocus):revealMine(mineFocus);};
  A.actions.mineFlag=()=>{if(!mineCanPlay())return;mineMode=mineMode==='flag'?'open':'flag';mineHint=-1;renderMines();};
@@ -284,15 +334,19 @@
   // Charge assistance before revealing any information; never preview a free safe cell.
   mines.hintsUsed++;revealMine(index,true);
  };
- A.actions.mineZoom=()=>{mineZoom=!mineZoom;A.save('minesPreferences',{lite:mineLite,zoom:mineZoom});renderMines();};
- A.actions.mineQuality=()=>{mineLite=!mineLite;A.save('minesPreferences',{lite:mineLite,zoom:mineZoom});renderMines();};
- A.actions.mineRestart=()=>A.confirm('新しい鉱脈を探索？','現在の盤面は置き換わります。勝利数と最短記録は残ります。',()=>{const d=mines.difficulty;resetMines(d);saveMines();open('mines');});
- A.actions.mineDifficulty=el=>{const difficulty=el.dataset.value;if(!Object.hasOwn(mineDifficulties,difficulty)||difficulty===mines.difficulty)return;A.confirm('難易度を変更？','現在の盤面を置き換えて、新しい探索を始めます。',()=>{resetMines(difficulty);saveMines();open('mines');});};
+ A.actions.mineZoom=()=>{mineZoom=!mineZoom;saveMinePrefs();renderMines();};
+ A.actions.mineQuality=()=>{mineLite=!mineLite;saveMinePrefs();renderMines();};
+ A.actions.mineTheme=()=>{const themes=Object.keys(mineThemes);mineTheme=themes[(themes.indexOf(mineTheme)+1)%themes.length];saveMinePrefs();renderMines();};
+ A.actions.mineSound=()=>{mineSound=!mineSound;if(!mineSound)closeMineAudio();saveMinePrefs();renderMines();if(mineSound)mineTone('scan');};
+ A.actions.mineDaily=()=>A.confirm('今日の鉱脈に挑戦？','現在の盤面を置き換えます。端末の日付と難易度で決まる同じ盤面に、中央から挑戦。記録はフリー探索と別に保存します。',()=>{resetMines(mines.difficulty,mineDay());saveMines();open('mines');});
+ A.actions.mineFree=()=>{if(!mines.day)return;A.confirm('フリー探索へ戻る？','日替わりの盤面を置き換え、ランダムな新しい鉱脈を探索します。',()=>{resetMines(mines.difficulty);saveMines();open('mines');});};
+ A.actions.mineRestart=()=>A.confirm('新しい鉱脈を探索？','現在の盤面は置き換わります。勝利数と最短記録は残ります。',()=>{const d=mines.difficulty,day=mines.day;resetMines(d,day);saveMines();open('mines');});
+ A.actions.mineDifficulty=el=>{const difficulty=el.dataset.value;if(!Object.hasOwn(mineDifficulties,difficulty)||difficulty===mines.difficulty)return;A.confirm('難易度を変更？','現在の盤面を置き換えて、新しい探索を始めます。',()=>{resetMines(difficulty,mines.day);saveMines();open('mines');});};
  A.actions.mineRecords=()=>{
   const stored=A.load('minesHistory',[]),history=(Array.isArray(stored)?stored:[]).filter(r=>r&&Object.hasOwn(mineDifficulties,r.difficulty)&&typeof r.won==='boolean').slice(0,30);
-  help('Crystal Field · 成績',`<p>累計 ${mineNumber(A.load('minesWins',0))}勝</p><h3>難易度別の最短記録</h3>${Object.keys(mineDifficulties).map(id=>{const best=mineNumber(A.load('minesBest-'+id,0)),assisted=mineNumber(A.load('minesAssistedBest-'+id,0));return `<p>${mineLabels[id]}：${best?mineTime(best):'未記録'}<br>アシスト：${assisted?mineTime(assisted):'未記録'}</p>`;}).join('')}<h3>最近の探索（最大30件）</h3><p>完了した探索のみ。途中で作り直した盤面は含みません。</p>${history.map(r=>`<p>${esc(typeof r.date==='string'?r.date.slice(0,10):'')} · ${mineLabels[r.difficulty]} · ${r.won?'クリア':'探索終了'}<br>${mineTime(mineNumber(r.seconds))} / ${mineNumber(r.moves)}手 / ${mineNumber(r.hints)?'アシスト':'ノーヒント'}</p>`).join('')||'<p>まだ記録はありません。</p>'}`);
+  help('Crystal Field · 成績',`<p>フリー探索の累計 ${mineNumber(A.load('minesWins',0))}勝</p><h3>難易度別の最短記録</h3>${Object.keys(mineDifficulties).map(id=>{const best=mineNumber(A.load('minesBest-'+id,0)),assisted=mineNumber(A.load('minesAssistedBest-'+id,0));return `<p>${mineLabels[id]}：${best?mineTime(best):'未記録'}<br>アシスト：${assisted?mineTime(assisted):'未記録'}</p>`;}).join('')}<h3>日替わりクリア（最大90件）</h3><p>フリーとは別記録。同じ日・難易度の再クリアは1件にまとめます。</p>${mineDailyRecords().map(r=>`<p>${esc(r.day)} · ${mineLabels[r.difficulty]}<br>ノーヒント ${r.best?mineTime(r.best):'未記録'} / アシスト ${r.assistedBest?mineTime(r.assistedBest):'未記録'}</p>`).join('')||'<p>まだクリアはありません。</p>'}<h3>最近の探索（最大30件）</h3><p>完了した探索のみ。途中で作り直した盤面は含みません。</p>${history.map(r=>`<p>${esc(typeof r.date==='string'?r.date.slice(0,10):'')} · ${mineLabels[r.difficulty]} · ${r.day?'日替わり':'フリー'} · ${r.won?'クリア':'探索終了'}<br>${mineTime(mineNumber(r.seconds))} / ${mineNumber(r.moves)}手 / ${mineNumber(r.hints)?'アシスト':'ノーヒント'}</p>`).join('')||'<p>まだ記録はありません。</p>'}`);
  };
- A.actions.mineHelp=()=>help('Crystal Field · 遊び方','<p>鉱石を避け、すべての安全なマスを開けばクリア。数字は周囲8マスの鉱石の数です。初手とその周囲は必ず安全です。</p><p>タップで探索。旗モード、長押し（約0.44秒）、右クリック、Fキーで旗を切り替えます。数字の周囲に同じ数の旗があれば、数字をタップして一括探索。間違った旗があると鉱石を開く場合があります。</p><p>安全スキャンは1探索3回まで、安全なマスを1つ開きます。使用したクリアはアシスト最短に記録し、通常の最短記録を更新しません。推測が必要な盤面もあります。</p><p>矢印キーで移動、Enter / Spaceで現在のモードの操作、Pで一時停止。拡大表示では盤面をスクロールできます。時間はプレイ中のみ計測。別画面・タブ・ダイアログへ移ると一時停止し、戻ったら手動で再開します。</p><p>盤面・経過時間・旗・スキャン残数を端末内に自動保存。高精細描画ボタンで軽量描画に切替。OSとauraの「動きを減らす」に対応します。</p>');
+ A.actions.mineHelp=()=>help('Crystal Field · 遊び方','<p>鉱石を避け、すべての安全なマスを開けばクリア。数字は周囲8マスの鉱石の数です。初手とその周囲は必ず安全です。</p><p>タップで探索。旗モード、長押し（約0.44秒）、右クリック、Fキーで旗を切り替えます。数字の周囲に同じ数の旗があれば、数字をタップして一括探索。間違った旗があると鉱石を開く場合があります。</p><p>安全スキャンは1探索3回まで、安全なマスを1つ開きます。使用したクリアはアシスト最短に記録し、通常の最短記録を更新しません。推測が必要な盤面もあります。</p><p>矢印キーで移動、Enter / Spaceで現在のモードの操作、Pで一時停止。拡大表示では盤面をスクロールできます。時間はプレイ中のみ計測。別画面・タブ・ダイアログへ移ると一時停止し、戻ったら手動で再開します。</p><p>「今日の鉱脈」は端末の日付と難易度から生成。中央の＋マスから開始します。同じ日の再挑戦は同じ盤面で、フリーの勝利数・最短には加算しません。日付が変わっても途中の盤面は維持します。今日の鉱脈を押すと当日分へ切り替えられます。</p><p>結晶色はアクア・アメジスト・アンバーを切替。効果音は初期OFFで、auraのサウンド設定と音量に従います。</p><p>盤面・経過時間・旗・スキャン残数を端末内に自動保存。高精細描画ボタンで軽量描画に切替。OSとauraの「動きを減らす」に対応します。</p>');
 
  // Reversi Atelier. The same pure rules/search run in a Worker or cooperative fallback.
  function createReversiEngine(){
