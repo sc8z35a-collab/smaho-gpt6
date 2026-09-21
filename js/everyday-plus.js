@@ -287,9 +287,9 @@
   function renderReminderBatch() {
     const host=$('#rm-batch-tools');if(!host)return;
     const count=reminderSelected.size,disabled=count?'':'disabled';
-    host.innerHTML=reminderSelecting?`<div class="rm-batch"><div><strong role="status">${count}件を選択</strong>${button('rmSelectAll','表示中をすべて')}${button('rmSelectNone','解除')}</div><div class="rm-batch-actions">${button('rmBatchComplete','完了','',''+disabled)}${button('rmBatchTomorrow','明日へ','',disabled)}${button('rmBatchMove','移動','',disabled)}${button('rmBatchDelete','削除','',disabled)}</div></div>`:'';
+    host.innerHTML=reminderSelecting?`<div class="rm-batch"><div><strong role="status">${count}件を選択</strong>${button('rmSelectAll','表示中をすべて')}${button('rmSelectNone','解除')}</div><div class="rm-batch-actions">${button('rmBatchComplete','完了','',disabled)}${button('rmBatchTomorrow','明日へ','',disabled)}${button('rmBatchMove','移動','',disabled)}${button('rmBatchDelete','削除','',disabled)}</div></div>`:'';
   }
-  A.actions.rmSelectionMode=()=>{reminderSelecting=!reminderSelecting;reminderSelected.clear();renderReminders();$('.rm-selection-entry button')?.focus({preventScroll:true});};
+  A.actions.rmSelectionMode=()=>{const scroll=$('.ev-reminders')?.scrollTop||0;reminderSelecting=!reminderSelecting;reminderSelected.clear();renderReminders();$('.ev-reminders').scrollTop=scroll;$('.rm-selection-entry button')?.focus({preventScroll:true});};
   A.actions.rmSelect=el=>{
     if(!reminderSelecting||!visibleReminders().some(x=>x.id===el.dataset.id))return;
     const id=el.dataset.id;if(reminderSelected.has(id))reminderSelected.delete(id);else reminderSelected.add(id);
