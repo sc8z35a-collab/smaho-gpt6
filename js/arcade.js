@@ -604,6 +604,7 @@
    if(pattern===2&&c===3&&r>0)continue;
    if(pattern===3&&(r+c)%4===0)continue;
    if(pattern===4&&r!==Math.floor(rows/2)&&c!==3&&(r+c)%2===0)continue;
+   if(pattern===5&&r>0&&r<rows-1&&c>1&&c<5&&r%2===1)continue;
    const hp=stage>2&&(r+c+stage)%4===0?Math.min(3,1+Math.floor(stage/3)):1;
    const type=stage>1&&(r*7+c+stage)%13===0?'nova':'normal';
    items.push({x:20+c*46,y:62+r*26,w:40,h:18,hp,maxHp:hp,type,color:orbitColors[(r+Math.floor((stage-1)/6))%5],flash:0});
@@ -671,6 +672,7 @@
  function orbitPause(message='一時停止 · 再開で続ける'){
   if(!breaker)return;
   const wasRunning=breaker.running;breaker.running=false;breakerKeys={left:false,right:false};
+  breakerView?.clearInput();
   if(wasRunning){orbitMessage(message);orbitSave();}
   orbitWake();
  }
@@ -710,7 +712,7 @@
  }
  function orbitMoveBall(dt){
   const b=breaker,ball=b.ball;
-  let remaining=dt*((b.slow>0||b.focus>0)?.64:1);
+  let remaining=dt*((b.slow>0||b.focus>0)?0.64:1);
   for(let iteration=0;iteration<6&&remaining>1e-7;iteration++){
    const dx=ball.vx*remaining,dy=ball.vy*remaining;
    let hit=null;
@@ -789,6 +791,7 @@
   text('score',number(b.score));text('best',number(Math.max(orbitRecords[b.mode].best,b.score)));
   text('lives',b.lives+' 機');text('stage',String(b.stage).padStart(2,'0'));text('combo','×'+(1+Math.min(4,Math.floor(b.combo/5))));
   text('remaining',remaining+' / '+b.bricks.length);text('pattern',orbitPatterns[(b.stage-1)%6]);
+  text('record',`${orbitModes[b.mode].label} · 最高 ${number(Math.max(orbitRecords[b.mode].best,b.score))} pts / 到達 ${Math.max(orbitRecords[b.mode].stage,b.stage)} / 最大連続 ${Math.max(orbitRecords[b.mode].combo,b.maxCombo)} HIT`);
   text('effects',[b.wide>0?'W '+Math.ceil(b.wide)+'s':'',b.slow>0?'T '+Math.ceil(b.slow)+'s':'',b.shield?'S ×'+b.shield:'',b.focus>0?'FOCUS '+Math.ceil(b.focus)+'s':''].filter(Boolean).join(' · ')||'W ワイド / T スロー / S シールド');
   const status=b.messageTime>0?b.message:(!b.launched?'発射ボタン / Space / 盤面タップで発射':'ブロックを壊してFOCUSをチャージ');
   text('status',status);
@@ -843,7 +846,7 @@
   ctx.fillStyle='#ffffff24';ctx.beginPath();ctx.roundRect(7,5,34,6,2);ctx.fill();
   ctx.strokeStyle='#0c163544';ctx.beginPath();ctx.moveTo(8,18);ctx.lineTo(39,18);ctx.stroke();
   ctx.fillStyle='#122443';ctx.textAlign='center';ctx.font='bold 10px sans-serif';
-  if(brick.type==='nova')ctx.fillText('N',24,16);
+  if(brick.type==='nova')ctx.fillText('N'+(brick.hp>1?brick.hp:''),24,16);
   else if(brick.hp>1)for(let i=0;i<brick.hp;i++){ctx.beginPath();ctx.arc(24+(i-(brick.hp-1)/2)*6,13,1.4,0,Math.PI*2);ctx.fill();}
   v.sprites.set(key,sprite);return sprite;
  }
@@ -911,12 +914,17 @@
    <label class="orbit-aim" for="breaker-angle">発射角 <input id="breaker-angle" type="range" min="-55" max="55" step="1" value="18"><output id="breaker-angle-value" for="breaker-angle">+18°</output></label>
    <div class="arc-primary-controls"><button data-action="breakerToggle" id="breaker-toggle">開始</button><button data-action="breakerLaunch" id="breaker-launch">発射</button><button data-action="breakerRestart">リセット</button></div>
    <div class="orbit-steer"><button data-orbit-steer="left" aria-label="パドルを左へ移動">← 左へ</button><button data-orbit-steer="right" aria-label="パドルを右へ移動">右へ →</button></div>
-   <p class="orbit-instructions" id="breaker-instructions">ドラッグ / ← →：移動 · Space：開始 / 発射<br>P：一時停止 · F：フォーカス（4秒スロー）<br>発射角は発射前に調整。Nブロックは周囲も破壊。</p>`,iconButton('breakerHelp','遊び方','document'));
+   <p class="orbit-instructions" id="breaker-instructions">ドラッグ / ← →：移動 · Space：開始 / 発射<br>P：一時停止 · F：フォーカス（4秒スロー）<br>発射角は発射前に調整。Nブロックは周囲にダメージ。</p>
+   <details class="orbit-records"><summary>フライト記録と保存について</summary><p id="breaker-record"></p><p>難易度別の記録と設定は端末内に保存。進行はページを再読み込みするとリセットされます。ゲーム一覧のBESTは旧記録を含む全難易度の最高点です。</p></details>`,iconButton('breakerHelp','遊び方','document'));
   const canvas=$('#breaker-canvas'),ctx=canvas.getContext('2d');
   if(!ctx){A.toast('このブラウザではCanvasを利用できません');return;}
-  const ids=['score','best','lives','stage','combo','remaining','pattern','effects','status','toggle','focus','launch','energy','progress','angle','angle-value','panel','panel-title','panel-copy','panel-detail','panel-button'];
+  const ids=['score','best','lives','stage','combo','remaining','pattern','effects','status','toggle','focus','launch','energy','progress','angle','angle-value','panel','panel-title','panel-copy','panel-detail','panel-button','record'];
   const view=breakerView={canvas,ctx,nodes:Object.fromEntries(ids.map(id=>[id,$('#breaker-'+id)])),sprites:new Map(),background:null,scale:1,lastTone:0,wake:null};
   let disposed=false,last=0,accumulator=0,hudClock=0,activePointer=null;
+  view.clearInput=()=>{
+   if(activePointer!==null&&canvas.hasPointerCapture(activePointer))canvas.releasePointerCapture(activePointer);
+   activePointer=null;breakerKeys={left:false,right:false};
+  };
   function frame(now){
    breakerFrame=0;if(disposed)return;
    const dt=last?Math.min(.075,(now-last)/1000):0;last=now;
@@ -952,7 +960,7 @@
   keys(e=>{
    if(e.ctrlKey||e.metaKey||e.altKey||e.isComposing||e.target.closest('[contenteditable]'))return;
    if(e.code==='Space'&&e.target.closest('button'))return;
-   if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();breakerKeys[e.key==='ArrowLeft'?'left':'right']=true;return;}
+   if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();if(breaker.running)breakerKeys[e.key==='ArrowLeft'?'left':'right']=true;return;}
    if(['Space','KeyP','KeyF'].includes(e.code)){e.preventDefault();if(e.repeat)return;
     if(e.code==='Space')breaker.running?orbitLaunch():A.actions.breakerToggle();
     if(e.code==='KeyP')A.actions.breakerToggle();if(e.code==='KeyF')A.actions.breakerFocus();
@@ -964,7 +972,7 @@
   on(window,'pagehide',()=>orbitPause());
   const overlayObserver=new MutationObserver(()=>{if(!$('#overlay').hidden)orbitPause();});
   overlayObserver.observe($('#overlay'),{attributes:true,attributeFilter:['hidden']});
-  const resize=()=>{orbitResize();orbitWake();};
+  const resize=()=>{if(disposed||breakerView!==view)return;orbitResize();orbitWake();};
   let observer=null;
   if(window.ResizeObserver){observer=new ResizeObserver(resize);observer.observe(canvas);}else on(window,'resize',resize);
   const media=window.matchMedia('(prefers-reduced-motion: reduce)');on(media,'change',()=>orbitWake());
@@ -977,7 +985,7 @@
   });
   on($('#breaker-quality'),'change',e=>{orbitPrefs.quality=e.target.value==='light'?'light':'high';A.save('breakerPreferences',orbitPrefs);view.background=null;resize();});
   disposers.push(()=>{
-   disposed=true;cancelAnimationFrame(breakerFrame);breakerFrame=0;observer?.disconnect();overlayObserver.disconnect();
+   disposed=true;view.clearInput();cancelAnimationFrame(breakerFrame);breakerFrame=0;observer?.disconnect();overlayObserver.disconnect();
    breaker.running=false;breakerKeys={left:false,right:false};orbitSave();breakerView=null;
    if(breakerAudio){breakerAudio.close().catch(()=>{});breakerAudio=null;}
   });
@@ -997,7 +1005,7 @@
  A.actions.breakerSound=()=>{orbitPrefs.sound=!orbitPrefs.sound;A.save('breakerPreferences',orbitPrefs);const button=$('#breaker-sound');if(button){button.textContent='音 '+(orbitPrefs.sound?'ON':'OFF');button.setAttribute('aria-pressed',String(orbitPrefs.sound));}if(orbitPrefs.sound)orbitTone(540);};
  A.actions.breakerHelp=()=>{orbitPause();help('Orbit Breaker',
   '<strong>操作</strong><br>開始 → 発射。ドラッグ・マウス・左右キー・左右ボタンで移動。発射前は角度を調整できます。Spaceで開始/発射、Pで一時停止、FでFOCUS。パドル端で斜め、中央で上向きに反射します。<br><br>'+ 
-  '<strong>スコアとステージ</strong><br>パドルに戻るまでの連続ヒット5回ごとに倍率アップ（最大5倍）。耐久ブロックの点が残り耐久、Nは周囲にダメージを与えるノヴァ。6種類の配置が巡回し、速度・耐久が段階的に上がります。3ステージクリアごとに残機+1（最大7）。<br><br>'+ 
+  '<strong>スコアとステージ</strong><br>パドルに戻るまでの連続ヒット5回ごとに倍率アップ（最大5倍）。耐久ブロックの点（N付きは数字）が残り耐久、Nは周囲にダメージを与えるノヴァ。6種類の配置が巡回し、速度・耐久が段階的に上がります。3ステージクリアごとに残機+1（最大7）。<br><br>'+ 
   '<strong>強化とFOCUS</strong><br>7個破壊ごとにW（ワイド14秒）、T（スロー9秒）、S（落球防止1回、最大2回）が順番に落下。パドルで取得します。ヒットでチャージが100%になったらFOCUSで4秒間スロー。Tとの減速は重複しません。強化の残り秒数はボール飛行中のみ進みます。<br><br>'+ 
   '<strong>難易度・保存</strong><br>リラックスは5機・広いパドル、標準は3機、エキスパートは高速・狭いパドル。加点係数は順に1 / 1.5 / 2倍。モード別最高点・到達ステージ・最大連続ヒット、設定を端末に保存。盤面は同じページ内のみ保持し、再読み込みで新規になります。<br><br>'+ 
   '<strong>表示と中断</strong><br>高画質/軽量を選択可能。「動きを減らす」では背景移動・軌跡・破片を抑えます。別タブ・ヘルプ・画面移動時は停止し、自動では再開しません。音は初期OFFでauraのサウンド・音量にも従います。');};
