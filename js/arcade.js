@@ -655,11 +655,13 @@
  const orbitClamp=(v,min,max)=>Math.max(min,Math.min(max,v));
  const orbitInteger=v=>Number.isSafeInteger(v)&&v>=0?v:0;
  const orbitStored=A.load('breakerPreferences',{});
- const orbitPrefs={mode:Object.hasOwn(orbitModes,orbitStored?.mode)?orbitStored.mode:'normal',quality:orbitStored?.quality==='light'?'light':'high',sound:orbitStored?.sound===true};
+ const orbitPrefs={mode:Object.hasOwn(orbitModes,orbitStored?.mode)?orbitStored.mode:'normal',quality:orbitStored?.quality==='light'?'light':'high',sound:orbitStored?.sound===true,cockpit:orbitStored?.cockpit===true};
  const orbitSaved=A.load('breakerRecords',{});
  const orbitRecords=Object.fromEntries(Object.keys(orbitModes).map(mode=>[mode,{best:orbitInteger(orbitSaved?.[mode]?.best),stage:orbitInteger(orbitSaved?.[mode]?.stage),combo:orbitInteger(orbitSaved?.[mode]?.combo)}]));
  let breaker=null,breakerKeys={left:false,right:false},breakerFrame=0,breakerView=null,breakerAudio=null;
- const orbitReduced=()=>!!A.settings.reduceMotion||window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+ const orbitMotionQuery=window.matchMedia('(prefers-reduced-motion: reduce)');
+ const orbitReduced=()=>!!A.settings.reduceMotion||orbitMotionQuery.matches;
+ let orbitSaveStatus='まだ保存していません';
  const orbitWidth=()=>orbitModes[breaker.mode].width+(breaker.wide>0?32:0);
  const orbitSpeed=()=>Math.min(475,orbitModes[breaker.mode].speed+(breaker.stage-1)*13);
  function stageBricks(stage){
@@ -680,18 +682,74 @@
   breaker={mode,paddle:180,previousPaddle:180,target:180,angle:18,ball:{x:180,y:442,px:180,py:442,vx:0,vy:0},
    bricks:stageBricks(1),score:0,lives:orbitModes[mode].lives,stage:1,running:false,launched:false,over:false,
    trail:[],particles:[],rings:[],drops:[],combo:0,maxCombo:0,destroyed:0,elapsed:0,energy:0,focus:0,wide:0,slow:0,shield:0,
-   message:'発射角を決めて、軌道へ。',messageTime:4,stageTime:0,trailClock:0};
+   message:'発射角を決めて、軌道へ。',messageTime:4,stageTime:0,trailClock:0,countdown:0,restored:false,
+   stageHits:0,stagePeak:0,stageDrops:0,stageMisses:0,claimed:[],missions:0,perfects:0};
+ }
+ // Only gameplay data is serialized; rendering resources and effects never enter storage.
+ const orbitStateFields=['mode','paddle','target','angle','score','lives','stage','launched','over','combo','maxCombo','destroyed','elapsed','energy','focus','wide','slow','shield','stageHits','stagePeak','stageDrops','stageMisses','claimed','missions','perfects'];
+ function orbitCheckpoint(){
+  if(!breaker)return null;
+  const b=breaker,data={version:1,savedAt:Date.now()};
+  for(const key of orbitStateFields)data[key]=b[key];
+  data.ball={x:b.ball.x,y:b.ball.y,vx:b.ball.vx,vy:b.ball.vy};
+  data.hp=b.bricks.map(brick=>brick.hp);
+  data.drops=b.drops.map(({x,y,type})=>({x,y,type}));
+  return data;
+ }
+ function orbitRestore(){
+  const saved=A.load('breakerState',null);if(saved===null)return false;
+  const finite=(v,min,max)=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
+  const integer=(v,min,max)=>Number.isSafeInteger(v)&&v>=min&&v<=max;
+  const reject=()=>{orbitSaveStatus='保存データを復元できないため新規開始';return false;};
+  if(!saved||saved.version!==1||!Object.hasOwn(orbitModes,saved.mode)||!integer(saved.stage,1,1000000)||
+   !integer(saved.lives,0,7)||typeof saved.over!=='boolean'||typeof saved.launched!=='boolean'||
+   saved.over!==(saved.lives===0)||!finite(saved.paddle,0,360)||!finite(saved.target,0,360)||
+   !integer(saved.angle,-55,55)||!finite(saved.elapsed,0,1e9)||!integer(saved.energy,0,100)||
+   !integer(saved.shield,0,2)||!finite(saved.wide,0,14)||!finite(saved.slow,0,9)||!finite(saved.focus,0,4)||
+   !['score','combo','maxCombo','destroyed','stageHits','stagePeak','stageDrops','stageMisses','missions','perfects'].every(key=>integer(saved[key],0,Number.MAX_SAFE_INTEGER)))return reject();
+  if(!saved.ball||!finite(saved.ball.x,5.9,354.1)||!finite(saved.ball.y,5.9,saved.over?520:514)||
+   !finite(saved.ball.vx,-475,475)||!finite(saved.ball.vy,-475,475)||
+   (saved.launched&&(!finite(Math.hypot(saved.ball.vx,saved.ball.vy),200,476)||Math.abs(saved.ball.vy)<10)))return reject();
+  const bricks=stageBricks(saved.stage);
+  if(!Array.isArray(saved.hp)||saved.hp.length!==bricks.length||!saved.hp.every((hp,i)=>integer(hp,0,bricks[i].maxHp))||
+   !saved.hp.some(hp=>hp>0)||!Array.isArray(saved.drops)||saved.drops.length>6||
+   !saved.drops.every(drop=>drop&&Object.hasOwn(orbitDrops,drop.type)&&finite(drop.x,0,360)&&finite(drop.y,0,510))||
+   !Array.isArray(saved.claimed)||saved.claimed.length>3||new Set(saved.claimed).size!==saved.claimed.length||
+   !saved.claimed.every(id=>['hits','combo','collect'].includes(id)))return reject();
+  resetBreaker(saved.mode);
+  for(const key of orbitStateFields)breaker[key]=saved[key];
+  breaker.claimed=[...saved.claimed];
+  const half=(orbitModes[breaker.mode].width+(breaker.wide>0?32:0))/2;
+  breaker.paddle=orbitClamp(breaker.paddle,half+4,356-half);breaker.previousPaddle=breaker.paddle;
+  breaker.target=breaker.paddle;breaker.bricks=bricks.map((brick,i)=>({...brick,hp:saved.hp[i]}));
+  breaker.ball={...saved.ball,px:saved.ball.x,py:saved.ball.y};
+  if(!breaker.launched)breaker.ball={x:breaker.paddle,y:442,px:breaker.paddle,py:442,vx:0,vy:0};
+  breaker.drops=saved.drops.map(drop=>({...drop,py:drop.y}));
+  breaker.restored=true;breaker.running=false;
+  orbitSaveStatus='保存フライトを復元しました';orbitMessage('保存済みのフライト · 再開で続ける');return true;
  }
  function orbitSave(){
-  if(!breaker)return;
-  const b=breaker,r=orbitRecords[b.mode];
-  const next={best:Math.max(r.best,b.score),stage:Math.max(r.stage,b.stage),combo:Math.max(r.combo,b.maxCombo)};
-  if(next.best!==r.best||next.stage!==r.stage||next.combo!==r.combo){
-   const records={...orbitRecords,[b.mode]:next};
-   if(A.save('breakerRecords',records))orbitRecords[b.mode]=next;
+  if(!breaker)return false;
+  const b=breaker,r=orbitRecords[b.mode],next={best:Math.max(r.best,b.score),stage:Math.max(r.stage,b.stage),combo:Math.max(r.combo,b.maxCombo)};
+  const records={...orbitRecords,[b.mode]:next};
+  const saved=A.saveBatch({breakerRecords:records,breakerBest:Math.max(orbitInteger(A.load('breakerBest',0)),b.score),breakerState:orbitCheckpoint()});
+  if(saved){orbitRecords[b.mode]=next;orbitSaveStatus='この端末に保存しました';}
+  else orbitSaveStatus='保存できませんでした · 空き容量を確認してください';
+  return saved;
+ }
+ function orbitMissionList(){
+  const b=breaker;
+  return [{id:'hits',label:'ブロックに12回ヒット',value:b.stageHits,target:12,bonus:150},
+   {id:'combo',label:'8回連続ヒット',value:b.stagePeak,target:8,bonus:250},
+   {id:'collect',label:'アイテムを2個回収',value:b.stageDrops,target:2,bonus:200}];
+ }
+ function orbitCheckMissions(){
+  const b=breaker;
+  for(const mission of orbitMissionList())if(mission.value>=mission.target&&!b.claimed.includes(mission.id)){
+   b.claimed.push(mission.id);b.missions++;const bonus=Math.round(mission.bonus*orbitModes[b.mode].multiplier);
+   b.score+=bonus;b.energy=Math.min(100,b.energy+20);
+   orbitMessage('MISSION CLEAR · +'+bonus+' pts / FOCUS +20');orbitBurst(180,300,'#9de8dd',24);
   }
-  const best=orbitInteger(A.load('breakerBest',0));
-  if(b.score>best)A.save('breakerBest',b.score);
  }
  function orbitMessage(text){breaker.message=text;breaker.messageTime=3;}
  function orbitTone(frequency=440){
@@ -738,6 +796,7 @@
   if(!breaker)return;
   const wasRunning=breaker.running;breaker.running=false;breakerKeys={left:false,right:false};
   breakerView?.clearInput();
+  breaker.countdown=0;
   if(wasRunning){orbitMessage(message);orbitSave();}
   orbitWake();
  }
@@ -756,7 +815,7 @@
  function orbitDamage(brick,explosion=false){
   if(brick.hp<=0)return;
   const b=breaker;brick.hp--;brick.flash=.16;
-  b.combo++;b.maxCombo=Math.max(b.maxCombo,b.combo);
+  b.combo++;b.maxCombo=Math.max(b.maxCombo,b.combo);b.stageHits++;b.stagePeak=Math.max(b.stagePeak,b.combo);
   const multiplier=1+Math.min(4,Math.floor(b.combo/5));
   b.score+=Math.round((brick.hp?8:20)*multiplier*orbitModes[b.mode].multiplier);
   b.energy=Math.min(100,b.energy+(brick.hp?5:9));
@@ -823,6 +882,7 @@
   for(const ring of b.rings)ring.life-=dt;b.rings=b.rings.filter(r=>r.life>0);
   for(const brick of b.bricks)brick.flash=Math.max(0,brick.flash-dt);
   if(!b.launched){b.ball.x=b.paddle;b.ball.y=442;return;}
+  if(b.countdown>0){b.countdown=Math.max(0,b.countdown-dt);return;}
   b.elapsed+=dt;
   for(const key of ['wide','slow','focus'])b[key]=Math.max(0,b[key]-dt);
   orbitMoveBall(dt);
@@ -830,20 +890,22 @@
    drop.py=drop.y;drop.y+=88*dt;
    if(drop.y>=443&&drop.py<=467&&Math.abs(drop.x-b.paddle)<=orbitWidth()/2+10){
     if(drop.type==='wide')b.wide=14;if(drop.type==='slow')b.slow=9;if(drop.type==='shield')b.shield=Math.min(2,b.shield+1);
-    drop.y=520;orbitMessage(orbitDrops[drop.type].name);orbitBurst(drop.x,454,orbitDrops[drop.type].color);orbitTone(740);
+    b.stageDrops++;drop.y=520;orbitMessage(orbitDrops[drop.type].name);orbitBurst(drop.x,454,orbitDrops[drop.type].color);orbitTone(740);
    }
   }
-  b.drops=b.drops.filter(drop=>drop.y<510);
+  b.drops=b.drops.filter(drop=>drop.y<510);orbitCheckMissions();
   if(b.ball.y>514){
-   b.lives--;b.drops=[];b.wide=0;b.slow=0;b.shield=0;orbitTone(140);
+   b.lives--;b.stageMisses++;b.drops=[];b.wide=0;b.slow=0;b.shield=0;orbitTone(140);
    if(b.lives<=0){b.over=true;b.running=false;orbitMessage('フライト終了');orbitSave();}
    else{breakerBallReset();orbitMessage('残り '+b.lives+' 機 · 発射で再挑戦');orbitSave();}
    return;
   }
   if(b.bricks.every(brick=>brick.hp<=0)){
-   b.score+=Math.round(150*b.stage*orbitModes[b.mode].multiplier);b.stage++;b.bricks=stageBricks(b.stage);b.drops=[];
-   if(b.stage%3===1){b.lives=Math.min(7,b.lives+1);orbitMessage('ステージクリア · 残機 +1');}
-   else orbitMessage('ステージクリア · 発射で次の軌道へ');
+   const perfect=b.stageMisses===0,bonus=Math.round((150+(perfect?200:0))*b.stage*orbitModes[b.mode].multiplier);
+   b.score+=bonus;if(perfect)b.perfects++;b.stage++;b.bricks=stageBricks(b.stage);b.drops=[];
+   const extraLife=b.stage%3===1;if(extraLife)b.lives=Math.min(7,b.lives+1);
+   orbitMessage((perfect?'ノーミスクリア':'ステージクリア')+' · +'+bonus+' pts'+(extraLife?' / 残機 +1':''));
+   b.stageHits=0;b.stagePeak=0;b.stageDrops=0;b.stageMisses=0;b.claimed=[];
    b.stageTime=2;breakerBallReset();orbitSave();orbitTone(880);return;
   }
   b.trailClock+=dt;
@@ -856,22 +918,31 @@
   text('score',number(b.score));text('best',number(Math.max(orbitRecords[b.mode].best,b.score)));
   text('lives',b.lives+' 機');text('stage',String(b.stage).padStart(2,'0'));text('combo','×'+(1+Math.min(4,Math.floor(b.combo/5))));
   text('remaining',remaining+' / '+b.bricks.length);text('pattern',orbitPatterns[(b.stage-1)%6]);
+  text('save-status',orbitSaveStatus);
+  for(const mission of orbitMissionList()){
+   text('mission-'+mission.id,`${b.claimed.includes(mission.id)?'達成':'進行中'} · ${mission.label} ${Math.min(mission.target,mission.value)}/${mission.target}`);
+   text('reward-'+mission.id,`+${Math.round(mission.bonus*orbitModes[b.mode].multiplier)} pts / FOCUS +20`);
+   v.nodes['mission-'+mission.id].parentElement.classList.toggle('complete',b.claimed.includes(mission.id));
+  }
+  text('mission-summary',`セクターミッション ${b.claimed.length} / 3`);
   text('record',`${orbitModes[b.mode].label} · 最高 ${number(Math.max(orbitRecords[b.mode].best,b.score))} pts / 到達 ${Math.max(orbitRecords[b.mode].stage,b.stage)} / 最大連続 ${Math.max(orbitRecords[b.mode].combo,b.maxCombo)} HIT`);
   text('effects',[b.wide>0?'W '+Math.ceil(b.wide)+'s':'',b.slow>0?'T '+Math.ceil(b.slow)+'s':'',b.shield?'S ×'+b.shield:'',b.focus>0?'FOCUS '+Math.ceil(b.focus)+'s':''].filter(Boolean).join(' · ')||'W ワイド / T スロー / S シールド');
   const status=b.messageTime>0?b.message:(!b.launched?'発射ボタン / Space / 盤面タップで発射':'ブロックを壊してFOCUSをチャージ');
   text('status',status);
   text('toggle',b.over?'もう一度':b.running?'一時停止':b.launched?'再開':'開始');
   text('focus',b.focus>0?'FOCUS 発動中':b.energy>=100?'FOCUS 発動':'FOCUS '+b.energy+'%');
-  v.nodes.focus.disabled=!b.running||!b.launched||b.energy<100||b.focus>0;
+  v.nodes.focus.disabled=!b.running||!b.launched||b.energy<100||b.focus>0||b.countdown>0;
   v.nodes.launch.disabled=!b.running||b.launched||b.over;
   v.nodes.energy.value=b.energy;v.nodes.energy.setAttribute('aria-valuetext',b.energy+'%');
   v.nodes.progress.value=b.bricks.length-remaining;v.nodes.progress.max=b.bricks.length;
   v.nodes.angle.disabled=b.launched||b.over;v.nodes.angle.value=b.angle;
   text('angle-value',(b.angle>0?'+':'')+b.angle+'°');
   const panel=v.nodes.panel;panel.hidden=b.running;
-  text('panel-title',b.over?'FLIGHT COMPLETE':b.launched?'PAUSED':'ORBIT BREAKER');
+  const count=v.nodes.countdown;count.hidden=!b.running||b.countdown<=0;
+  text('countdown',b.countdown>0?Math.ceil(b.countdown):'');
+  text('panel-title',b.over?'FLIGHT COMPLETE':b.restored?'FLIGHT SAVED':b.launched?'PAUSED':'ORBIT BREAKER');
   text('panel-copy',b.over?`${number(b.score)} pts · STAGE ${b.stage} · ${Math.floor(b.elapsed/60)}分${Math.floor(b.elapsed%60)}秒`:'狙って、跳ね返して、星の先へ。');
-  text('panel-detail',b.over?`最大連続 ${b.maxCombo} HIT / 破壊 ${b.destroyed} 個`:orbitModes[b.mode].label+' · '+(b.launched?'再開を押すまで停止します':'ドラッグ / ← → で移動'));
+  text('panel-detail',b.over?`最大連続 ${b.maxCombo} HIT / 破壊 ${b.destroyed} 個 / ミッション ${b.missions} / ノーミス ${b.perfects}`:orbitModes[b.mode].label+' · '+(b.launched?'再開を押すまで停止します':'ドラッグ / ← → で移動'));
   text('panel-button',b.over?'もう一度プレイ':b.launched?'フライトを再開':'フライトを開始');
  }
  function orbitBackground(ctx){
@@ -915,6 +986,21 @@
   else if(brick.hp>1)for(let i=0;i<brick.hp;i++){ctx.beginPath();ctx.arc(24+(i-(brick.hp-1)/2)*6,13,1.4,0,Math.PI*2);ctx.fill();}
   v.sprites.set(key,sprite);return sprite;
  }
+ function orbitAimGuide(ctx,x,y){
+  const angle=breaker.angle*Math.PI/180,point={x,y};let dx=Math.sin(angle),dy=-Math.cos(angle),distance=580;
+  ctx.save();ctx.strokeStyle='#b4eaff70';ctx.lineWidth=1.2;ctx.setLineDash([3,7]);ctx.beginPath();ctx.moveTo(x,y);
+  for(let segment=0;segment<3&&distance>0;segment++){
+   const mx=dx*distance,my=dy*distance;let hit=null;
+   const consider=c=>{if(c&&c.time>=0&&c.time<=1&&(!hit||c.time<hit.time))hit=c;};
+   if(mx<0)consider({time:(6-point.x)/mx,nx:1,ny:0});if(mx>0)consider({time:(354-point.x)/mx,nx:-1,ny:0});
+   if(my<0)consider({time:(6-point.y)/my,nx:0,ny:1});
+   for(const brick of breaker.bricks)if(brick.hp>0){const collision=orbitSweep(point,mx,my,brick);if(collision)consider({...collision,brick:true});}
+   point.x+=mx*(hit?hit.time:1);point.y+=my*(hit?hit.time:1);ctx.lineTo(point.x,point.y);
+   if(!hit||hit.brick)break;
+   distance*=1-hit.time;if(hit.nx)dx=-dx;if(hit.ny)dy=-dy;point.x+=hit.nx*.02;point.y+=hit.ny*.02;
+  }
+  ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(point.x,point.y,5,0,Math.PI*2);ctx.stroke();ctx.restore();
+ }
  function drawBreaker(alpha=1){
   const v=breakerView;if(!v)return;
   const ctx=v.ctx,b=breaker,reduced=orbitReduced(),high=orbitPrefs.quality==='high';
@@ -944,10 +1030,7 @@
   if(b.shield){ctx.strokeStyle='#6bdfff';ctx.lineWidth=2;ctx.setLineDash([8,4]);ctx.beginPath();ctx.moveTo(8,484);ctx.lineTo(352,484);ctx.stroke();ctx.setLineDash([]);}
   if(b.focus>0){ctx.strokeStyle='#b999ff99';ctx.lineWidth=3;ctx.strokeRect(5,5,350,490);}
   const paddle=lerp(b.previousPaddle,b.paddle),width=orbitWidth(),x=lerp(b.ball.px,b.ball.x),y=lerp(b.ball.py,b.ball.y);
-  if(!b.launched&&!b.over){
-   ctx.strokeStyle='#c2ebff66';ctx.lineWidth=1.3;ctx.setLineDash([4,6]);ctx.beginPath();ctx.moveTo(x,435);
-   const angle=b.angle*Math.PI/180;ctx.lineTo(x+Math.sin(angle)*83,435-Math.cos(angle)*83);ctx.stroke();ctx.setLineDash([]);
-  }
+  if(!b.launched&&!b.over)orbitAimGuide(ctx,x,y);
   if(!reduced){
    ctx.lineCap='round';
    for(let i=b.trail.length-1;i>0;i--){const p=b.trail[i],next=b.trail[i-1];ctx.globalAlpha=(1-i/b.trail.length)*.35;ctx.strokeStyle=b.focus>0?'#c4a5ff':'#92deff';ctx.lineWidth=(1-i/b.trail.length)*9;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(next.x,next.y);ctx.stroke();}
@@ -965,34 +1048,44 @@
  }
  function orbitWake(){if(breakerView)breakerView.wake();}
  function breakerApp(){
-  if(!breaker)resetBreaker();
+  if(!breaker&&!orbitRestore())resetBreaker();
   shell('Orbit Breaker','night',`
    <div class="orbit-heading"><div><small>ORBIT / DEEP SPACE ARCADE</small><h1>星の先へ。</h1></div><div class="orbit-best"><small>MODE BEST</small><strong id="breaker-best">0</strong></div></div>
+   <div class="orbit-toolbar"><button data-action="breakerCockpit" id="breaker-cockpit" aria-pressed="${orbitPrefs.cockpit}">${orbitPrefs.cockpit?'通常表示':'盤面重視'}</button><button data-action="breakerSave">保存して停止</button><span id="breaker-save-status" role="status"></span></div>
    <div class="orbit-options"><label>難易度<select id="breaker-mode">${Object.entries(orbitModes).map(([key,mode])=>`<option value="${key}" ${breaker.mode===key?'selected':''}>${mode.label}</option>`).join('')}</select></label><label>描画<select id="breaker-quality"><option value="high" ${orbitPrefs.quality==='high'?'selected':''}>高画質</option><option value="light" ${orbitPrefs.quality==='light'?'selected':''}>軽量</option></select></label><button data-action="breakerSound" id="breaker-sound" aria-pressed="${orbitPrefs.sound}">音 ${orbitPrefs.sound?'ON':'OFF'}</button></div>
    <div class="arc-scorebar orbit-scorebar">${score('SCORE',0,'breaker-score')}${score('LIVES',0,'breaker-lives')}${score('SECTOR',1,'breaker-stage')}${score('COMBO','×1','breaker-combo')}</div>
    <div class="orbit-sector"><span id="breaker-pattern"></span><span>残り <strong id="breaker-remaining"></strong></span></div><progress id="breaker-progress" class="orbit-progress" value="0" max="1" aria-label="ステージの破壊進捗"></progress>
    <div class="orbit-arena"><canvas id="breaker-canvas" width="360" height="500" tabindex="0" aria-label="Orbit Breakerの盤面。左右キーで移動、Spaceで発射、Pで一時停止、Fでフォーカス。" aria-describedby="breaker-instructions"></canvas>
+    <div class="orbit-countdown" id="breaker-countdown" role="status" aria-label="再開カウントダウン" hidden></div>
     <div class="orbit-panel" id="breaker-panel"><small>ORBIT FLIGHT CONTROL</small><h2 id="breaker-panel-title"></h2><p id="breaker-panel-copy"></p><p id="breaker-panel-detail"></p><button data-action="breakerToggle" id="breaker-panel-button">フライトを開始</button></div>
    </div>
-   <div class="orbit-effects" id="breaker-effects"></div><p class="orbit-status" id="breaker-status" role="status" aria-live="polite"></p>
    <div class="orbit-focus"><progress id="breaker-energy" value="0" max="100" aria-label="フォーカスのチャージ"></progress><button data-action="breakerFocus" id="breaker-focus">FOCUS 0%</button></div>
    <label class="orbit-aim" for="breaker-angle">発射角 <input id="breaker-angle" type="range" min="-55" max="55" step="1" value="18"><output id="breaker-angle-value" for="breaker-angle">+18°</output></label>
    <div class="arc-primary-controls"><button data-action="breakerToggle" id="breaker-toggle">開始</button><button data-action="breakerLaunch" id="breaker-launch">発射</button><button data-action="breakerRestart">リセット</button></div>
    <div class="orbit-steer"><button data-orbit-steer="left" aria-label="パドルを左へ移動">← 左へ</button><button data-orbit-steer="right" aria-label="パドルを右へ移動">右へ →</button></div>
+   <div class="orbit-effects" id="breaker-effects"></div><p class="orbit-status" id="breaker-status" role="status" aria-live="polite"></p>
+   <details class="orbit-missions"><summary id="breaker-mission-summary">セクターミッション</summary>${['hits','combo','collect'].map(id=>`<div><span id="breaker-mission-${id}"></span><small id="breaker-reward-${id}"></small></div>`).join('')}<p>達成ごとに加点とFOCUS +20。落球なしでクリアすると追加ボーナス。</p></details>
    <p class="orbit-instructions" id="breaker-instructions">ドラッグ / ← →：移動 · Space：開始 / 発射<br>P：一時停止 · F：フォーカス（4秒スロー）<br>発射角は発射前に調整。Nブロックは周囲にダメージ。</p>
-   <details class="orbit-records"><summary>フライト記録と保存について</summary><p id="breaker-record"></p><p>難易度別の記録と設定は端末内に保存。進行はページを再読み込みするとリセットされます。ゲーム一覧のBESTは旧記録を含む全難易度の最高点です。</p></details>`,iconButton('breakerHelp','遊び方','document'));
+   <details class="orbit-records"><summary>フライト記録と保存について</summary><p id="breaker-record"></p><p>難易度別の記録と設定は端末内に保存。進行は10秒ごと・停止時・区切りで保存し、再読み込み後は停止状態から続けられます。保存枠は1つです。ゲーム一覧のBESTは旧記録を含む全難易度の最高点です。</p></details>`,iconButton('breakerHelp','遊び方','document'));
   const canvas=$('#breaker-canvas'),ctx=canvas.getContext('2d');
   if(!ctx){A.toast('このブラウザではCanvasを利用できません');return;}
-  const ids=['score','best','lives','stage','combo','remaining','pattern','effects','status','toggle','focus','launch','energy','progress','angle','angle-value','panel','panel-title','panel-copy','panel-detail','panel-button','record'];
+  const ids=['score','best','lives','stage','combo','remaining','pattern','effects','status','toggle','focus','launch','energy','progress','angle','angle-value','panel','panel-title','panel-copy','panel-detail','panel-button','record','save-status','countdown','mission-summary',...['hits','combo','collect'].flatMap(id=>['mission-'+id,'reward-'+id])];
   const view=breakerView={canvas,ctx,nodes:Object.fromEntries(ids.map(id=>[id,$('#breaker-'+id)])),sprites:new Map(),background:null,scale:1,lastTone:0,wake:null};
-  let disposed=false,last=0,accumulator=0,hudClock=0,activePointer=null;
+  const content=canvas.closest('.arcade-play');content.dataset.cockpit=String(orbitPrefs.cockpit);
+  let disposed=false,last=0,accumulator=0,hudClock=0,activePointer=null,saveClock=0;
+  const fitArena=()=>{
+   const available=Math.max(260,content.clientHeight-320);
+   content.style.setProperty('--orbit-arena-width',Math.min(380,Math.floor(available*.72))+'px');
+  };
+  fitArena();
   view.clearInput=()=>{
    if(activePointer!==null&&canvas.hasPointerCapture(activePointer))canvas.releasePointerCapture(activePointer);
    activePointer=null;breakerKeys={left:false,right:false};
   };
   function frame(now){
    breakerFrame=0;if(disposed)return;
-   const dt=last?Math.min(.075,(now-last)/1000):0;last=now;
+   const elapsed=last?Math.max(0,(now-last)/1000):0,dt=Math.min(.075,elapsed);last=now;
+   if(elapsed>.25&&breaker.running)orbitPause('処理の中断を検出 · 再開で続ける');
    if(document.hidden||!$('#overlay').hidden){if(breaker.running)orbitPause('自動停止 · 再開で続ける');accumulator=0;}
    if(breaker.running){
     accumulator+=dt;let steps=0;
@@ -1000,6 +1093,7 @@
    }else accumulator=0;
    drawBreaker(breaker.running?accumulator*120:1);
    hudClock+=dt;if(hudClock>=.1||!breaker.running){orbitHud();hudClock=0;}
+   if(breaker.running){saveClock+=dt;if(saveClock>=10){saveClock=0;orbitSave();}}
    if(breaker.running&&!breakerFrame)breakerFrame=requestAnimationFrame(frame);
   }
   view.wake=()=>{
@@ -1034,18 +1128,20 @@
   on(document,'keyup',e=>{if(e.key==='ArrowLeft')breakerKeys.left=false;if(e.key==='ArrowRight')breakerKeys.right=false;});
   on(window,'blur',()=>orbitPause('自動停止 · 再開で続ける'));
   on(document,'visibilitychange',()=>{if(document.hidden)orbitPause('自動停止 · 再開で続ける');});
-  on(window,'pagehide',()=>orbitPause());
+  on(window,'pagehide',()=>{orbitPause();orbitSave();});
   const overlayObserver=new MutationObserver(()=>{if(!$('#overlay').hidden)orbitPause();});
   overlayObserver.observe($('#overlay'),{attributes:true,attributeFilter:['hidden']});
-  const resize=()=>{if(disposed||breakerView!==view)return;orbitResize();orbitWake();};
+  const resize=()=>{if(disposed||breakerView!==view)return;fitArena();orbitResize();orbitWake();};
+  view.resize=resize;
   let observer=null;
-  if(window.ResizeObserver){observer=new ResizeObserver(resize);observer.observe(canvas);}else on(window,'resize',resize);
-  const media=window.matchMedia('(prefers-reduced-motion: reduce)');on(media,'change',()=>orbitWake());
+  if(window.ResizeObserver){observer=new ResizeObserver(resize);observer.observe(canvas);observer.observe(content);}
+  on(window,'resize',resize);
+  on(orbitMotionQuery,'change',()=>orbitWake());
   on($('#breaker-angle'),'input',e=>{if(!breaker.launched&&!breaker.over){breaker.angle=orbitClamp(Number(e.target.value),-55,55);orbitWake();}});
   on($('#breaker-mode'),'change',e=>{
    const mode=e.target.value;e.target.value=breaker.mode;if(!Object.hasOwn(orbitModes,mode)||mode===breaker.mode)return;
    orbitPause();A.confirm('難易度を変更？','現在のフライトを終了して新しく開始します。記録は難易度ごとに保存します。',()=>{
-    orbitSave();orbitPrefs.mode=mode;A.save('breakerPreferences',orbitPrefs);resetBreaker(mode);$('#breaker-mode').value=mode;orbitWake();
+    orbitSave();orbitPrefs.mode=mode;A.save('breakerPreferences',orbitPrefs);resetBreaker(mode);orbitSave();$('#breaker-mode').value=mode;orbitWake();
    });
   });
   on($('#breaker-quality'),'change',e=>{orbitPrefs.quality=e.target.value==='light'?'light':'high';A.save('breakerPreferences',orbitPrefs);view.background=null;resize();});
@@ -1058,21 +1154,29 @@
  }
  A.actions.breakerToggle=()=>{
   if(!breakerView)return;
-  if(breaker.over){orbitSave();resetBreaker(breaker.mode);}
-  if(breaker.running)orbitPause();else{breaker.running=true;orbitMessage(breaker.launched?'フライト再開':'発射ボタン / Space / 盤面タップで発射');orbitTone(360);orbitWake();}
+  if(breaker.over){orbitSave();resetBreaker(breaker.mode);orbitSave();}
+  if(breaker.running)orbitPause();else{breaker.restored=false;breaker.countdown=breaker.launched?3:0;breaker.running=true;orbitMessage(breaker.launched?'フライト再開':'発射ボタン / Space / 盤面タップで発射');orbitTone(360);orbitWake();}
  };
  A.actions.breakerLaunch=orbitLaunch;
  A.actions.breakerFocus=()=>{
   const b=breaker;if(!b||!b.running||!b.launched||b.energy<100||b.focus>0)return;
+  if(b.countdown>0)return;
   b.energy=0;b.focus=4;orbitMessage('FOCUS · 4秒間のスローモーション');orbitTone(600);orbitWake();
  };
- A.actions.breakerRestart=()=>{if(!breakerView)return;orbitPause();A.confirm('新しいフライト？','現在の進行をリセットします。ベスト記録は残ります。',()=>{orbitSave();resetBreaker(breaker.mode);orbitWake();});};
+ A.actions.breakerRestart=()=>{if(!breakerView)return;orbitPause();A.confirm('新しいフライト？','現在の進行をリセットします。ベスト記録は残ります。',()=>{orbitSave();resetBreaker(breaker.mode);orbitSave();orbitWake();});};
+ A.actions.breakerSave=()=>{if(!breakerView)return;orbitPause();orbitSave();orbitWake();};
+ A.actions.breakerCockpit=()=>{
+  if(!breakerView)return;orbitPause();orbitPrefs.cockpit=!orbitPrefs.cockpit;A.save('breakerPreferences',orbitPrefs);
+  const content=breakerView.canvas.closest('.arcade-play');content.dataset.cockpit=String(orbitPrefs.cockpit);content.scrollTop=0;
+  const button=$('#breaker-cockpit');button.textContent=orbitPrefs.cockpit?'通常表示':'盤面重視';button.setAttribute('aria-pressed',String(orbitPrefs.cockpit));breakerView.resize();
+ };
  A.actions.breakerSound=()=>{orbitPrefs.sound=!orbitPrefs.sound;A.save('breakerPreferences',orbitPrefs);const button=$('#breaker-sound');if(button){button.textContent='音 '+(orbitPrefs.sound?'ON':'OFF');button.setAttribute('aria-pressed',String(orbitPrefs.sound));}if(orbitPrefs.sound)orbitTone(540);};
  A.actions.breakerHelp=()=>{orbitPause();help('Orbit Breaker',
   '<strong>操作</strong><br>開始 → 発射。ドラッグ・マウス・左右キー・左右ボタンで移動。発射前は角度を調整できます。Spaceで開始/発射、Pで一時停止、FでFOCUS。パドル端で斜め、中央で上向きに反射します。<br><br>'+ 
   '<strong>スコアとステージ</strong><br>パドルに戻るまでの連続ヒット5回ごとに倍率アップ（最大5倍）。耐久ブロックの点（N付きは数字）が残り耐久、Nは周囲にダメージを与えるノヴァ。6種類の配置が巡回し、速度・耐久が段階的に上がります。3ステージクリアごとに残機+1（最大7）。<br><br>'+ 
   '<strong>強化とFOCUS</strong><br>7個破壊ごとにW（ワイド14秒）、T（スロー9秒）、S（落球防止1回、最大2回）が順番に落下。パドルで取得します。ヒットでチャージが100%になったらFOCUSで4秒間スロー。Tとの減速は重複しません。強化の残り秒数はボール飛行中のみ進みます。<br><br>'+ 
-  '<strong>難易度・保存</strong><br>リラックスは5機・広いパドル、標準は3機、エキスパートは高速・狭いパドル。加点係数は順に1 / 1.5 / 2倍。モード別最高点・到達ステージ・最大連続ヒット、設定を端末に保存。盤面は同じページ内のみ保持し、再読み込みで新規になります。<br><br>'+ 
+  '<strong>難易度・保存</strong><br>リラックスは5機・広いパドル、標準は3機、エキスパートは高速・狭いパドル。加点係数は順に1 / 1.5 / 2倍。モード別最高点・到達ステージ・最大連続ヒット、設定を端末に保存。盤面・残機・強化・ミッションは10秒ごとと停止時に1枠へ保存。再読み込み後は停止状態で復元し、飛行中なら再開時に3秒カウントダウンします。不正な保存データは新規開始へ戻します。<br><br>'+ 
+  '<strong>ミッションと操作</strong><br>各セクターで12ヒット、8連続ヒット、アイテム2個回収を目指します。達成ごとに加点とFOCUS +20。落球なしのクリアには追加得点。「盤面重視」で装飾を畳み、「通常表示」で設定・記録へ戻れます。発射ガイドは最初のブロックまでの軌道を壁反射込みで表示します。<br><br>'+
   '<strong>表示と中断</strong><br>高画質/軽量を選択可能。「動きを減らす」では背景移動・軌跡・破片を抑えます。別タブ・ヘルプ・画面移動時は停止し、自動では再開しません。音は初期OFFでauraのサウンド・音量にも従います。');};
 
  // Sudoku: transformations preserve a known unique puzzle; notes, undo and daily seeds.
