@@ -51,6 +51,7 @@
   if(!['work','rest'].includes(focus.mode)||!Number.isFinite(focus.remaining)||!Number.isFinite(focus.duration)||!Number.isFinite(focus.end))focus={mode:'work',duration:1500,remaining:1500,end:0};
   const commitFocus = next => {if(!A.save('focusSession',next))return false;focus=next;return true;};
   const secondsLeft = () => focus.end ? Math.max(0,Math.ceil((focus.end-Date.now())/1000)) : focus.remaining;
+  A.focusTimerSnapshot=()=>focus.id||focus.end?{label:focus.mode==='rest'?'休憩':'集中',running:!!focus.end,remaining:secondsLeft(),duration:focus.duration,end:focus.end}:null;
   function finishFocus() {
     if(!focus.end||secondsLeft()>0)return;
     if(focus.mode==='work') {

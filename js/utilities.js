@@ -57,6 +57,8 @@ function saveTimer(next,extra={}){
 }
 const timerRemaining=()=>timer.running?Math.max(0,(timer.end-Date.now())/1000):timer.remaining;
 const timerBusy=()=>timer.running||!!timer.id&&!timer.finished;
+// Read-only projection of the same session used by the timer, never a second countdown.
+A.clockTimerSnapshot=()=>timerBusy()?{label:timer.label,running:timer.running,remaining:Math.ceil(timerRemaining()),duration:timer.duration,end:timer.end}:null;
 const timerLength=s=>s>=60?`${Math.floor(s/60)}分${s%60?`${s%60}秒`:''}`:`${s}秒`;
 const timerTime=end=>new Date(end).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',hour12:false});
 function timerDial(){

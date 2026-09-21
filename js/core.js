@@ -661,6 +661,7 @@
     if(controlVisible())A.controls();
   });
   const controlRemaining=()=>controlTimer?Math.max(0,controlTimer.end?Math.ceil((controlTimer.end-Date.now())/1000):controlTimer.remaining):0;
+  A.controlTimerSnapshot=()=>controlTimer?{label:'クイックタイマー',running:!!controlTimer.end,remaining:controlRemaining(),duration:controlTimer.duration,end:controlTimer.end}:null;
   const storeControlTimer=next=>{if(!A.save('controlTimer',next))return false;controlTimer=next;return true;};
   const controlQuickMarkup=()=>controlSelection().map(id=>{
     const [,icon,label]=controlShortcuts.find(([key])=>key===id);
@@ -965,7 +966,7 @@
   const normalizeNotices=value=>(Array.isArray(value)?value:[]).filter(n=>n&&A.apps[n.app]&&typeof n.title==='string'&&typeof n.body==='string').slice(0,noticeLimit).map(n=>({...n,id:String(n.id||A.id()),time:Number.isFinite(Number(n.time))&&Math.abs(Number(n.time))<8640000000000000?Number(n.time):Date.now(),read:!!n.read,pinned:!!n.pinned,snoozedUntil:Number(n.snoozedUntil)||0,demo:n.demo===true||['welcome','studio'].includes(n.id)||n.app==='messages'}));
   let noticeList=normalizeNotices(A.load('notifications',[]));
   const savedNoticePrefs=A.load('notificationPrefs',{})||{};
-  let noticePrefs={banners:savedNoticePrefs.banners!==false,compact:savedNoticePrefs.compact!==false,scheduled:!!savedNoticePrefs.scheduled,muted:Array.isArray(savedNoticePrefs.muted)?savedNoticePrefs.muted:[]};
+  let noticePrefs={live:savedNoticePrefs.live!==false,banners:savedNoticePrefs.banners!==false,compact:savedNoticePrefs.compact!==false,scheduled:!!savedNoticePrefs.scheduled,muted:Array.isArray(savedNoticePrefs.muted)?savedNoticePrefs.muted:[]};
   let noticeFilter='all',noticeApp='all',noticeQuery='',noticeExpanded=new Set(),bannerQueue=[],bannerTimer,noticeSeenMinute=-1;
   const noticeActive=n=>!n.snoozedUntil;
   const noticeVisible=()=>!A.$('#overlay').hidden&&A.$('#overlay').classList.contains('notifications-overlay');
@@ -977,6 +978,52 @@
     return `<article class="system-notification notice-card ${n.read?'is-read':'is-unread'} ${n.pinned?'is-pinned':''} ${mini?'is-mini':''} ${expanded?'is-expanded':''}" data-notice-id="${noticeEsc(n.id)}" style="--notice-accent:${n.app==='clock'?'#b07130':n.app==='focus'?'#8265c5':n.app==='messages'?'#318764':'#487faf'}">
       <button class="notification-open" data-action="openNotice" data-id="${noticeEsc(n.id)}">${smallIcon(n.app)}<span><span class="notification-meta"><span>${noticeEsc(A.apps[n.app].name)}${n.demo?' · デモ':''}</span><time data-notice-time="${n.time}" datetime="${new Date(n.time).toISOString()}">${relativeTime(n.time)}</time></span><strong>${hidden?'新しい通知':noticeEsc(n.title)}</strong>${!hidden&&n.body?`<span class="notification-body">${noticeEsc(n.body)}</span>`:''}</span>${!n.read?'<i class="notice-unread-dot" aria-label="未読"></i>':''}</button>
       ${mini?noticeButton('dismissNotice','close','削除',n.id,'class="notification-dismiss"'):`<div class="notice-actions">${noticeButton('noticeRead',n.read?'refresh':'check',n.read?'未読にする':'既読にする',n.id)}${noticeButton('noticePin','pin',n.pinned?'ピン解除':'ピン留め',n.id,`aria-pressed="${n.pinned}"`)}<button data-action="noticeSnooze" data-id="${noticeEsc(n.id)}" aria-label="${waiting?'再通知を取り消す':'10分後に再通知'}">${A.icon(waiting?'refresh':'clock')}${waiting?new Date(n.snoozedUntil).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'10分'}</button>${noticeButton('noticeExpand',expanded?'minus':'plus',expanded?'折りたたむ':'全文を表示',n.id,`aria-expanded="${expanded}"`)}${noticeButton('dismissNotice','trash','削除',n.id)}</div>`}</article>`;
+  };
+  // Live cards are projections, not notifications: no writes, unread count or banners.
+  const activityTime=seconds=>{const s=Math.max(0,Math.ceil(seconds));return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;};
+  function activitySnapshots(){
+    if(!noticePrefs.live)return [];
+    const cards=[];
+    for(const [id,app,get] of [['timer','clock',A.clockTimerSnapshot],['focus','focus',A.focusTimerSnapshot],['quick','clock',A.controlTimerSnapshot]]){
+      const t=get?.();
+      if(!t||A.noticeMuted(app)||!Number.isFinite(t.remaining)||!Number.isFinite(t.duration)||t.duration<=0)continue;
+      const remaining=Math.max(0,t.remaining);
+      const end=t.running&&Number.isFinite(t.end)&&t.end>0&&t.end<=8640000000000000?new Date(t.end).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'';
+      cards.push({id,app,title:t.label,value:activityTime(remaining),detail:remaining===0?'終了処理中':t.running?`進行中${end?' · '+end+' 終了予定':''}`:'一時停止中',progress:Math.min(100,Math.max(0,(1-remaining/t.duration)*100))});
+    }
+    const w=A.weatherSnapshot?.();
+    if(w&&!A.noticeMuted('weather'))cards.push({id:'weather',app:'weather',title:w.name,value:w.temp==='—'?'—':`${w.temp}°`,detail:`${w.desc}${w.temp==='—'?'':` · 最高 ${w.high}° / 最低 ${w.low}°`}`,source:`${w.source} · Open-Meteo`});
+    return cards;
+  }
+  function renderActivities(){
+    if(document.hidden)return;
+    const roots=[noticeVisible()?A.$('#notice-activities'):null,A.locked?A.$('#lock-activities'):null].filter(Boolean);
+    if(!roots.length)return;
+    const cards=activitySnapshots(),privateView=A.locked&&A.settings.lockPreview===false;
+    for(const root of roots){
+      root.hidden=!cards.length;
+      const signature=cards.map(c=>c.id).join(',')+':'+privateView;
+      // Only rebuild on membership/privacy changes; keep keyboard focus and scroll on ticks.
+      if(root.dataset.signature!==signature){
+        root.dataset.signature=signature;
+        root.innerHTML=`<h3>アプリの状態 <small>履歴とは別に表示</small></h3><div class="activity-stack">${cards.map(c=>`<button class="activity-card" data-action="openActivity" data-id="${c.id}">${smallIcon(c.app)}<span class="activity-content"><span class="activity-app">${noticeEsc(A.apps[c.app].name)}</span><strong data-activity-title></strong><span data-activity-detail></span><small data-activity-source></small>${!privateView&&c.progress!==undefined?'<progress max="100" value="0" aria-label="経過"></progress>':''}</span><span class="activity-value" ${!privateView&&c.progress!==undefined?'role="timer" aria-label="残り時間"':''}></span></button>`).join('')}</div>`;
+      }
+      cards.forEach(c=>{
+        const el=root.querySelector(`[data-id="${c.id}"]`);
+        const text=(selector,value)=>{const node=el.querySelector(selector);if(node.textContent!==value)node.textContent=value;};
+        text('[data-activity-title]',privateView?'アプリの状態':String(c.title));
+        text('[data-activity-detail]',privateView?'開いて確認':c.detail);
+        text('[data-activity-source]',privateView?'':c.source||'');
+        text('.activity-value',privateView?'':c.value);
+        const bar=el.querySelector('progress');if(bar)bar.value=c.progress;
+      });
+    }
+  }
+  A.actions.openActivity=el=>{
+    const id=el.dataset.id;
+    if(id==='quick'){if(A.locked)A.home();A.controls();}
+    else if(id==='timer')A.open('clock','timer');
+    else if(id==='focus'||id==='weather')A.open(id);
   };
   const refreshNotices=()=>{A.renderLockNotices();if(noticeVisible())renderNoticeFeed();};
   const commitNotices=next=>{const bounded=next.slice(0,noticeLimit);if(!A.save('notifications',bounded))return false;noticeList=bounded;refreshNotices();return true;};
@@ -1006,6 +1053,7 @@
   A.renderLockNotices=()=>{
     const active=noticeList.filter(noticeActive),unread=active.filter(n=>!n.read).length;
     A.$('.lock-notifications').innerHTML=active.filter(n=>!n.read).slice(0,2).map(n=>noticeCard(n,true)).join('')||'<p class="lock-clear">通知なし</p>';
+    renderActivities();
     const status=A.$('#status-time');status.dataset.unread=String(Math.min(99,unread));status.classList.toggle('has-notices',unread>0);status.setAttribute('aria-label',`通知を開く・未読${unread}件`);
   };
   function renderNoticeFeed(){
@@ -1029,8 +1077,8 @@
   }
   A.notifications=()=>{
     removeBanner();bannerQueue=[];
-    A.overlay(`${A.overlayTitle('通知')}<div class="notice-hero"><div class="notice-orb">${noticeBell()}</div><div><strong id="notice-count">0</strong><span id="notice-summary">未読</span></div><button id="notice-focus" data-action="noticeFocus"></button></div><div class="notice-tabs" id="notice-tabs" aria-label="通知の絞り込み"></div><div class="notice-tools"><label>${A.icon('search')}<input id="notice-query" type="search" placeholder="検索" aria-label="通知を検索" maxlength="200" value="${noticeEsc(noticeQuery)}"></label><select id="notice-app-filter" aria-label="アプリで絞り込み"></select>${noticeButton('noticeSettings','settings','通知設定')}</div><div id="notice-feed"></div><div class="notice-bulk"><button id="notice-read-all" data-action="noticeReadAll">${A.icon('check')}すべて既読</button><button id="notice-clear-read" data-action="noticeClearRead">${A.icon('trash')}既読を削除</button></div><p class="notice-footnote">端末内 · 最大100件</p>`,'notifications-overlay');
-    renderNoticeFeed();A.$('#notice-query').oninput=e=>{noticeQuery=e.target.value;renderNoticeFeed();};A.$('#notice-app-filter').onchange=e=>{noticeApp=e.target.value;renderNoticeFeed();};
+    A.overlay(`${A.overlayTitle('通知')}<div class="notice-hero"><div class="notice-orb">${noticeBell()}</div><div><strong id="notice-count">0</strong><span id="notice-summary">未読</span></div><button id="notice-focus" data-action="noticeFocus"></button></div><section id="notice-activities" class="notice-activities" aria-label="アプリの状態" hidden></section><h3 class="notice-history-label">通知履歴</h3><div class="notice-tabs" id="notice-tabs" aria-label="通知の絞り込み"></div><div class="notice-tools"><label>${A.icon('search')}<input id="notice-query" type="search" placeholder="検索" aria-label="通知を検索" maxlength="200" value="${noticeEsc(noticeQuery)}"></label><select id="notice-app-filter" aria-label="アプリで絞り込み"></select>${noticeButton('noticeSettings','settings','通知設定')}</div><div id="notice-feed"></div><div class="notice-bulk"><button id="notice-read-all" data-action="noticeReadAll">${A.icon('check')}すべて既読</button><button id="notice-clear-read" data-action="noticeClearRead">${A.icon('trash')}既読を削除</button></div><p class="notice-footnote">履歴は端末内 · 最大100件<br>状態表示はページ稼働中のみ更新。天気の取得・更新は天気アプリから。</p>`,'notifications-overlay');
+    renderNoticeFeed();renderActivities();A.$('#notice-query').oninput=e=>{noticeQuery=e.target.value;renderNoticeFeed();};A.$('#notice-app-filter').onchange=e=>{noticeApp=e.target.value;renderNoticeFeed();};
   };
   const changeNotice=(id,fn)=>commitNotices(noticeList.map(n=>n.id===id?fn(n):n));
   A.actions.openNotice=el=>{const n=noticeList.find(n=>n.id===el.dataset.id);if(!n)return;if(!changeNotice(n.id,n=>({...n,read:true})))return;dropBanner(n.id);A.open(n.app,n.arg);if(n.app==='calendar')A.actions.calendarToday?.();};
@@ -1052,11 +1100,11 @@
   const saveNoticePrefs=next=>{if(!A.save('notificationPrefs',next))return false;noticePrefs=next;return true;};
   A.actions.noticeSettings=()=>{
     const toggle=(key,label,detail='')=>`<button class="notice-setting" data-action="noticePreference" data-id="${key}" aria-pressed="${noticePrefs[key]}"><span><strong>${label}</strong>${detail?`<small>${detail}</small>`:''}</span><i class="preview-switch ${noticePrefs[key]?'on':''}"></i></button>`;
-    A.overlay(`${A.overlayTitle('通知設定')}<button class="notice-back" data-action="showNotifications">‹ 通知</button><div class="notice-settings-card">${toggle('banners','バナー')}${toggle('compact','コンパクト','本文は1行')}${toggle('scheduled','予定・期限','予定の10分前 / 当日期限')}</div><p class="notice-footnote">ページ終了・スリープ中は通知保証なし</p><h3 class="notice-settings-label">アプリ別</h3><div class="notice-settings-card">${['clock','focus','calendar','reminders','messages'].map(app=>`<button class="notice-setting" data-action="noticeMute" data-id="${app}" aria-pressed="${!A.noticeMuted(app)}">${smallIcon(app)}<span><strong>${noticeEsc(A.apps[app].name)}${app==='messages'?' · デモ':''}</strong></span><i class="preview-switch ${!A.noticeMuted(app)?'on':''}"></i></button>`).join('')}</div><button class="notice-setting" data-action="noticePrivacy" aria-pressed="${A.settings.lockPreview!==false}"><span><strong>ロック画面の本文</strong><small>表示設定のみ・端末保護なし</small></span><i class="preview-switch ${A.settings.lockPreview!==false?'on':''}"></i></button><button class="notice-danger" data-action="clearNotifications">全削除</button>`,'notice-settings-overlay');
+    A.overlay(`${A.overlayTitle('通知設定')}<button class="notice-back" data-action="showNotifications">‹ 通知</button><div class="notice-settings-card">${toggle('live','アプリの状態','天気・進行中のタイマーを通知とロック画面に表示')}${toggle('banners','バナー')}${toggle('compact','コンパクト','本文は1行')}${toggle('scheduled','予定・期限','予定の10分前 / 当日期限')}</div><p class="notice-footnote">ページ終了・スリープ中は通知保証なし</p><h3 class="notice-settings-label">アプリ別</h3><div class="notice-settings-card">${['weather','clock','focus','calendar','reminders','messages'].map(app=>`<button class="notice-setting" data-action="noticeMute" data-id="${app}" aria-pressed="${!A.noticeMuted(app)}">${smallIcon(app)}<span><strong>${noticeEsc(A.apps[app].name)}${app==='messages'?' · デモ':''}</strong></span><i class="preview-switch ${!A.noticeMuted(app)?'on':''}"></i></button>`).join('')}</div><button class="notice-setting" data-action="noticePrivacy" aria-pressed="${A.settings.lockPreview!==false}"><span><strong>ロック画面の本文</strong><small>表示設定のみ・端末保護なし</small></span><i class="preview-switch ${A.settings.lockPreview!==false?'on':''}"></i></button><button class="notice-danger" data-action="clearNotifications">全削除</button>`,'notice-settings-overlay');
   };
   A.actions.showNotifications=()=>A.notifications();
-  A.actions.noticePreference=el=>{const key=el.dataset.id;if(!['banners','compact','scheduled'].includes(key))return;if(saveNoticePrefs({...noticePrefs,[key]:!noticePrefs[key]})){if(!noticePrefs.banners){removeBanner();bannerQueue=[];}noticeSeenMinute=-1;A.actions.noticeSettings();}};
-  A.actions.noticeMute=el=>{const app=el.dataset.id;if(!A.apps[app])return;if(saveNoticePrefs({...noticePrefs,muted:A.noticeMuted(app)?noticePrefs.muted.filter(x=>x!==app):[...noticePrefs.muted,app]})){if(A.noticeMuted(app)){noticeList.filter(n=>n.app===app).forEach(n=>dropBanner(n.id));}A.actions.noticeSettings();}};
+  A.actions.noticePreference=el=>{const key=el.dataset.id;if(!['live','banners','compact','scheduled'].includes(key))return;if(saveNoticePrefs({...noticePrefs,[key]:!noticePrefs[key]})){if(!noticePrefs.banners){removeBanner();bannerQueue=[];}noticeSeenMinute=-1;renderActivities();A.actions.noticeSettings();}};
+  A.actions.noticeMute=el=>{const app=el.dataset.id;if(!A.apps[app])return;if(saveNoticePrefs({...noticePrefs,muted:A.noticeMuted(app)?noticePrefs.muted.filter(x=>x!==app):[...noticePrefs.muted,app]})){if(A.noticeMuted(app)){noticeList.filter(n=>n.app===app).forEach(n=>dropBanner(n.id));}renderActivities();A.actions.noticeSettings();}};
   A.actions.noticePrivacy=()=>{A.settings.lockPreview=A.settings.lockPreview===false;A.applySettings();A.renderLockNotices();A.actions.noticeSettings();};
   // Horizontal dismissal never captures vertical scrolling; buttons remain a full alternative.
   let noticeSwipe=null,noticeSwallowUntil=0;
@@ -1068,6 +1116,7 @@
   const scheduledHistory=A.load('noticeScheduleHistory',[]);
   let scheduleHistory=Array.isArray(scheduledHistory)?scheduledHistory.slice(-200):[];
   function noticeTick(){
+    renderActivities();
     const now=Date.now(),due=noticeList.filter(n=>n.snoozedUntil&&n.snoozedUntil<=now);
     if(due.length&&commitNotices(noticeList.map(n=>due.some(d=>d.id===n.id)?{...n,snoozedUntil:0,time:now,read:false}:n))){if(!A.settings.focus)bannerQueue.push(...due.filter(n=>!A.noticeMuted(n.app)).map(n=>n.id));bannerQueue=bannerQueue.slice(-8);}
     if(A.settings.focus||!noticePrefs.banners){removeBanner();bannerQueue=[];}else presentBanner();
@@ -1080,7 +1129,9 @@
     const tasks=(A.searchableReminders?.()||[]).filter(r=>!r.done&&r.due===day);if(tasks.length)deliver('tasks:'+day,{app:'reminders',title:`今日の期限 ${tasks.length}件`,body:tasks.slice(0,3).map(r=>r.text).join(' · ')});
   }
   setInterval(noticeTick,1000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)renderActivities();});
   window.addEventListener('storage',e=>{if(e.key==='aura.notifications'){noticeList=normalizeNotices(A.load('notifications',[]));removeBanner();bannerQueue=[];refreshNotices();}if(e.key==='aura.notificationPrefs'){const p=A.load('notificationPrefs',{})||{};noticePrefs={...noticePrefs,...p,muted:Array.isArray(p.muted)?p.muted:[]};refreshNotices();}});
+  A.$('.lock-notifications').insertAdjacentHTML('beforebegin','<section id="lock-activities" class="notice-activities" aria-label="アプリの状態" hidden></section>');
   A.$('.lock-top .lock-icon').innerHTML=A.icon('lock');
   A.$('#lock-flashlight').innerHTML=A.icon('flashlight');
   A.$('.lock-shortcuts [data-app="camera"]').innerHTML=A.icon('camera');
