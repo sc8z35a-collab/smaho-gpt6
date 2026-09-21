@@ -256,7 +256,7 @@
   }
   A.apps.reminders.render=renderReminders;A.actions.epRemindersHome=renderReminders;
   A.actions.reminderFilter=el=>{reminderFilter=el.dataset.id||el.dataset.value;renderReminders();[...document.querySelectorAll('[data-action="reminderFilter"]')].find(x=>x.dataset.id===reminderFilter)?.focus({preventScroll:true});};
-  A.actions.rmResetFilters=()=>{reminderFilter='all';reminderQuery='';reminderList='*';renderReminders();};
+  A.actions.rmResetFilters=()=>{reminderFilter='all';reminderQuery='';reminderList='*';reminderSelecting=false;reminderSelected.clear();renderReminders();};
   A.actions.rmQuickDue=el=>{reminderDraftDue=el.dataset.id;document.querySelectorAll('[data-action="rmQuickDue"]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.id===reminderDraftDue));};
   A.actions.rmUndo=()=>{
     if(!reminderUndo)return;

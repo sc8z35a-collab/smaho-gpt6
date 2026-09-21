@@ -172,6 +172,47 @@ frame.addEventListener('load',async()=>{
  await reminderTest('bulk clear removes only done records and is reversible',()=>{
   A.actions.reminderClearDone();click('#confirm-yes');assert(A.reminderModel.get().length===5&&!A.reminderModel.get().some(x=>x.done),'Bulk clear affected pending');A.actions.rmUndo();assert(A.reminderModel.get().length===6,'Bulk clear undo failed');
  });
+ await reminderTest('bulk selection drops hidden tasks before mutation',()=>{
+  A.actions.rmSelectionMode();A.actions.rmSelectAll();assert(d.querySelectorAll('.rm-select[aria-pressed=true]').length===6,'Select all');
+  input('#ep-reminder-query','過去の用事');assert(d.querySelectorAll('.rm-select[aria-pressed=true]').length===1,'Hidden selection retained');
+  A.actions.rmBatchTomorrow();assert(A.reminderModel.get().find(x=>x.id==='rm-old').due===reminderDay(1),'Selected not postponed');assert(A.reminderModel.get().find(x=>x.id==='rm-today').due===reminderDay(),'Hidden item mutated');
+  A.actions.rmUndo();assert(A.reminderModel.get().find(x=>x.id==='rm-old').due===reminderDay(-1),'Bulk undo failed');
+ });
+ await reminderTest('bulk completion commits recurring tasks together and undoes atomically',()=>{
+  A.reminderModel.replace(A.reminderModel.get().map(x=>x.id==='rm-old'?{...x,repeat:'daily'}:x));
+  A.actions.rmSelectionMode();for(const id of ['rm-old','rm-today','rm-done'])A.actions.rmSelect({dataset:{id}});A.actions.rmBatchComplete();
+  const all=A.reminderModel.get();assert(all.length===7&&all.find(x=>x.id==='rm-old').done&&all.find(x=>x.id==='rm-today').done,'Bulk completion failed');
+  A.actions.rmUndo();assert(A.reminderModel.get().length===6&&!A.reminderModel.get().find(x=>x.id==='rm-old').done,'Recurring bulk undo lost records');
+ });
+ await reminderTest('bulk recurrence date overflow rejects the entire change',()=>{
+  A.reminderModel.replace(A.reminderModel.get().map(x=>x.id==='rm-old'?{...x,repeat:'daily',due:'9999-12-31'}:x));A.actions.rmResetFilters();
+  A.actions.rmSelectionMode();for(const id of ['rm-today','rm-old'])A.actions.rmSelect({dataset:{id}});
+  const before=JSON.stringify(A.reminderModel.get());A.actions.rmBatchComplete();assert(JSON.stringify(A.reminderModel.get())===before,'Partial batch committed');
+ });
+ await reminderTest('bulk move validates and deletion requires confirmation',()=>{
+  A.actions.rmSelectionMode();A.actions.rmSelect({dataset:{id:'rm-old'}});A.actions.rmBatchMove();input('#ep-list','*');submit('#modal-form');assert(!d.querySelector('#overlay').hidden,'Reserved name accepted');
+  input('#ep-list','新しいリスト');submit('#modal-form');assert(A.reminderModel.get().find(x=>x.id==='rm-old').list==='新しいリスト','Move failed');A.actions.rmUndo();
+  A.actions.rmSelectionMode();A.actions.rmSelect({dataset:{id:'rm-old'}});A.actions.rmBatchDelete();A.closeOverlay();assert(A.reminderModel.get().length===6,'Cancellation deleted data');
+  A.actions.rmBatchDelete();click('#confirm-yes');assert(A.reminderModel.get().length===5,'Batch delete failed');A.actions.rmUndo();assert(A.reminderModel.get().find(x=>x.id==='rm-old').steps.length===1,'Batch deletion lost steps');
+ });
+ await reminderTest('bulk storage failure keeps selections and supports retry',()=>{
+  A.actions.rmSelectionMode();A.actions.rmSelect({dataset:{id:'rm-old'}});const before=JSON.stringify(A.reminderModel.get()),save=A.save;
+  try{A.save=()=>false;A.actions.rmBatchComplete();assert(JSON.stringify(A.reminderModel.get())===before,'Failed batch changed data');assert(d.querySelector('.rm-select[aria-pressed=true]'),'Selection lost on failure');}finally{A.save=save;}
+  A.actions.rmBatchComplete();assert(A.reminderModel.get().find(x=>x.id==='rm-old').done,'Retry failed');
+ });
+ await reminderTest('bulk capture validates limits and ignores empty lines',()=>{
+  A.actions.rmBulkAdd();input('#ep-bulk',Array(51).fill('項目').join('\n'));submit('#modal-form');assert(A.reminderModel.get().length===6,'Oversized import accepted');
+  input('#ep-bulk','一つ目\n\n二つ目');input('#ep-due',reminderDay(1));input('#ep-list','新しいリスト');submit('#modal-form');
+  const added=A.reminderModel.get().filter(x=>x.list==='新しいリスト');assert(added.length===2&&added.every(x=>x.due===reminderDay(1)),'Bulk capture did not preserve options');A.actions.rmUndo();assert(A.reminderModel.get().length===6,'Bulk add undo failed');
+ });
+ await reminderTest('inline steps preserve existing steps and reject failed saves',()=>{
+  A.actions.epReminderOpen({dataset:{id:'rm-old'}});input('#rm-step-form input','次の一歩');submit('#rm-step-form');let task=A.reminderModel.get().find(x=>x.id==='rm-old');assert(task.steps.length===2&&task.steps[0].done,'Inline step replaced history');
+  const save=A.save;try{A.save=()=>false;input('#rm-step-form input','保存の再試行');submit('#rm-step-form');assert(d.querySelector('#rm-step-form input').value==='保存の再試行','Inline draft lost');assert(A.reminderModel.get().find(x=>x.id==='rm-old').steps.length===2,'Unsaved step appended');}finally{A.save=save;}
+ });
+ await reminderTest('selection keyboard escape stays inside the reminders app',()=>{
+  A.actions.rmSelectionMode();const control=d.querySelector('[data-action=rmSelectionMode]');control.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+  assert(A.current==='reminders'&&d.querySelector('[data-action=rmSelectionMode]').getAttribute('aria-pressed')==='false','Escape left app');
+ });
  await test('Calendar month navigation and event create',()=>{A.open('calendar');const before=d.querySelector('.calendar-month-head h3').textContent;click('[data-action="calendarMove"][data-value="1"]');assert(d.querySelector('.calendar-month-head h3').textContent!==before,'Month unchanged');click('[data-action="calendarAdd"]');const f=d.querySelector('#modal-form');f.elements.title.value='QA calendar event';f.elements.place.value='Local only';f.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));assert(A.load('events',[]).some(e=>e.title==='QA calendar event'),'Event not saved');});
  await test('Photo gallery and favorite',()=>{A.open('photos');click('[data-action="photoOpen"][data-id="sample-lake"]');assert(d.querySelector('.photo-viewer img'),'Photo missing');click('[data-action="photoFavorite"]');assert(A.load('photoFavorites',[]).includes('sample-lake'),'Favorite not saved');});
  await test('Camera permission is opt-in',()=>{A.open('camera');assert(d.querySelector('#camera-placeholder'),'No permission prompt');assert(!d.querySelector('#camera-video').srcObject,'Camera started without gesture');click('[data-action="cameraCapture"]');assert(d.querySelector('#toast').textContent.includes('先に'),'Missing capture warning');});
