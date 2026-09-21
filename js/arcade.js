@@ -826,7 +826,7 @@
   const records=Object.fromEntries(Object.keys(orbitModes).map(mode=>[mode,Object.fromEntries(['best','stage','combo'].map(key=>[key,Math.max(orbitRecords[mode][key],orbitInteger(latest?.[mode]?.[key]))]))]));
   const r=records[b.mode],next={best:Math.max(r.best,b.score),stage:Math.max(r.stage,b.stage),combo:Math.max(r.combo,b.maxCombo)};
   records[b.mode]=next;
-  const saved=A.saveBatch({breakerRecords:records,breakerBest:Math.max(orbitInteger(A.load('breakerBest',0)),b.score),breakerState:orbitCheckpoint()});
+  const saved=A.saveBatch({breakerPreferences:{...orbitPrefs},breakerRecords:records,breakerBest:Math.max(orbitInteger(A.load('breakerBest',0)),b.score),breakerState:orbitCheckpoint()});
   if(saved){Object.assign(orbitRecords,records);orbitSaveStatus='この端末に保存しました';}
   else orbitSaveStatus='保存できませんでした · 空き容量を確認してください';
   return saved;
@@ -1169,6 +1169,7 @@
   const view=breakerView={canvas,ctx,nodes:Object.fromEntries(ids.map(id=>[id,$('#breaker-'+id)])),sprites:new Map(),background:null,scale:1,lastTone:0,wake:null};
   const content=canvas.closest('.arcade-play');content.dataset.cockpit=String(orbitPrefs.cockpit);
   let disposed=false,last=0,accumulator=0,hudClock=0,activePointer=null,saveClock=0;
+  const steerPointers=new Map();
   const fitArena=()=>{
    const available=Math.max(260,content.clientHeight-320);
    content.style.setProperty('--orbit-arena-width',Math.min(380,Math.floor(available*.72))+'px');
@@ -1177,6 +1178,7 @@
   view.clearInput=()=>{
    if(activePointer!==null&&canvas.hasPointerCapture(activePointer))canvas.releasePointerCapture(activePointer);
    activePointer=null;breakerKeys={left:false,right:false};
+   for(const [button,pointer] of steerPointers){steerPointers.delete(button);if(button.hasPointerCapture(pointer))button.releasePointerCapture(pointer);}
   };
   function frame(now){
    breakerFrame=0;if(disposed)return;
@@ -1208,8 +1210,13 @@
   on(canvas,'pointerup',release);on(canvas,'pointercancel',release);on(canvas,'lostpointercapture',release);
   for(const button of A.$$('[data-orbit-steer]')){
    const direction=button.dataset.orbitSteer;
-   on(button,'pointerdown',e=>{if(!breaker.running)return;e.preventDefault();button.setPointerCapture(e.pointerId);breakerKeys[direction]=true;});
-   for(const event of ['pointerup','pointercancel','lostpointercapture'])on(button,event,()=>{breakerKeys[direction]=false;});
+   on(button,'pointerdown',e=>{
+    if(!breaker.running||e.button!==0||steerPointers.has(button))return;
+    e.preventDefault();steerPointers.set(button,e.pointerId);button.setPointerCapture(e.pointerId);breakerKeys[direction]=true;
+   });
+   for(const event of ['pointerup','pointercancel','lostpointercapture'])on(button,event,e=>{
+    if(steerPointers.get(button)!==e.pointerId)return;steerPointers.delete(button);breakerKeys[direction]=false;
+   });
    on(button,'click',e=>{if(e.detail===0&&breaker.running){breaker.target+=direction==='left'?-28:28;orbitWake();}});
   }
   keys(e=>{
@@ -1227,7 +1234,12 @@
   on(window,'pagehide',()=>{orbitPause();orbitSave();});
   const overlayObserver=new MutationObserver(()=>{if(!$('#overlay').hidden)orbitPause();});
   overlayObserver.observe($('#overlay'),{attributes:true,attributeFilter:['hidden']});
-  const resize=()=>{if(disposed||breakerView!==view)return;fitArena();orbitResize();orbitWake();};
+  let displaySize=canvas.getBoundingClientRect();
+  const resize=()=>{
+   if(disposed||breakerView!==view)return;fitArena();const nextSize=canvas.getBoundingClientRect();
+   if(breaker.running&&(Math.abs(nextSize.width-displaySize.width)>1||Math.abs(nextSize.height-displaySize.height)>1))orbitPause('画面サイズ変更 · 再開で続ける');
+   displaySize=nextSize;orbitResize();orbitWake();
+  };
   view.resize=resize;
   let observer=null;
   if(window.ResizeObserver){observer=new ResizeObserver(resize);observer.observe(canvas);observer.observe(content);}
@@ -1251,7 +1263,7 @@
  A.actions.breakerToggle=()=>{
   if(!breakerView)return;
   if(breaker.over){orbitSave();resetBreaker(breaker.mode);orbitSave();}
-  if(breaker.running)orbitPause();else{breaker.restored=false;breaker.countdown=breaker.launched?3:0;breaker.running=true;orbitMessage(breaker.launched?'フライト再開':'発射ボタン / Space / 盤面タップで発射');orbitTone(360);orbitWake();}
+  if(breaker.running)orbitPause();else{breaker.restored=false;breaker.countdown=breaker.launched?3:0;breaker.running=true;breakerView.canvas.focus({preventScroll:true});orbitMessage(breaker.launched?'フライト再開':'発射ボタン / Space / 盤面タップで発射');orbitTone(360);orbitWake();}
  };
  A.actions.breakerLaunch=orbitLaunch;
  A.actions.breakerFocus=()=>{
@@ -1260,7 +1272,7 @@
   b.energy=0;b.focus=4;orbitMessage('FOCUS · 4秒間のスローモーション');orbitTone(600);orbitWake();
  };
  A.actions.breakerRestart=()=>{if(!breakerView)return;orbitPause();A.confirm('新しいフライト？','現在の進行をリセットします。ベスト記録は残ります。',()=>{orbitSave();resetBreaker(breaker.mode);orbitSave();orbitWake();});};
- A.actions.breakerSave=()=>{if(!breakerView)return;orbitPause();orbitSave();orbitWake();};
+ A.actions.breakerSave=()=>{if(!breakerView)return;const running=breaker.running;orbitPause();if(!running)orbitSave();orbitWake();};
  A.actions.breakerCockpit=()=>{
   if(!breakerView)return;orbitPause();orbitPrefs.cockpit=!orbitPrefs.cockpit;A.save('breakerPreferences',orbitPrefs);
   const content=breakerView.canvas.closest('.arcade-play');content.dataset.cockpit=String(orbitPrefs.cockpit);content.scrollTop=0;
