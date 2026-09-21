@@ -4,7 +4,7 @@
 
 **本番：<https://sc8z35a-collab.github.io/smaho-gpt6/>**
 
-## 2048 Studio（PRで開発中）
+## 2048 Studio（実装完全版・PR保存／本番未公開）
 
 ゲームアプリ内の2048を、陶器 / オーロラの立体タイルと移動経路に沿うスライド描画へ刷新。合体時の光と弾み、先読みヒント、4方向の加点・合体・空きマス予測、32手分の取り消し／やり直しの自動保存、局面1枠の保存・復帰を追加しました。既存の盤面と最高点を引き継ぎます。
 
@@ -20,7 +20,23 @@
 - [保存先：共有PR #11](https://github.com/sc8z35a-collab/smaho-gpt6/pull/11)
 - **依頼によりテスト未実施です。** PR保存と本番公開は別です。
 
-## Reversi Atelier（PRで開発中）
+## Crystal Field 完全版アップグレード（PR保存）
+
+クリスタルフィールドに、多面体SVGの結晶、ガラス調盤面、連鎖開封モーション、3色のテーマを追加しました。安全スキャン、長押し・キーボード操作、周辺マスのガイド、一時停止、盤面拡大、日替わりチャレンジ、任意の効果音、通常／アシスト／日替わり別記録、進行保存の状態表示・再試行に対応します。旧セーブと既存の勝利数・最短記録を引き継ぎます。
+
+- [変更タイトル・実装内容・操作方法・保存仕様・制限](CHANGES-CRYSTAL-FIELD.md)
+- [保存先：共有PR #11](https://github.com/sc8z35a-collab/smaho-gpt6/pull/11)
+- **依頼により、今回のCrystal Field変更はテスト・ブラウザ検証・性能測定を実施していません。** 完全版は依頼範囲の実装と説明を保存した意味で、無不具合やFPSを保証するものではありません。PR保存と本番公開は別です。
+
+## Orbit Breaker — Flight Upgrade（PRに保存）
+
+Orbitを宇宙背景・立体ブロック・光の軌跡と破片演出へ刷新。120Hz固定物理と描画補間、3難易度、6種の配置、強化アイテム、FOCUS、ミッション、ノーミス報酬を実装しました。進行の自動保存と再開、3秒カウントダウン、壁反射付き発射ガイド、盤面重視表示を追加しています。
+
+- [PRタイトル・完全版の変更説明・操作・保存仕様・未検証範囲](CHANGES-ORBIT.md)
+- [保存先：共有PR #11](https://github.com/sc8z35a-collab/smaho-gpt6/pull/11)
+- **依頼によりOrbitのテストは未実施です。** FPS・実機動作は未測定。PR保存と本番公開は別で、マージ・デプロイは行っていません。
+
+## Reversi Atelier（実装完全版・PR保存／本番未公開）
 
 Reversiを翡翠／深藍の立体盤面と距離差付き3D反転へ刷新。4段階NPC、先後選択、ヒントと分析中止、待った、棋譜研究、TXT／JSON書き出し、一時停止・自動保存を実装しました。
 
@@ -249,7 +265,7 @@ tests/persistence.cjs   Playwrightでの再読込・既存配置移行・タイ�
 
 追加の起動リンク：`#app=games&view=blocks`、`mines`、`reversi`、`breaker`、`sudoku`（後ろ4件も同じview形式）。
 
-追加ゲームの保存キーは `arcadeFavorites`、`arcadeRecent`、`blocksState`、`blocksBest`、`minesState`、`minesWins`、`minesBest-難易度`、`reversiState`、`reversiWins`、`breakerBest`、`sudokuState`、`sudokuWins`、`sudokuDaily`（すべて `aura.` 接頭辞）。ブロック崩しは最高点のみ保存し、進行は同じページを開いている間だけ保持します。スケッチ同様にゲーム操作の取り消し履歴はセッション内のみです。
+追加ゲームの保存キーは `arcadeFavorites`、`arcadeRecent`、`blocksState`、`blocksBest`、`minesState`、`minesWins`、`minesBest-難易度`、`reversiState`、`reversiWins`、`breakerBest`、`sudokuState`、`sudokuWins`、`sudokuDaily`（すべて `aura.` 接頭辞）。当初のブロック崩しは最高点のみ保存していました。現行Orbitでは `breakerPreferences`・`breakerRecords`・`breakerState` を追加し、設定・難易度別記録・進行1枠を保存します（[現行の保存仕様](CHANGES-ORBIT.md)）。スケッチ同様にゲーム操作の取り消し履歴はセッション内のみです。
 
 ゲーム追加・グラフィック変更も、依頼によりテストを実行していません。本番反映時はGitHub Pagesのデプロイ成否と配信バージョンだけを確認します。
 

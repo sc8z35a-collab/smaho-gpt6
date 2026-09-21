@@ -353,7 +353,7 @@ const snakeBadges=[
 const snakeBadgeRaw=A.load('snakeAchievements',[]);
 const snakeAchievements=new Set((Array.isArray(snakeBadgeRaw)?snakeBadgeRaw:[]).filter(id=>snakeBadges.some(b=>b.id===id)));
 let snake=null,snakeFrame=0,snakeLast=0,snakeCanvas=null,snakeGround=null,snakeGroundKey='',snakeParticles=[],snakeFloats=[];
-let snakeSaveOK=true,snakeScoreAnimation=null;
+let snakeSaveOK=true,snakePrefsSaveOK=true,snakeScoreAnimation=null;
 const snakeMotionQuery=matchMedia('(prefers-reduced-motion: reduce)');
 const snakeReduced=()=>!!A.settings.reduceMotion||snakeMotionQuery.matches;
 const sameSnakeCell=(a,b)=>!!a&&!!b&&a.x===b.x&&a.y===b.y;
@@ -365,8 +365,7 @@ function resetSnake(){
  snakeParticles=[];snakeFloats=[];snake.food=freeSnakeCell();snakeText('snake-achievement-notice','');
 }
 // Saved runs are untrusted input: validate geometry before restoring a paused run.
-function restoreSnake(){
- const saved=A.load('snakeSession',null);
+function restoreSnake(saved=A.load('snakeSession',null)){
  if(!saved||saved.version!==1||typeof saved.mode!=='string'||!Object.hasOwn(snakeModes,saved.mode))return false;
  const cell=p=>p&&Number.isInteger(p.x)&&Number.isInteger(p.y)&&p.x>=0&&p.y>=0&&p.x<18&&p.y<18;
  const integer=(n,max)=>Number.isSafeInteger(n)&&n>=0&&n<=max;
@@ -413,10 +412,17 @@ function saveSnakeRecords(force=true){
  snakeBest=Math.max(snakeBest,snake.score);snakeRecords[snake.mode].best=Math.max(snakeRecords[snake.mode].best,snake.score);
  if(!force&&!snakeSaveOK)return false;
  // Snapshot, records and completion history succeed or roll back together.
- snakeSaveOK=A.saveBatch({snakeBest,snakeRecords,snakeHistory,snakeSession:snakeSnapshot(),snakeAchievements:[...snakeAchievements]});
+ snakeSaveOK=A.saveBatch({snakeBest,snakeRecords,snakeHistory,snakeSession:snakeSnapshot(),snakeAchievements:[...snakeAchievements],snakePreferences:snakePrefs});
+ if(snakeSaveOK)snakePrefsSaveOK=true;
  snakeText('snake-save-status',snakeSaveOK?'端末内に保存済み':'未保存：容量やブラウザ設定を確認し、保存を再試行してください');
  $('#snake-save-status')?.classList.toggle('save-error',!snakeSaveOK);
+ updateSnakeSaveWarning();
  return snakeSaveOK;
+}
+function updateSnakeSaveWarning(){
+ const warning=$('#snake-save-warning');if(!warning)return;
+ warning.hidden=snakeSaveOK&&snakePrefsSaveOK;
+ snakeText('snake-save-warning-copy',!snakeSaveOK?'進行を保存できていません。保存を再試行してください。':'見た目の設定が未保存です。このページ内だけに適用中です。');
 }
 function finishSnake(reason,won=false){
  snake.over=true;snake.won=won;snake.reason=reason;snake.running=false;snake.queue=[];
@@ -611,7 +617,10 @@ function drawSnake(){
 
 }
 function gameSnake(){
- if(!snake&&!restoreSnake())resetSnake();
+ if(!snake){
+  const saved=A.load('snakeSession',null);
+  if(!restoreSnake(saved)){resetSnake();if(saved!==null)snake.reason='保存した盤面を復元できなかったため、新しい庭を用意しました';}
+ }
  A.view(A.nav('Little Snake',`<button data-action="snakeHelp" aria-label="リトルスネークの遊び方">?</button>`,'gamesLibrary','ゲーム')+`<div class="app-content snake-studio">
  <header class="snake-heading"><div><small>THE LITTLE GARDEN</small><h2>Little Snake<span>.</span></h2><p>実を集めて、自分だけの長い旅へ。</p></div><span class="snake-edition">18 × 18<br>GARDEN</span></header>
  <div class="snake-modes" role="group" aria-label="プレイモード">${Object.entries(snakeModes).map(([id,m])=>`<button data-action="snakeMode" data-value="${id}" aria-pressed="${id===snake.mode}">${m.label}</button>`).join('')}</div>
@@ -620,10 +629,11 @@ function gameSnake(){
  <div class="snake-curtain" id="snake-curtain"><div><small>LITTLE SNAKE</small><h3 id="snake-curtain-title"></h3><p id="snake-curtain-copy"></p><button data-action="snakeToggle" id="snake-curtain-action">庭に入る</button></div></div></div>
  <div class="snake-livebar"><span id="snake-combo"></span><span id="snake-bonus"></span><time id="snake-time">0:00</time></div><div class="snake-combo-track" aria-hidden="true"><i id="snake-combo-meter"></i></div>
  <div class="snake-actions"><button data-action="snakeToggle" id="snake-toggle">スタート</button><button data-action="snakeRestart">やり直す</button></div>
+ <div id="snake-save-warning" class="snake-save-warning" hidden><span id="snake-save-warning-copy" role="status"></span><button data-action="snakeSave">保存を再試行</button></div>
  <p class="snake-status" id="snake-status" role="status" aria-live="polite"></p>
  <div class="snake-goal"><div><span id="snake-goal"></span><small id="snake-best-note"></small></div><progress id="snake-goal-progress" max="5" value="0" aria-label="今回の成長目標の達成度"></progress></div>
  <div class="snake-pad" role="group" aria-label="方向操作">${[['up','↑','上'],['left','←','左'],['down','↓','下'],['right','→','右']].map(([id,symbol,label])=>`<button data-action="snakeDirection" data-value="${id}" aria-label="${label}へ進む">${symbol}</button>`).join('')}</div>
- <p class="snake-instructions" id="snake-instructions">スワイプ / 矢印 / WASD · Spaceで一時停止<br>一時停止後は「再開」で続けます</p>
+ <p class="snake-instructions" id="snake-instructions">スワイプ / 矢印 / WASD · Space / Pで一時停止<br>一時停止後は「再開」で続けます</p>
  <p class="snake-achievement-notice" id="snake-achievement-notice" role="status" aria-live="polite"></p>
  <details class="snake-settings"><summary>庭の見た目と記録</summary><div class="snake-options"><button data-action="snakeTheme" id="snake-theme"></button><button data-action="snakeQuality" id="snake-quality"></button><button data-action="snakeGrid" id="snake-grid"></button></div><p id="snake-record-summary"></p><h3>6つの実績</h3><ul id="snake-badges" class="snake-badges"></ul><h3>最近の8プレイ</h3><ol id="snake-history"></ol><div class="snake-save-row"><p id="snake-save-status" role="status"></p><button data-action="snakeSave">今すぐ保存</button></div><p class="snake-save-note">盤面も端末内に自動保存。再読み込み後は一時停止から再開できます。保存は1プレイ分です。</p></details></div>`);
  snakeCanvas=$('#snake-board');const canvas=snakeCanvas;
@@ -649,10 +659,10 @@ function gameSnake(){
   if(!$('#overlay').hidden||e.isComposing||e.ctrlKey||e.altKey||e.metaKey||e.target.closest('input,textarea,select,[contenteditable]'))return;
   const d={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',w:'up',a:'left',s:'down',d:'right'}[e.key.length===1?e.key.toLowerCase():e.key];
   if(d){e.preventDefault();if(!e.repeat)steerSnake(d);}
-  if(e.code==='Space'&&!e.target.closest('button,summary')){e.preventDefault();if(!e.repeat)toggleSnake();}
+  if(e.code==='KeyP'||e.code==='Space'&&!e.target.closest('button,summary')){e.preventDefault();if(!e.repeat)toggleSnake();}
  });
  gameCleanups.push(()=>{stopSnake('おかえりなさい。「再開」で続けられます');snakeCanvas=null;snakeGround=null;snakeParticles=[];snakeFloats=[];snakeScoreAnimation?.cancel();});
- updateSnakeOptions();updateSnakeUi();fitSnakeCanvas();
+ updateSnakeOptions();updateSnakeUi();fitSnakeCanvas();updateSnakeSaveWarning();
  snakeText('snake-save-status',snakeSaveOK?'自動保存：2秒ごと・実の獲得時・一時停止時':'未保存：保存を再試行してください');
 }
 function updateSnakeOptions(){
@@ -660,9 +670,12 @@ function updateSnakeOptions(){
  snakeText('snake-quality',snakePrefs.quality==='rich'?'描画：高精細':'描画：軽量');
  snakeText('snake-grid',snakePrefs.grid?'マス目：オン':'マス目：オフ');$('#snake-grid')?.setAttribute('aria-pressed',String(snakePrefs.grid));
 }
-function changeSnakeLook(key,value){snakePrefs[key]=value;A.save('snakePreferences',snakePrefs);snakeGround=null;updateSnakeOptions();fitSnakeCanvas();}
+function changeSnakeLook(key,value){
+ snakePrefs[key]=value;snakePrefsSaveOK=A.save('snakePreferences',snakePrefs);
+ snakeGround=null;updateSnakeOptions();fitSnakeCanvas();updateSnakeSaveWarning();
+}
 function restartSnake(mode=snake.mode){
- const reset=()=>{snakePrefs.mode=mode;A.save('snakePreferences',snakePrefs);resetSnake();saveSnakeRecords();snakeText('snake-achievement-notice','');A.$$('.snake-modes button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.value===mode)));updateSnakeUi();drawSnake();};
+ const reset=()=>{snakePrefs.mode=mode;resetSnake();saveSnakeRecords();snakeText('snake-achievement-notice','');A.$$('.snake-modes button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.value===mode)));updateSnakeUi();drawSnake();};
  stopSnake();if(snake.started&&!snake.over)A.confirm('新しい庭から始めますか？','今のスコアと盤面はリセットします。保存済みの記録は残ります。',reset);else reset();
 }
 A.actions.snakeSave=()=>{if(snake.running)stopSnake();else{saveSnakeRecords();updateSnakeUi();}};
@@ -675,7 +688,7 @@ A.actions.snakeQuality=()=>changeSnakeLook('quality',snakePrefs.quality==='rich'
 A.actions.snakeGrid=()=>changeSnakeLook('grid',!snakePrefs.grid);
 A.actions.snakeHelp=()=>{
  stopSnake('遊び方を確認中です。閉じてから再開できます');
- A.overlay(`${A.overlayTitle('Little Snake の遊び方')}<div class="about-copy"><p>矢印キー・WASD・盤面のスワイプ・方向ボタンで操作。曲がる方向は2回先まで予約でき、直接の逆走はできません。</p><p>クラシックは壁と自分の体に当たると終了。おさんぽは低速で、壁を抜けて反対側へ移動します。ラッシュは速い移動と6秒以内の連続獲得で最大4倍のコンボに挑戦できます。</p><p>実は10点。5個食べるごとに、空きマスがあれば金の実が8秒間登場します。金の実は30点。どちらも体が1マス伸び、ラッシュでは倍率がかかります。5個ごとにレベルが上がり、おさんぽ以外は少しずつ速くなります。324マスすべて埋めるとクリアです。</p><p>Space（ボタン選択中はそのボタンを操作）で一時停止。タブ切替・メニュー・アプリ移動でも停止し、自動では再開しません。盤面は2秒ごと・実の獲得・一時停止時に保存します。再読み込み後も必ず一時停止から再開し、閉じていた時間は加算しません。保存に失敗した場合は「今すぐ保存」で再試行できます。</p><p>成長目標と6つの実績に挑戦できます。実績はゲームをやり直しても残ります。モード別最高点・終了した直近8プレイ・庭の見た目を端末内に保存。旧最高点はゲーム一覧の総合BESTに残します。「動きを減らす」では補間・粒子・背景演出を止め、軽量描画では演出と解像度を抑えます。</p></div>`);
+ A.overlay(`${A.overlayTitle('Little Snake の遊び方')}<div class="about-copy"><p>矢印キー・WASD・盤面のスワイプ・方向ボタンで操作。曲がる方向は2回先まで予約でき、直接の逆走はできません。</p><p>クラシックは壁と自分の体に当たると終了。おさんぽは低速で、壁を抜けて反対側へ移動します。ラッシュは速い移動と6秒以内の連続獲得で最大4倍のコンボに挑戦できます。</p><p>実は10点。5個食べるごとに、空きマスがあれば金の実が8秒間登場します。金の実は30点。どちらも体が1マス伸び、ラッシュでは倍率がかかります。5個ごとにレベルが上がり、おさんぽ以外は少しずつ速くなります。324マスすべて埋めるとクリアです。</p><p>Space（ボタン選択中はそのボタンを操作）またはPで一時停止。タブ切替・メニュー・アプリ移動でも停止し、自動では再開しません。盤面は2秒ごと・実の獲得・一時停止時に保存します。再読み込み後も必ず一時停止から再開し、閉じていた時間は加算しません。保存に失敗した場合は「今すぐ保存」で再試行できます。</p><p>成長目標と6つの実績に挑戦できます。実績はゲームをやり直しても残ります。モード別最高点・終了した直近8プレイ・庭の見た目を端末内に保存。旧最高点はゲーム一覧の総合BESTに残します。「動きを減らす」では補間・粒子・背景演出を止め、軽量描画では演出と解像度を抑えます。</p></div>`);
 };
 // Memory Garden — shuffled pairs with a race-safe reveal timer.
 const symbols=['✿','☀','☾','♧','♡','✦','☁','♫'];const colors=['#cd8d9a','#d2ae69','#a394c4','#91aa81','#d1a092','#a3b3c7','#8bb3c6','#b79ac1'];
