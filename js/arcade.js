@@ -391,15 +391,26 @@
   const levels={easy:{depth:2,ms:120},normal:{depth:4,ms:400},hard:{depth:7,ms:950},expert:{depth:12,ms:1800}};
   function* search(board,color,level='normal'){
    const config=levels[level]||levels.normal,deadline=performance.now()+config.ms,table=new Map(),timeout={};
+   const history=new Int32Array(192),killers=new Map();
    const legal=moves(board,color),empty=board.filter(v=>!v).length;
    let nodes=0,best={index:legal[0]??null,score:0,depth:0,nodes:0,solved:false};
    if(!legal.length)return best;
-   function order(b,list,pv){
+   function order(b,list,pv,side=color,depth=0){
     return list.map(index=>{
      let weight=weights[index];
      for(const c of corners)if(b[c]&&index!==c&&Math.abs(index%8-c%8)<=1&&Math.abs((index/8|0)-(c/8|0))<=1)weight=8;
-     return {index,rank:(index===pv?10000:0)+(corners.includes(index)?2000:0)+weight*5};
+     const killer=killers.get(depth)||[];
+     return {index,rank:(index===pv?10000:0)+(corners.includes(index)?2000:0)+weight*8+(killer.includes(index)?400:0)+Math.min(300,history[side*64+index])};
     }).sort((a,z)=>z.rank-a.rank).map(item=>item.index);
+   }
+   function variation(index,depth){
+    const line=[];let b=board,side=color,left=depth,next=index;
+    while(left>0&&line.length<16){
+     const legal=moves(b,side);
+     if(!legal.length){if(!moves(b,3-side).length)break;line.push({color:side,index:-1});side=3-side;next=table.get(b.join('')+side)?.index;continue;}
+     if(!legal.includes(next))break;
+     line.push({color:side,index:next});b=placed(b,next,side);left--;side=3-side;next=table.get(b.join('')+side)?.index;
+    }return line;
    }
    function* negamax(b,side,depth,alpha,beta){
     nodes++;if((nodes&31)===0){yield null;if(performance.now()>=deadline)throw timeout;}
@@ -412,14 +423,19 @@
      return -(yield* negamax(b,3-side,depth,-beta,-alpha));
     }
     if(depth===0)return evaluate(b,side);
-    let value=-Infinity,chosen=available[0];
-    for(const index of order(b,available,entry?.index)){
-     const score=-(yield* negamax(placed(b,index,side),3-side,depth-1,-beta,-alpha));
-     if(score>value){value=score;chosen=index;}alpha=Math.max(alpha,score);if(alpha>=beta)break;
+    let value=-Infinity,chosen=available[0],first=true;
+    for(const index of order(b,available,entry?.index,side,depth)){
+     const child=placed(b,index,side);let score;
+     // Principal variation search: scout later moves, then fully re-search improvements.
+     if(first||depth<3)score=-(yield* negamax(child,3-side,depth-1,-beta,-alpha));
+     else{score=-(yield* negamax(child,3-side,depth-1,-alpha-1,-alpha));if(score>alpha&&score<beta)score=-(yield* negamax(child,3-side,depth-1,-beta,-alpha));}
+     first=false;if(score>value){value=score;chosen=index;}alpha=Math.max(alpha,score);
+     if(alpha>=beta){history[side*64+index]=Math.min(4096,history[side*64+index]+depth*depth);killers.set(depth,[index,...(killers.get(depth)||[]).filter(i=>i!==index)].slice(0,2));break;}
     }
     if(table.size<30000)table.set(key,{depth,value,index:chosen,flag:value<=a0?2:value>=b0?1:0});
     return value;
    }
+   best.index=order(board,legal)[0];
    const maxDepth=(level==='hard'||level==='expert')&&empty<=12?empty:Math.min(empty,config.depth);
    for(let depth=1;depth<=maxDepth;depth++){
     let value=-Infinity,chosen=best.index;
@@ -429,7 +445,7 @@
       const score=-(yield* negamax(placed(board,index,color),3-color,depth-1,-Infinity,-value));
       if(score>value){value=score;chosen=index;}
      }
-     best={index:chosen,score:value,depth,nodes,solved:depth>=empty};
+     best={index:chosen,score:value,depth,nodes,solved:depth>=empty,line:variation(chosen,depth)};
      yield {...best};if(best.solved)break;
     }catch(error){if(error!==timeout)throw error;break;}
    }
@@ -442,10 +458,10 @@
  const rvColor=n=>n===1?'黒':'白';
  const rvCoordinate=i=>'ABCDEFGH'[i%8]+((i/8|0)+1);
  const rvBoardValid=b=>Array.isArray(b)&&b.length===64&&b.every(v=>v===0||v===1||v===2)&&b.filter(Boolean).length>=4;
- let reversi=null,rvBusy=false,rvAnimating=false,rvReview=-1,rvHint=-1,rvPreview=-1,rvFocus=19,rvSearchCancel=null,rvInfo='',rvTimers=new Set();
+ let reversi=null,rvBusy=false,rvAnimating=false,rvReview=-1,rvHint=-1,rvPreview=-1,rvFocus=19,rvSearchCancel=null,rvInfo='',rvCoach='',rvSaveOK=true,rvTimers=new Set();
  const rvReduced=()=>A.settings.reduceMotion||window.matchMedia('(prefers-reduced-motion: reduce)').matches;
  const rvLater=(fn,ms)=>{const timer=setTimeout(()=>{rvTimers.delete(timer);fn();},ms);rvTimers.add(timer);return timer;};
- function rvCancel(){rvSearchCancel?.();rvSearchCancel=null;for(const timer of rvTimers)clearTimeout(timer);rvTimers.clear();rvBusy=false;rvAnimating=false;rvHint=-1;rvPreview=-1;}
+ function rvCancel(){rvSearchCancel?.();rvSearchCancel=null;for(const timer of rvTimers)clearTimeout(timer);rvTimers.clear();rvBusy=false;rvAnimating=false;rvHint=-1;rvPreview=-1;rvCoach='';}
  function rvSnapshot(r){return {board:r.board.slice(),turn:r.turn,over:r.over,pass:r.pass,last:r.last,mover:r.mover,flipped:r.flipped};}
  function rvSetTurn(r,turn){
   r.turn=turn;r.pass=0;r.over=false;
@@ -453,7 +469,7 @@
  }
  function freshReversi(options={}){
   const board=Array(64).fill(0);board[27]=board[36]=2;board[28]=board[35]=1;
-  reversi={version:2,id:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10),board,turn:1,mode:options.mode==='local'?'local':'cpu',level:Object.hasOwn(rvLevels,options.level)?options.level:'normal',human:options.human===2?2:1,showLegal:options.showLegal!==false,over:false,counted:false,assisted:false,pass:0,last:-1,mover:0,flipped:0};
+  reversi={version:2,id:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10),board,turn:1,mode:options.mode==='local'?'local':'cpu',level:Object.hasOwn(rvLevels,options.level)?options.level:'normal',human:options.human===2?2:1,showLegal:options.showLegal!==false,theme:options.theme==='midnight'?'midnight':'jade',paused:false,over:false,counted:false,assisted:false,pass:0,last:-1,mover:0,flipped:0};
   reversi.frames=[rvSnapshot(reversi)];rvReview=-1;rvInfo='';rvFocus=19;
  }
  function rvRestore(){
@@ -462,7 +478,7 @@
   freshReversi(saved);const r=reversi;
   r.board=saved.board.slice();rvSetTurn(r,saved.turn);
   r.id=typeof saved.id==='string'&&/^[a-z0-9-]{1,60}$/.test(saved.id)?saved.id:r.id;
-  r.counted=saved.counted===true||(saved.version!==2&&r.over);r.assisted=saved.assisted===true;
+  r.counted=r.over&&(saved.counted===true||saved.version!==2);r.assisted=saved.assisted===true;r.paused=saved.paused===true;
   r.last=Number.isInteger(saved.last)&&saved.last>=0&&saved.last<64&&r.board[saved.last]?saved.last:-1;
   r.mover=[1,2].includes(saved.mover)?saved.mover:0;r.flipped=Number.isInteger(saved.flipped)?Math.max(0,Math.min(63,saved.flipped)):0;
   // Only accept a bounded, replayable timeline; malformed history never drives undo.
@@ -483,7 +499,11 @@
   if(frames.length===saved.frames?.length&&frames.length&&frames.at(-1).board.every((v,i)=>v===r.board[i])&&frames.at(-1).turn===r.turn){r.frames=frames;Object.assign(r,rvSnapshot(frames.at(-1)));}
   else r.frames=[rvSnapshot(r)];
  }
- function rvSave(){A.save('reversiState',reversi);}
+ function rvSave(){
+  rvSaveOK=A.save('reversiState',reversi);const el=$('#reversi-save');
+  if(el){el.textContent=rvSaveOK?'この端末に保存済み':'保存できませんでした。棋譜を書き出して保管してください';el.classList.toggle('save-failed',!rvSaveOK);}
+  return rvSaveOK;
+ }
  function rvStats(){
   const s=A.load('reversiStats',{}),n=v=>Number.isSafeInteger(v)&&v>=0?v:0;
   return {wins:n(s?.wins),losses:n(s?.losses),draws:n(s?.draws),legacyWins:n(s?.legacyWins??A.load('reversiWins',0)),ids:Array.isArray(s?.ids)?s.ids.filter(id=>typeof id==='string').slice(-100):[]};
@@ -504,7 +524,11 @@
   for(let i=reversi.frames.length-2;i>=0;i--)if(reversi.mode==='local'||reversi.frames[i].turn===reversi.human)return i;
   return -1;
  }
- function rvCanPlay(){return current==='reversi'&&$('#overlay').hidden&&!rvBusy&&!rvAnimating&&rvReview<0&&!reversi.over&&!document.hidden&&(reversi.mode==='local'||reversi.turn===reversi.human);}
+ function rvCanPlay(){return current==='reversi'&&$('#overlay').hidden&&!rvBusy&&!rvAnimating&&rvReview<0&&!reversi.over&&!reversi.paused&&!document.hidden&&(reversi.mode==='local'||reversi.turn===reversi.human);}
+ function rvCanAnalyze(){
+  const view=rvReview>=0?reversi.frames[rvReview]:reversi;
+  return !rvBusy&&!rvAnimating&&!view.over&&!document.hidden&&$('#overlay').hidden&&(rvReview>=0||rvCanPlay());
+ }
  function rvSearch(board,turn,level,done){
   rvSearchCancel?.();let worker=null,url=null,halted=false,fallingBack=false,watchdog=0;
   const disposeWorker=()=>{if(worker){worker.onmessage=null;worker.onerror=null;worker.terminate();worker=null;}if(url){URL.revokeObjectURL(url);url=null;}};
@@ -526,7 +550,7 @@
  }
  function rvWaitForBoard(fn){if(document.hidden||!$('#overlay').hidden){rvLater(()=>rvWaitForBoard(fn),160);return;}fn();}
  function scheduleAI(){
-  const r=reversi;if(current!=='reversi'||document.hidden||rvReview>=0||rvAnimating||rvBusy||r.over||r.mode!=='cpu'||r.turn===r.human)return;
+  const r=reversi;if(current!=='reversi'||document.hidden||rvReview>=0||rvAnimating||rvBusy||r.paused||r.over||r.mode!=='cpu'||r.turn===r.human)return;
   rvBusy=true;rvInfo='候補を比較しています';renderReversi();
   rvLater(()=>rvWaitForBoard(()=>{
    rvSearch(r.board.slice(),r.turn,r.level,result=>rvWaitForBoard(()=>{
@@ -539,7 +563,7 @@
  function rvMove(index){
   const r=reversi,captured=rvEngine.flips(r.board,index,r.turn);if(!captured.length||r.over)return;
   const before=r.board.slice(),mover=r.turn;r.board=rvEngine.placed(r.board,index,mover);r.last=index;r.mover=mover;r.flipped=captured.length;
-  rvHint=-1;rvPreview=-1;rvSetTurn(r,3-mover);r.frames.push(rvSnapshot(r));rvRecord();rvSave();
+  rvHint=-1;rvPreview=-1;rvCoach='';rvSetTurn(r,3-mover);r.frames.push(rvSnapshot(r));rvRecord();rvSave();
   rvAnimating=!rvReduced();renderReversi(before);A.haptic();
   if(rvAnimating)rvLater(()=>{rvAnimating=false;renderReversi();scheduleAI();},600);else scheduleAI();
  }
@@ -552,17 +576,18 @@
  function renderReversi(before=null){
   const root=$('#reversi-board');if(!root)return;
   const r=reversi,view=rvReview>=0?r.frames[rvReview]:r,legal=rvEngine.moves(view.board,view.turn),canPlay=rvCanPlay(),animate=before&&!rvReduced();
+  $('.rv-studio').dataset.theme=r.theme;
   root.classList.toggle('rv-instant',!animate);root.setAttribute('aria-busy',String(rvBusy));
   const preview=rvPreview>=0&&canPlay?rvEngine.flips(view.board,rvPreview,view.turn):[];
   $('#reversi-preview').textContent=preview.length?`${rvCoordinate(rvPreview)} · ${preview.length}枚を裏返せます`:'座標を選んで着手。矢印キーでも移動できます';
   [...root.children].forEach((cell,i)=>{
    const v=view.board[i],was=before?.[i],isLegal=canPlay&&legal.includes(i),disc=cell.querySelector('.reversi-disc');
-   cell.dataset.value=v;cell.classList.toggle('rv-legal',isLegal&&r.showLegal);cell.classList.toggle('rv-last',view.last===i);cell.classList.toggle('rv-best',rvHint===i&&rvReview<0);cell.classList.toggle('rv-preview',preview.includes(i));
+   cell.dataset.value=v;cell.classList.toggle('rv-legal',isLegal&&r.showLegal);cell.classList.toggle('rv-last',view.last===i);cell.classList.toggle('rv-best',rvHint===i);cell.classList.toggle('rv-preview',preview.includes(i));
    cell.classList.toggle('rv-new',!!animate&&!was&&!!v);cell.classList.toggle('rv-turning',!!animate&&!!was&&was!==v);
    const distance=r.last<0?0:Math.max(Math.abs(i%8-r.last%8),Math.abs((i/8|0)-(r.last/8|0)));
    disc.style.transitionDelay=animate&&was&&was!==v?`${distance*24}ms`:'0ms';
    disc.style.transform=v===2?'rotateY(180deg)':'rotateY(0deg)';
-   cell.querySelector('.rv-flip-count').textContent=isLegal&&r.showLegal?rvEngine.flips(view.board,i,view.turn).length:'';
+   cell.querySelector('.rv-flip-count').textContent=(isLegal&&r.showLegal)||rvHint===i?rvEngine.flips(view.board,i,view.turn).length:'';
    cell.setAttribute('aria-disabled',String(!isLegal));cell.tabIndex=i===rvFocus?0:-1;
    cell.setAttribute('aria-label',`${rvCoordinate(i)} ${v?rvColor(v):isLegal?'着手可能、'+rvEngine.flips(view.board,i,view.turn).length+'枚返せます':'空'}${view.last===i?'、直前の着手':''}${rvHint===i?'、推奨手':''}`);
   });
@@ -574,18 +599,26 @@
   const phase=view.over?'終局':64-black-white>44?'序盤':64-black-white>16?'中盤':'終盤';
   $('#reversi-phase').textContent=`${phase} · 残り${64-black-white}マス`;
   $('#reversi-legal').textContent=view.over?'対局終了':`合法手 ${legal.length}`;
-  $('#reversi-status').textContent=rvReview>=0?`棋譜 ${rvReview} / ${r.frames.length-1}`:view.over?(black===white?'引き分け':`${black>white?'黒':'白'}の勝ち · ${Math.abs(black-white)}枚差`):`${view.pass?rvColor(view.pass)+'は置けずパス · ':''}${rvColor(view.turn)}${rvBusy?'が思考中':rvAnimating?'の番へ':'の番'}`;
+  $('#reversi-status').textContent=rvReview>=0?`棋譜 ${rvReview} / ${r.frames.length-1}${rvBusy?' · 分析中':''}`:r.paused&&!r.over?'一時停止中 · 再開で続きから':view.over?(black===white?'引き分け':`${black>white?'黒':'白'}の勝ち · ${Math.abs(black-white)}枚差`):`${view.pass?rvColor(view.pass)+'は置けずパス · ':''}${rvColor(view.turn)}${rvBusy?'が思考中':rvAnimating?'の番へ':'の番'}`;
   $('#reversi-status').classList.toggle('thinking',rvBusy);
   $('#reversi-engine').textContent=rvReview>=0?'振り返り中は着手・NPC思考を停止':rvInfo||'端末内で思考 · 対局は自動保存';
   $('#reversi-last').textContent=view.last>=0?`直前 ${rvColor(view.mover||view.board[view.last])} ${rvCoordinate(view.last)} · ${view.flipped}枚反転`:'黒から開始 · 四隅と置ける場所を大切に';
   $('#reversi-undo').disabled=rvReview>=0||rvUndoIndex()<0;
-  $('#reversi-hint').disabled=!canPlay;$('#reversi-review').disabled=r.frames.length<2;
+  $('#reversi-hint').disabled=!rvCanAnalyze();$('#reversi-hint').textContent=rvReview>=0?'局面分析':'ヒント';$('#reversi-review').disabled=r.frames.length<2;
   $('#reversi-guides').setAttribute('aria-pressed',String(r.showLegal));
   $('#reversi-guides').textContent=r.showLegal?'候補 ON':'候補 OFF';
   $('#reversi-review-tools').hidden=rvReview<0;$('#reversi-replay-back').disabled=rvReview<=0;$('#reversi-replay-next').disabled=rvReview>=r.frames.length-1;
   $('#reversi-result').hidden=!view.over||rvReview>=0;
   if(view.over){$('#reversi-result-title').textContent=black===white?'DRAW':r.mode==='cpu'?(view.board.filter(v=>v===r.human).length>view.board.filter(v=>v===3-r.human).length?'YOU WIN':'NPC WINS'):(black>white?'BLACK WINS':'WHITE WINS');$('#reversi-result-detail').textContent=`黒 ${black} : ${white} 白${r.assisted?' · ヒント／待った使用':''}。棋譜で対局を振り返れます。`;}
   const stats=rvStats();$('#reversi-record').textContent=`NPC戦績 ${stats.wins}勝 ${stats.losses}敗 ${stats.draws}分`;
+  $('#reversi-coach').hidden=!rvCoach;$('#reversi-coach').textContent=rvCoach;
+  $('#reversi-pause').textContent=r.paused?'対局を再開':'一時停止';$('#reversi-pause').disabled=r.over||rvReview>=0;$('#reversi-pause').setAttribute('aria-pressed',String(r.paused));
+  $('#reversi-theme').textContent=r.theme==='midnight'?'盤色：深藍':'盤色：翡翠';
+  $('#reversi-save').textContent=rvSaveOK?'この端末に保存済み':'保存できませんでした。棋譜を書き出して保管してください';$('#reversi-save').classList.toggle('save-failed',!rvSaveOK);
+  const range=$('#reversi-timeline');range.max=r.frames.length-1;range.value=rvReview>=0?rvReview:r.frames.length-1;range.disabled=r.frames.length<2;range.setAttribute('aria-valuetext',`${range.value}手目 / ${r.frames.length-1}手`);
+  const list=$('#reversi-moves'),signature=r.frames.map(f=>f.last).join(',');
+  if(list.dataset.signature!==signature){list.dataset.signature=signature;list.innerHTML=r.frames.map((f,i)=>`<li><button data-action="reversiJump" data-frame="${i}" aria-label="${i===0?'開始局面':i+'手目 '+rvColor(f.mover)+' '+rvCoordinate(f.last)+(f.pass?'、'+rvColor(f.pass)+'パス':'')}">${i===0?'開始':`${i}. ${rvColor(f.mover)} ${rvCoordinate(f.last)}${f.pass?' / パス':''}`}</button></li>`).join('');}
+  const selected=rvReview>=0?rvReview:r.frames.length-1;list.querySelectorAll('button').forEach((button,i)=>{if(i===selected)button.setAttribute('aria-current','step');else button.removeAttribute('aria-current');});
  }
  function reversiApp(){
   if(!reversi)rvRestore();rvCancel();rvReview=-1;rvRecord();rvSave();
@@ -598,8 +631,10 @@
    <div class="reversi-frame"><div class="rv-coordinates" aria-hidden="true">${[...'ABCDEFGH'].map(c=>`<span>${c}</span>`).join('')}</div><div class="rv-ranks" aria-hidden="true">${Array.from({length:8},(_,i)=>`<span>${i+1}</span>`).join('')}</div><div class="reversi-board" id="reversi-board" role="group" aria-label="8行8列のリバーシ盤。矢印キーで移動、EnterまたはSpaceで着手" aria-describedby="reversi-status">${Array.from({length:64},(_,i)=>`<button class="reversi-cell" data-action="reversiMove" data-index="${i}" tabindex="-1"><span class="rv-piece" aria-hidden="true"><span class="reversi-disc"><i class="rv-face black"></i><i class="rv-face white"></i></span></span><i class="reversi-hint" aria-hidden="true"></i><span class="rv-flip-count" aria-hidden="true"></span><i class="rv-last-mark" aria-hidden="true"></i></button>`).join('')}</div></div>
    <p class="rv-preview-copy" id="reversi-preview">座標を選んで着手。矢印キーでも移動できます</p>
    <div class="rv-status-panel"><strong id="reversi-status" role="status" aria-live="polite" aria-atomic="true"></strong><span id="reversi-last"></span><small id="reversi-engine"></small></div>
+   <p class="rv-coach" id="reversi-coach" hidden role="status"></p>
    <div class="rv-tools"><button id="reversi-undo" data-action="reversiUndo">待った</button><button id="reversi-hint" data-action="reversiHint">ヒント</button><button id="reversi-guides" data-action="reversiGuides">候補 ON</button><button id="reversi-review" data-action="reversiReview">棋譜</button></div>
    <div class="rv-review-tools" id="reversi-review-tools" hidden><button data-action="reversiReplay" data-step="-1" id="reversi-replay-back" aria-label="棋譜を一手戻る">前の手</button><button data-action="reversiLive">対局へ戻る</button><button data-action="reversiReplay" data-step="1" id="reversi-replay-next" aria-label="棋譜を一手進める">次の手</button></div>
+   <details class="rv-study"><summary>棋譜・研究・保存</summary><label class="rv-timeline">手順を移動<input id="reversi-timeline" type="range" min="0" max="0" value="0" step="1" aria-label="棋譜の手数" /></label><ol id="reversi-moves" class="rv-moves" aria-label="対局の手順"></ol><div class="rv-study-tools"><button id="reversi-pause" data-action="reversiPause">一時停止</button><button id="reversi-theme" data-action="reversiTheme">盤色：翡翠</button><button data-action="reversiExport" data-format="text">棋譜 TXT</button><button data-action="reversiExport" data-format="json">棋譜 JSON</button></div><p id="reversi-save" role="status"></p><button class="rv-save-retry" data-action="reversiSave">保存を再試行</button></details>
    <section class="rv-result" id="reversi-result" hidden><small>GAME COMPLETE</small><h2 id="reversi-result-title"></h2><p id="reversi-result-detail"></p></section>
    <div class="rv-footer"><span id="reversi-record"></span><button data-action="reversiRestart">新しい対局</button></div></section>`,iconButton('reversiHelp','遊び方','document'));
   renderReversi();scheduleAI();
@@ -610,25 +645,55 @@
   on(board,'focusout',e=>{if(!board.contains(e.relatedTarget))rvPreviewAt(-1);});
   on(board,'keydown',e=>{if(!$('#overlay').hidden||e.altKey||e.metaKey||e.ctrlKey)return;
    const delta={ArrowLeft:-1,ArrowRight:1,ArrowUp:-8,ArrowDown:8};
-   if(Object.hasOwn(delta,e.key)){e.preventDefault();rvFocus=Math.max(0,Math.min(63,rvFocus+delta[e.key]));board.children[rvFocus].focus();}
+   if(Object.hasOwn(delta,e.key)){
+    e.preventDefault();const x=rvFocus%8,y=rvFocus/8|0;
+    if(e.key==='ArrowLeft'&&x>0||e.key==='ArrowRight'&&x<7||e.key==='ArrowUp'&&y>0||e.key==='ArrowDown'&&y<7)rvFocus+=delta[e.key];
+    board.children[rvFocus].focus();
+   }
    if(e.key==='Home'||e.key==='End'){e.preventDefault();rvFocus=e.key==='Home'?0:63;board.children[rvFocus].focus();}
   });
-  on(document,'visibilitychange',()=>{if(document.hidden){rvCancel();rvSave();renderReversi();}else{renderReversi();scheduleAI();}});
+  on($('#reversi-timeline'),'input',e=>rvShowFrame(Number(e.target.value)));
+  on(document,'visibilitychange',()=>{if(document.hidden){rvCancel();rvInfo='';rvSave();renderReversi();}else{renderReversi();scheduleAI();}});
   disposers.push(()=>{rvCancel();rvSave();});
  }
  A.actions.reversiMove=el=>{if(!rvCanPlay())return;rvMove(Number(el.dataset.index));};
  A.actions.reversiUndo=()=>{const index=rvUndoIndex();if(index<0||rvReview>=0)return;rvCancel();reversi.frames=reversi.frames.slice(0,index+1);Object.assign(reversi,rvSnapshot(reversi.frames[index]));reversi.assisted=true;rvInfo='あなたの着手前まで戻しました';rvSave();renderReversi();scheduleAI();};
  A.actions.reversiHint=()=>{
-  if(!rvCanPlay())return;rvBusy=true;reversi.assisted=true;rvSave();rvInfo='おすすめの一手を探索中';renderReversi();
-  rvSearch(reversi.board.slice(),reversi.turn,'hard',result=>rvWaitForBoard(()=>{rvBusy=false;rvHint=result.index;
-   const reason=[0,7,56,63].includes(rvHint)?'角は相手に返されない石です':'角・相手の合法手・返されやすい石を比較';
-   rvInfo=rvHint===null?'置ける場所がありません':`${rvCoordinate(rvHint)}を推奨 · ${reason}（${result.depth}手先）`;renderReversi();
+  if(!rvCanAnalyze())return;const view=rvReview>=0?reversi.frames[rvReview]:reversi;
+  rvBusy=true;rvHint=-1;rvCoach='';if(rvReview<0){reversi.assisted=true;rvSave();}rvInfo='おすすめの一手を探索中';renderReversi();
+  rvSearch(view.board.slice(),view.turn,reversi.level==='expert'?'expert':'hard',result=>rvWaitForBoard(()=>{
+   rvBusy=false;const legal=rvEngine.moves(view.board,view.turn);rvHint=legal.includes(result.index)?result.index:-1;
+   if(rvHint<0){rvInfo='置ける場所がありません';renderReversi();return;}
+   const next=rvEngine.placed(view.board,rvHint,view.turn),reply=rvEngine.moves(next,3-view.turn),unsafeCorners=reply.filter(i=>[0,7,56,63].includes(i));
+   const reason=[0,7,56,63].includes(rvHint)?'角を確保する手':!reply.length?'相手の着手をなくす手':unsafeCorners.length?'相手の角取りにも注意':'相手の選択肢と石の安定性を比較';
+   const line=(result.line||[]).map(item=>`${rvColor(item.color)}${item.index<0?'パス':rvCoordinate(item.index)}`).join(' → ');
+   rvInfo=`${rvCoordinate(rvHint)}を推奨 · ${result.fallback?'簡易候補':result.solved?'終局まで読了':result.depth+'手先'} · ${number(result.nodes)}局面`;
+   rvCoach=`${reason}。${rvEngine.flips(view.board,rvHint,view.turn).length}枚反転 / 相手の合法手 ${reply.length}。${line?'参考手順：'+line+'。':''}探索範囲内の提案で、勝利の保証ではありません。`;
+   renderReversi();
   }));
  };
  A.actions.reversiGuides=()=>{reversi.showLegal=!reversi.showLegal;rvPreview=-1;rvSave();renderReversi();rvPreviewAt(-1);};
- A.actions.reversiReview=()=>{if(reversi.frames.length<2)return;rvCancel();rvReview=reversi.frames.length-1;renderReversi();rvPreviewAt(-1);};
- A.actions.reversiReplay=el=>{if(rvReview<0)return;rvReview=Math.max(0,Math.min(reversi.frames.length-1,rvReview+Number(el.dataset.step)));renderReversi();};
- A.actions.reversiLive=()=>{rvReview=-1;rvInfo='';renderReversi();scheduleAI();};
+ function rvShowFrame(index){
+  if(!Number.isInteger(index)||index<0||index>=reversi.frames.length)return;
+  rvCancel();rvReview=index;rvInfo='';renderReversi();
+ }
+ A.actions.reversiReview=()=>{if(reversi.frames.length>1)rvShowFrame(reversi.frames.length-1);};
+ A.actions.reversiJump=el=>rvShowFrame(Number(el.dataset.frame));
+ A.actions.reversiReplay=el=>{if(rvReview>=0)rvShowFrame(Math.max(0,Math.min(reversi.frames.length-1,rvReview+Number(el.dataset.step))));};
+ A.actions.reversiLive=()=>{rvCancel();rvReview=-1;rvInfo='';renderReversi();scheduleAI();};
+ A.actions.reversiPause=()=>{if(reversi.over||rvReview>=0)return;rvCancel();reversi.paused=!reversi.paused;rvInfo='';rvSave();renderReversi();scheduleAI();};
+ A.actions.reversiTheme=()=>{reversi.theme=reversi.theme==='midnight'?'jade':'midnight';rvSave();$('.rv-studio').dataset.theme=reversi.theme;$('#reversi-theme').textContent=reversi.theme==='midnight'?'盤色：深藍':'盤色：翡翠';};
+ A.actions.reversiSave=()=>{rvRecord();rvSave();renderReversi();};
+ A.actions.reversiExport=el=>{
+  const r=reversi,black=r.board.filter(v=>v===1).length,white=r.board.filter(v=>v===2).length;
+  const record={format:'aura-reversi',version:1,exportedAt:new Date().toISOString(),mode:r.mode,level:r.level,human:r.human,assisted:r.assisted,complete:r.over,score:{black,white},initialBoard:r.frames[0].board,initialTurn:r.frames[0].turn,moves:r.frames.slice(1).map((f,i)=>({ply:i+1,color:f.mover,index:f.last,coordinate:rvCoordinate(f.last),flipped:f.flipped,passed:f.pass})),finalBoard:r.board,turn:r.turn};
+  const json=el.dataset.format==='json',content=json?JSON.stringify(record,null,2):[
+   'Reversi Atelier — 棋譜',`保存日時: ${record.exportedAt}`,`対戦: ${r.mode==='cpu'?'NPC '+rvLevels[r.level]+' / 自分 '+rvColor(r.human):'2人対戦'}`,`状態: ${r.over?'終局':'対局途中'} / 黒${black} 白${white}`,`ヒント・待った: ${r.assisted?'使用':'未使用'}`,'',
+   '開始盤面（. 空 / B 黒 / W 白）',...Array.from({length:8},(_,y)=>record.initialBoard.slice(y*8,y*8+8).map(v=>['.','B','W'][v]).join(' ')),`開始手番: ${rvColor(record.initialTurn)}`,'',
+   ...record.moves.map(m=>`${m.ply}. ${rvColor(m.color)} ${m.coordinate} / ${m.flipped}枚反転${m.passed?' / '+rvColor(m.passed)+'パス':''}`),'','移行局面からの記録の場合、移行前の手順は含みません。','このファイルのアプリ内再取り込みには対応していません。'
+  ].join('\n');
+  A.download(new Blob([content],{type:json?'application/json;charset=utf-8':'text/plain;charset=utf-8'}),`reversi_${new Date().toISOString().slice(0,10)}.${json?'json':'txt'}`);
+ };
  function rvStart(options){rvCancel();freshReversi(options);rvSave();open('reversi');}
  A.actions.reversiRestart=()=>A.confirm('新しい対局を始めますか？','今の対局と棋譜を置き換えます。戦績は残ります。',()=>rvStart(reversi));
  A.actions.reversiSettings=()=>{
@@ -636,12 +701,12 @@
   A.overlay(`${A.overlayTitle('対局設定')}<div class="rv-options"><label>対戦相手<select id="rv-option-mode"><option value="cpu" ${r.mode==='cpu'?'selected':''}>NPC対戦</option><option value="local" ${r.mode==='local'?'selected':''}>同じ端末で2人対戦</option></select></label><label>NPCの強さ<select id="rv-option-level">${Object.entries(rvLevels).map(([id,label])=>`<option value="${id}" ${r.level===id?'selected':''}>${label}</option>`).join('')}</select></label><label>あなたの石（NPC戦）<select id="rv-option-human"><option value="1" ${r.human===1?'selected':''}>黒 · 先手</option><option value="2" ${r.human===2?'selected':''}>白 · 後手</option></select></label><p>入門 / 標準 / 上級 / 達人。達人の探索予算は約1.8秒。端末により探索の深さは変わります。設定を反映すると新しい対局になります。</p><button class="primary-button" data-action="reversiApplySettings">この設定で新しい対局</button></div>`);
  };
  A.actions.reversiApplySettings=()=>{
-  const options={mode:$('#rv-option-mode').value,level:$('#rv-option-level').value,human:Number($('#rv-option-human').value),showLegal:reversi.showLegal};
+  const options={mode:$('#rv-option-mode').value,level:$('#rv-option-level').value,human:Number($('#rv-option-human').value),showLegal:reversi.showLegal,theme:reversi.theme};
   A.confirm('設定を変更して開始？','現在の盤面と棋譜を置き換えます。',()=>rvStart(options));
  };
  // Retain the old action contract for existing callers.
  A.actions.reversiMode=el=>A.confirm('対戦モードを変更？','新しい対局を始めます。',()=>rvStart({...reversi,mode:el.dataset.value}));
- A.actions.reversiHelp=()=>help('Reversi · 遊び方','自分の石で一直線にはさむと相手の石が裏返ります。黒から開始し、置けない側は自動パス。両者とも置けなければ空きマスが残っていても終局です。石数バーは勝率ではありません。<br><br>候補の数字は返せる枚数。マウス／キーボードフォーカスで返る石を強調します。金の小さな印は直前の着手、金の候補はヒントです。候補OFFでも合法手には置けます。<br><br>「待った」はNPCの応手も含め自分の着手前へ（2人対戦は一手）。思考中も取り消せますが、終局後は戦績の重複を避けるため棋譜の閲覧のみです。ヒント・待った使用の対局もNPC戦績に含みます。<br><br>「棋譜」で保存された手順を往復。「対局へ戻る」で再開。古い保存データは移行後の手順から記録します。盤面・棋譜は端末内に自動保存。音声・通信・追加画像素材は使用しません。');
+ A.actions.reversiHelp=()=>help('Reversi · 遊び方','自分の石で一直線にはさむと相手の石が裏返ります。黒から開始し、置けない側は自動パス。両者とも置けなければ空きマスが残っていても終局です。石数バーは勝率ではありません。<br><br>候補の数字は返せる枚数。マウス／キーボードフォーカスで返る石を強調します。金の小さな印は直前の着手、金の候補はヒントです。候補OFFでも合法手には置けます。<br><br>「待った」はNPCの応手も含め自分の着手前へ（2人対戦は一手）。思考中も取り消せますが、終局後は戦績の重複を避けるため棋譜の閲覧のみです。ヒント・待った使用の対局もNPC戦績に含みます。<br><br>「棋譜」で保存された手順を往復。「対局へ戻る」で再開。古い保存データは移行後の手順から記録します。<br><br>「棋譜・研究・保存」のスライダーや手順ボタンで任意の局面へ。閲覧中の「局面分析」は過去局面に対する提案で、本対局の盤面は変更しません。一時停止・盤色切替・TXT/JSON書き出しも利用できます。書き出した棋譜の再取り込みは非対応。盤面・棋譜は端末内に自動保存。音声・通信・追加画像素材は使用しません。');
 
  // Orbit Breaker: 120 Hz simulation, swept collisions and interpolated HiDPI rendering.
  const orbitModes={
@@ -655,11 +720,13 @@
  const orbitClamp=(v,min,max)=>Math.max(min,Math.min(max,v));
  const orbitInteger=v=>Number.isSafeInteger(v)&&v>=0?v:0;
  const orbitStored=A.load('breakerPreferences',{});
- const orbitPrefs={mode:Object.hasOwn(orbitModes,orbitStored?.mode)?orbitStored.mode:'normal',quality:orbitStored?.quality==='light'?'light':'high',sound:orbitStored?.sound===true};
+ const orbitPrefs={mode:Object.hasOwn(orbitModes,orbitStored?.mode)?orbitStored.mode:'normal',quality:orbitStored?.quality==='light'?'light':'high',sound:orbitStored?.sound===true,cockpit:orbitStored?.cockpit===true};
  const orbitSaved=A.load('breakerRecords',{});
  const orbitRecords=Object.fromEntries(Object.keys(orbitModes).map(mode=>[mode,{best:orbitInteger(orbitSaved?.[mode]?.best),stage:orbitInteger(orbitSaved?.[mode]?.stage),combo:orbitInteger(orbitSaved?.[mode]?.combo)}]));
  let breaker=null,breakerKeys={left:false,right:false},breakerFrame=0,breakerView=null,breakerAudio=null;
- const orbitReduced=()=>!!A.settings.reduceMotion||window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+ const orbitMotionQuery=window.matchMedia('(prefers-reduced-motion: reduce)');
+ const orbitReduced=()=>!!A.settings.reduceMotion||orbitMotionQuery.matches;
+ let orbitSaveStatus='まだ保存していません';
  const orbitWidth=()=>orbitModes[breaker.mode].width+(breaker.wide>0?32:0);
  const orbitSpeed=()=>Math.min(475,orbitModes[breaker.mode].speed+(breaker.stage-1)*13);
  function stageBricks(stage){
@@ -680,18 +747,74 @@
   breaker={mode,paddle:180,previousPaddle:180,target:180,angle:18,ball:{x:180,y:442,px:180,py:442,vx:0,vy:0},
    bricks:stageBricks(1),score:0,lives:orbitModes[mode].lives,stage:1,running:false,launched:false,over:false,
    trail:[],particles:[],rings:[],drops:[],combo:0,maxCombo:0,destroyed:0,elapsed:0,energy:0,focus:0,wide:0,slow:0,shield:0,
-   message:'発射角を決めて、軌道へ。',messageTime:4,stageTime:0,trailClock:0};
+   message:'発射角を決めて、軌道へ。',messageTime:4,stageTime:0,trailClock:0,countdown:0,restored:false,
+   stageHits:0,stagePeak:0,stageDrops:0,stageMisses:0,claimed:[],missions:0,perfects:0};
+ }
+ // Only gameplay data is serialized; rendering resources and effects never enter storage.
+ const orbitStateFields=['mode','paddle','target','angle','score','lives','stage','launched','over','combo','maxCombo','destroyed','elapsed','energy','focus','wide','slow','shield','stageHits','stagePeak','stageDrops','stageMisses','claimed','missions','perfects'];
+ function orbitCheckpoint(){
+  if(!breaker)return null;
+  const b=breaker,data={version:1,savedAt:Date.now()};
+  for(const key of orbitStateFields)data[key]=b[key];
+  data.ball={x:b.ball.x,y:b.ball.y,vx:b.ball.vx,vy:b.ball.vy};
+  data.hp=b.bricks.map(brick=>brick.hp);
+  data.drops=b.drops.map(({x,y,type})=>({x,y,type}));
+  return data;
+ }
+ function orbitRestore(){
+  const saved=A.load('breakerState',null);if(saved===null)return false;
+  const finite=(v,min,max)=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
+  const integer=(v,min,max)=>Number.isSafeInteger(v)&&v>=min&&v<=max;
+  const reject=()=>{orbitSaveStatus='保存データを復元できないため新規開始';return false;};
+  if(!saved||saved.version!==1||!Object.hasOwn(orbitModes,saved.mode)||!integer(saved.stage,1,1000000)||
+   !integer(saved.lives,0,7)||typeof saved.over!=='boolean'||typeof saved.launched!=='boolean'||
+   saved.over!==(saved.lives===0)||!finite(saved.paddle,0,360)||!finite(saved.target,0,360)||
+   !integer(saved.angle,-55,55)||!finite(saved.elapsed,0,1e9)||!integer(saved.energy,0,100)||
+   !integer(saved.shield,0,2)||!finite(saved.wide,0,14)||!finite(saved.slow,0,9)||!finite(saved.focus,0,4)||
+   !['score','combo','maxCombo','destroyed','stageHits','stagePeak','stageDrops','stageMisses','missions','perfects'].every(key=>integer(saved[key],0,Number.MAX_SAFE_INTEGER)))return reject();
+  if(!saved.ball||!finite(saved.ball.x,5.9,354.1)||!finite(saved.ball.y,5.9,saved.over?520:514)||
+   !finite(saved.ball.vx,-475,475)||!finite(saved.ball.vy,-475,475)||
+   (saved.launched&&(!finite(Math.hypot(saved.ball.vx,saved.ball.vy),200,476)||Math.abs(saved.ball.vy)<10)))return reject();
+  const bricks=stageBricks(saved.stage);
+  if(!Array.isArray(saved.hp)||saved.hp.length!==bricks.length||!saved.hp.every((hp,i)=>integer(hp,0,bricks[i].maxHp))||
+   !saved.hp.some(hp=>hp>0)||!Array.isArray(saved.drops)||saved.drops.length>6||
+   !saved.drops.every(drop=>drop&&Object.hasOwn(orbitDrops,drop.type)&&finite(drop.x,0,360)&&finite(drop.y,0,510))||
+   !Array.isArray(saved.claimed)||saved.claimed.length>3||new Set(saved.claimed).size!==saved.claimed.length||
+   !saved.claimed.every(id=>['hits','combo','collect'].includes(id)))return reject();
+  resetBreaker(saved.mode);
+  for(const key of orbitStateFields)breaker[key]=saved[key];
+  breaker.claimed=[...saved.claimed];
+  const half=(orbitModes[breaker.mode].width+(breaker.wide>0?32:0))/2;
+  breaker.paddle=orbitClamp(breaker.paddle,half+4,356-half);breaker.previousPaddle=breaker.paddle;
+  breaker.target=breaker.paddle;breaker.bricks=bricks.map((brick,i)=>({...brick,hp:saved.hp[i]}));
+  breaker.ball={...saved.ball,px:saved.ball.x,py:saved.ball.y};
+  if(!breaker.launched)breaker.ball={x:breaker.paddle,y:442,px:breaker.paddle,py:442,vx:0,vy:0};
+  breaker.drops=saved.drops.map(drop=>({...drop,py:drop.y}));
+  breaker.restored=true;breaker.running=false;
+  orbitSaveStatus='保存フライトを復元しました';orbitMessage('保存済みのフライト · 再開で続ける');return true;
  }
  function orbitSave(){
-  if(!breaker)return;
-  const b=breaker,r=orbitRecords[b.mode];
-  const next={best:Math.max(r.best,b.score),stage:Math.max(r.stage,b.stage),combo:Math.max(r.combo,b.maxCombo)};
-  if(next.best!==r.best||next.stage!==r.stage||next.combo!==r.combo){
-   const records={...orbitRecords,[b.mode]:next};
-   if(A.save('breakerRecords',records))orbitRecords[b.mode]=next;
+  if(!breaker)return false;
+  const b=breaker,r=orbitRecords[b.mode],next={best:Math.max(r.best,b.score),stage:Math.max(r.stage,b.stage),combo:Math.max(r.combo,b.maxCombo)};
+  const records={...orbitRecords,[b.mode]:next};
+  const saved=A.saveBatch({breakerRecords:records,breakerBest:Math.max(orbitInteger(A.load('breakerBest',0)),b.score),breakerState:orbitCheckpoint()});
+  if(saved){orbitRecords[b.mode]=next;orbitSaveStatus='この端末に保存しました';}
+  else orbitSaveStatus='保存できませんでした · 空き容量を確認してください';
+  return saved;
+ }
+ function orbitMissionList(){
+  const b=breaker;
+  return [{id:'hits',label:'ブロックに12回ヒット',value:b.stageHits,target:12,bonus:150},
+   {id:'combo',label:'8回連続ヒット',value:b.stagePeak,target:8,bonus:250},
+   {id:'collect',label:'アイテムを2個回収',value:b.stageDrops,target:2,bonus:200}];
+ }
+ function orbitCheckMissions(){
+  const b=breaker;
+  for(const mission of orbitMissionList())if(mission.value>=mission.target&&!b.claimed.includes(mission.id)){
+   b.claimed.push(mission.id);b.missions++;const bonus=Math.round(mission.bonus*orbitModes[b.mode].multiplier);
+   b.score+=bonus;b.energy=Math.min(100,b.energy+20);
+   orbitMessage('MISSION CLEAR · +'+bonus+' pts / FOCUS +20');orbitBurst(180,300,'#9de8dd',24);
   }
-  const best=orbitInteger(A.load('breakerBest',0));
-  if(b.score>best)A.save('breakerBest',b.score);
  }
  function orbitMessage(text){breaker.message=text;breaker.messageTime=3;}
  function orbitTone(frequency=440){
@@ -738,6 +861,7 @@
   if(!breaker)return;
   const wasRunning=breaker.running;breaker.running=false;breakerKeys={left:false,right:false};
   breakerView?.clearInput();
+  breaker.countdown=0;
   if(wasRunning){orbitMessage(message);orbitSave();}
   orbitWake();
  }
@@ -756,7 +880,7 @@
  function orbitDamage(brick,explosion=false){
   if(brick.hp<=0)return;
   const b=breaker;brick.hp--;brick.flash=.16;
-  b.combo++;b.maxCombo=Math.max(b.maxCombo,b.combo);
+  b.combo++;b.maxCombo=Math.max(b.maxCombo,b.combo);b.stageHits++;b.stagePeak=Math.max(b.stagePeak,b.combo);
   const multiplier=1+Math.min(4,Math.floor(b.combo/5));
   b.score+=Math.round((brick.hp?8:20)*multiplier*orbitModes[b.mode].multiplier);
   b.energy=Math.min(100,b.energy+(brick.hp?5:9));
@@ -823,6 +947,7 @@
   for(const ring of b.rings)ring.life-=dt;b.rings=b.rings.filter(r=>r.life>0);
   for(const brick of b.bricks)brick.flash=Math.max(0,brick.flash-dt);
   if(!b.launched){b.ball.x=b.paddle;b.ball.y=442;return;}
+  if(b.countdown>0){b.countdown=Math.max(0,b.countdown-dt);return;}
   b.elapsed+=dt;
   for(const key of ['wide','slow','focus'])b[key]=Math.max(0,b[key]-dt);
   orbitMoveBall(dt);
@@ -830,20 +955,22 @@
    drop.py=drop.y;drop.y+=88*dt;
    if(drop.y>=443&&drop.py<=467&&Math.abs(drop.x-b.paddle)<=orbitWidth()/2+10){
     if(drop.type==='wide')b.wide=14;if(drop.type==='slow')b.slow=9;if(drop.type==='shield')b.shield=Math.min(2,b.shield+1);
-    drop.y=520;orbitMessage(orbitDrops[drop.type].name);orbitBurst(drop.x,454,orbitDrops[drop.type].color);orbitTone(740);
+    b.stageDrops++;drop.y=520;orbitMessage(orbitDrops[drop.type].name);orbitBurst(drop.x,454,orbitDrops[drop.type].color);orbitTone(740);
    }
   }
-  b.drops=b.drops.filter(drop=>drop.y<510);
+  b.drops=b.drops.filter(drop=>drop.y<510);orbitCheckMissions();
   if(b.ball.y>514){
-   b.lives--;b.drops=[];b.wide=0;b.slow=0;b.shield=0;orbitTone(140);
+   b.lives--;b.stageMisses++;b.drops=[];b.wide=0;b.slow=0;b.shield=0;orbitTone(140);
    if(b.lives<=0){b.over=true;b.running=false;orbitMessage('フライト終了');orbitSave();}
    else{breakerBallReset();orbitMessage('残り '+b.lives+' 機 · 発射で再挑戦');orbitSave();}
    return;
   }
   if(b.bricks.every(brick=>brick.hp<=0)){
-   b.score+=Math.round(150*b.stage*orbitModes[b.mode].multiplier);b.stage++;b.bricks=stageBricks(b.stage);b.drops=[];
-   if(b.stage%3===1){b.lives=Math.min(7,b.lives+1);orbitMessage('ステージクリア · 残機 +1');}
-   else orbitMessage('ステージクリア · 発射で次の軌道へ');
+   const perfect=b.stageMisses===0,bonus=Math.round((150+(perfect?200:0))*b.stage*orbitModes[b.mode].multiplier);
+   b.score+=bonus;if(perfect)b.perfects++;b.stage++;b.bricks=stageBricks(b.stage);b.drops=[];
+   const extraLife=b.stage%3===1;if(extraLife)b.lives=Math.min(7,b.lives+1);
+   orbitMessage((perfect?'ノーミスクリア':'ステージクリア')+' · +'+bonus+' pts'+(extraLife?' / 残機 +1':''));
+   b.stageHits=0;b.stagePeak=0;b.stageDrops=0;b.stageMisses=0;b.claimed=[];
    b.stageTime=2;breakerBallReset();orbitSave();orbitTone(880);return;
   }
   b.trailClock+=dt;
@@ -856,22 +983,31 @@
   text('score',number(b.score));text('best',number(Math.max(orbitRecords[b.mode].best,b.score)));
   text('lives',b.lives+' 機');text('stage',String(b.stage).padStart(2,'0'));text('combo','×'+(1+Math.min(4,Math.floor(b.combo/5))));
   text('remaining',remaining+' / '+b.bricks.length);text('pattern',orbitPatterns[(b.stage-1)%6]);
+  text('save-status',orbitSaveStatus);
+  for(const mission of orbitMissionList()){
+   text('mission-'+mission.id,`${b.claimed.includes(mission.id)?'達成':'進行中'} · ${mission.label} ${Math.min(mission.target,mission.value)}/${mission.target}`);
+   text('reward-'+mission.id,`+${Math.round(mission.bonus*orbitModes[b.mode].multiplier)} pts / FOCUS +20`);
+   v.nodes['mission-'+mission.id].parentElement.classList.toggle('complete',b.claimed.includes(mission.id));
+  }
+  text('mission-summary',`セクターミッション ${b.claimed.length} / 3`);
   text('record',`${orbitModes[b.mode].label} · 最高 ${number(Math.max(orbitRecords[b.mode].best,b.score))} pts / 到達 ${Math.max(orbitRecords[b.mode].stage,b.stage)} / 最大連続 ${Math.max(orbitRecords[b.mode].combo,b.maxCombo)} HIT`);
   text('effects',[b.wide>0?'W '+Math.ceil(b.wide)+'s':'',b.slow>0?'T '+Math.ceil(b.slow)+'s':'',b.shield?'S ×'+b.shield:'',b.focus>0?'FOCUS '+Math.ceil(b.focus)+'s':''].filter(Boolean).join(' · ')||'W ワイド / T スロー / S シールド');
   const status=b.messageTime>0?b.message:(!b.launched?'発射ボタン / Space / 盤面タップで発射':'ブロックを壊してFOCUSをチャージ');
   text('status',status);
   text('toggle',b.over?'もう一度':b.running?'一時停止':b.launched?'再開':'開始');
   text('focus',b.focus>0?'FOCUS 発動中':b.energy>=100?'FOCUS 発動':'FOCUS '+b.energy+'%');
-  v.nodes.focus.disabled=!b.running||!b.launched||b.energy<100||b.focus>0;
+  v.nodes.focus.disabled=!b.running||!b.launched||b.energy<100||b.focus>0||b.countdown>0;
   v.nodes.launch.disabled=!b.running||b.launched||b.over;
   v.nodes.energy.value=b.energy;v.nodes.energy.setAttribute('aria-valuetext',b.energy+'%');
   v.nodes.progress.value=b.bricks.length-remaining;v.nodes.progress.max=b.bricks.length;
   v.nodes.angle.disabled=b.launched||b.over;v.nodes.angle.value=b.angle;
   text('angle-value',(b.angle>0?'+':'')+b.angle+'°');
   const panel=v.nodes.panel;panel.hidden=b.running;
-  text('panel-title',b.over?'FLIGHT COMPLETE':b.launched?'PAUSED':'ORBIT BREAKER');
+  const count=v.nodes.countdown;count.hidden=!b.running||b.countdown<=0;
+  text('countdown',b.countdown>0?Math.ceil(b.countdown):'');
+  text('panel-title',b.over?'FLIGHT COMPLETE':b.restored?'FLIGHT SAVED':b.launched?'PAUSED':'ORBIT BREAKER');
   text('panel-copy',b.over?`${number(b.score)} pts · STAGE ${b.stage} · ${Math.floor(b.elapsed/60)}分${Math.floor(b.elapsed%60)}秒`:'狙って、跳ね返して、星の先へ。');
-  text('panel-detail',b.over?`最大連続 ${b.maxCombo} HIT / 破壊 ${b.destroyed} 個`:orbitModes[b.mode].label+' · '+(b.launched?'再開を押すまで停止します':'ドラッグ / ← → で移動'));
+  text('panel-detail',b.over?`最大連続 ${b.maxCombo} HIT / 破壊 ${b.destroyed} 個 / ミッション ${b.missions} / ノーミス ${b.perfects}`:orbitModes[b.mode].label+' · '+(b.launched?'再開を押すまで停止します':'ドラッグ / ← → で移動'));
   text('panel-button',b.over?'もう一度プレイ':b.launched?'フライトを再開':'フライトを開始');
  }
  function orbitBackground(ctx){
@@ -915,6 +1051,21 @@
   else if(brick.hp>1)for(let i=0;i<brick.hp;i++){ctx.beginPath();ctx.arc(24+(i-(brick.hp-1)/2)*6,13,1.4,0,Math.PI*2);ctx.fill();}
   v.sprites.set(key,sprite);return sprite;
  }
+ function orbitAimGuide(ctx,x,y){
+  const angle=breaker.angle*Math.PI/180,point={x,y};let dx=Math.sin(angle),dy=-Math.cos(angle),distance=580;
+  ctx.save();ctx.strokeStyle='#b4eaff70';ctx.lineWidth=1.2;ctx.setLineDash([3,7]);ctx.beginPath();ctx.moveTo(x,y);
+  for(let segment=0;segment<3&&distance>0;segment++){
+   const mx=dx*distance,my=dy*distance;let hit=null;
+   const consider=c=>{if(c&&c.time>=0&&c.time<=1&&(!hit||c.time<hit.time))hit=c;};
+   if(mx<0)consider({time:(6-point.x)/mx,nx:1,ny:0});if(mx>0)consider({time:(354-point.x)/mx,nx:-1,ny:0});
+   if(my<0)consider({time:(6-point.y)/my,nx:0,ny:1});
+   for(const brick of breaker.bricks)if(brick.hp>0){const collision=orbitSweep(point,mx,my,brick);if(collision)consider({...collision,brick:true});}
+   point.x+=mx*(hit?hit.time:1);point.y+=my*(hit?hit.time:1);ctx.lineTo(point.x,point.y);
+   if(!hit||hit.brick)break;
+   distance*=1-hit.time;if(hit.nx)dx=-dx;if(hit.ny)dy=-dy;point.x+=hit.nx*.02;point.y+=hit.ny*.02;
+  }
+  ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(point.x,point.y,5,0,Math.PI*2);ctx.stroke();ctx.restore();
+ }
  function drawBreaker(alpha=1){
   const v=breakerView;if(!v)return;
   const ctx=v.ctx,b=breaker,reduced=orbitReduced(),high=orbitPrefs.quality==='high';
@@ -944,10 +1095,7 @@
   if(b.shield){ctx.strokeStyle='#6bdfff';ctx.lineWidth=2;ctx.setLineDash([8,4]);ctx.beginPath();ctx.moveTo(8,484);ctx.lineTo(352,484);ctx.stroke();ctx.setLineDash([]);}
   if(b.focus>0){ctx.strokeStyle='#b999ff99';ctx.lineWidth=3;ctx.strokeRect(5,5,350,490);}
   const paddle=lerp(b.previousPaddle,b.paddle),width=orbitWidth(),x=lerp(b.ball.px,b.ball.x),y=lerp(b.ball.py,b.ball.y);
-  if(!b.launched&&!b.over){
-   ctx.strokeStyle='#c2ebff66';ctx.lineWidth=1.3;ctx.setLineDash([4,6]);ctx.beginPath();ctx.moveTo(x,435);
-   const angle=b.angle*Math.PI/180;ctx.lineTo(x+Math.sin(angle)*83,435-Math.cos(angle)*83);ctx.stroke();ctx.setLineDash([]);
-  }
+  if(!b.launched&&!b.over)orbitAimGuide(ctx,x,y);
   if(!reduced){
    ctx.lineCap='round';
    for(let i=b.trail.length-1;i>0;i--){const p=b.trail[i],next=b.trail[i-1];ctx.globalAlpha=(1-i/b.trail.length)*.35;ctx.strokeStyle=b.focus>0?'#c4a5ff':'#92deff';ctx.lineWidth=(1-i/b.trail.length)*9;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(next.x,next.y);ctx.stroke();}
@@ -965,34 +1113,44 @@
  }
  function orbitWake(){if(breakerView)breakerView.wake();}
  function breakerApp(){
-  if(!breaker)resetBreaker();
+  if(!breaker&&!orbitRestore())resetBreaker();
   shell('Orbit Breaker','night',`
    <div class="orbit-heading"><div><small>ORBIT / DEEP SPACE ARCADE</small><h1>星の先へ。</h1></div><div class="orbit-best"><small>MODE BEST</small><strong id="breaker-best">0</strong></div></div>
+   <div class="orbit-toolbar"><button data-action="breakerCockpit" id="breaker-cockpit" aria-pressed="${orbitPrefs.cockpit}">${orbitPrefs.cockpit?'通常表示':'盤面重視'}</button><button data-action="breakerSave">保存して停止</button><span id="breaker-save-status" role="status"></span></div>
    <div class="orbit-options"><label>難易度<select id="breaker-mode">${Object.entries(orbitModes).map(([key,mode])=>`<option value="${key}" ${breaker.mode===key?'selected':''}>${mode.label}</option>`).join('')}</select></label><label>描画<select id="breaker-quality"><option value="high" ${orbitPrefs.quality==='high'?'selected':''}>高画質</option><option value="light" ${orbitPrefs.quality==='light'?'selected':''}>軽量</option></select></label><button data-action="breakerSound" id="breaker-sound" aria-pressed="${orbitPrefs.sound}">音 ${orbitPrefs.sound?'ON':'OFF'}</button></div>
    <div class="arc-scorebar orbit-scorebar">${score('SCORE',0,'breaker-score')}${score('LIVES',0,'breaker-lives')}${score('SECTOR',1,'breaker-stage')}${score('COMBO','×1','breaker-combo')}</div>
    <div class="orbit-sector"><span id="breaker-pattern"></span><span>残り <strong id="breaker-remaining"></strong></span></div><progress id="breaker-progress" class="orbit-progress" value="0" max="1" aria-label="ステージの破壊進捗"></progress>
    <div class="orbit-arena"><canvas id="breaker-canvas" width="360" height="500" tabindex="0" aria-label="Orbit Breakerの盤面。左右キーで移動、Spaceで発射、Pで一時停止、Fでフォーカス。" aria-describedby="breaker-instructions"></canvas>
+    <div class="orbit-countdown" id="breaker-countdown" role="status" aria-label="再開カウントダウン" hidden></div>
     <div class="orbit-panel" id="breaker-panel"><small>ORBIT FLIGHT CONTROL</small><h2 id="breaker-panel-title"></h2><p id="breaker-panel-copy"></p><p id="breaker-panel-detail"></p><button data-action="breakerToggle" id="breaker-panel-button">フライトを開始</button></div>
    </div>
-   <div class="orbit-effects" id="breaker-effects"></div><p class="orbit-status" id="breaker-status" role="status" aria-live="polite"></p>
    <div class="orbit-focus"><progress id="breaker-energy" value="0" max="100" aria-label="フォーカスのチャージ"></progress><button data-action="breakerFocus" id="breaker-focus">FOCUS 0%</button></div>
    <label class="orbit-aim" for="breaker-angle">発射角 <input id="breaker-angle" type="range" min="-55" max="55" step="1" value="18"><output id="breaker-angle-value" for="breaker-angle">+18°</output></label>
    <div class="arc-primary-controls"><button data-action="breakerToggle" id="breaker-toggle">開始</button><button data-action="breakerLaunch" id="breaker-launch">発射</button><button data-action="breakerRestart">リセット</button></div>
    <div class="orbit-steer"><button data-orbit-steer="left" aria-label="パドルを左へ移動">← 左へ</button><button data-orbit-steer="right" aria-label="パドルを右へ移動">右へ →</button></div>
+   <div class="orbit-effects" id="breaker-effects"></div><p class="orbit-status" id="breaker-status" role="status" aria-live="polite"></p>
+   <details class="orbit-missions"><summary id="breaker-mission-summary">セクターミッション</summary>${['hits','combo','collect'].map(id=>`<div><span id="breaker-mission-${id}"></span><small id="breaker-reward-${id}"></small></div>`).join('')}<p>達成ごとに加点とFOCUS +20。落球なしでクリアすると追加ボーナス。</p></details>
    <p class="orbit-instructions" id="breaker-instructions">ドラッグ / ← →：移動 · Space：開始 / 発射<br>P：一時停止 · F：フォーカス（4秒スロー）<br>発射角は発射前に調整。Nブロックは周囲にダメージ。</p>
-   <details class="orbit-records"><summary>フライト記録と保存について</summary><p id="breaker-record"></p><p>難易度別の記録と設定は端末内に保存。進行はページを再読み込みするとリセットされます。ゲーム一覧のBESTは旧記録を含む全難易度の最高点です。</p></details>`,iconButton('breakerHelp','遊び方','document'));
+   <details class="orbit-records"><summary>フライト記録と保存について</summary><p id="breaker-record"></p><p>難易度別の記録と設定は端末内に保存。進行は10秒ごと・停止時・区切りで保存し、再読み込み後は停止状態から続けられます。保存枠は1つです。ゲーム一覧のBESTは旧記録を含む全難易度の最高点です。</p></details>`,iconButton('breakerHelp','遊び方','document'));
   const canvas=$('#breaker-canvas'),ctx=canvas.getContext('2d');
   if(!ctx){A.toast('このブラウザではCanvasを利用できません');return;}
-  const ids=['score','best','lives','stage','combo','remaining','pattern','effects','status','toggle','focus','launch','energy','progress','angle','angle-value','panel','panel-title','panel-copy','panel-detail','panel-button','record'];
+  const ids=['score','best','lives','stage','combo','remaining','pattern','effects','status','toggle','focus','launch','energy','progress','angle','angle-value','panel','panel-title','panel-copy','panel-detail','panel-button','record','save-status','countdown','mission-summary',...['hits','combo','collect'].flatMap(id=>['mission-'+id,'reward-'+id])];
   const view=breakerView={canvas,ctx,nodes:Object.fromEntries(ids.map(id=>[id,$('#breaker-'+id)])),sprites:new Map(),background:null,scale:1,lastTone:0,wake:null};
-  let disposed=false,last=0,accumulator=0,hudClock=0,activePointer=null;
+  const content=canvas.closest('.arcade-play');content.dataset.cockpit=String(orbitPrefs.cockpit);
+  let disposed=false,last=0,accumulator=0,hudClock=0,activePointer=null,saveClock=0;
+  const fitArena=()=>{
+   const available=Math.max(260,content.clientHeight-320);
+   content.style.setProperty('--orbit-arena-width',Math.min(380,Math.floor(available*.72))+'px');
+  };
+  fitArena();
   view.clearInput=()=>{
    if(activePointer!==null&&canvas.hasPointerCapture(activePointer))canvas.releasePointerCapture(activePointer);
    activePointer=null;breakerKeys={left:false,right:false};
   };
   function frame(now){
    breakerFrame=0;if(disposed)return;
-   const dt=last?Math.min(.075,(now-last)/1000):0;last=now;
+   const elapsed=last?Math.max(0,(now-last)/1000):0,dt=Math.min(.075,elapsed);last=now;
+   if(elapsed>.25&&breaker.running)orbitPause('処理の中断を検出 · 再開で続ける');
    if(document.hidden||!$('#overlay').hidden){if(breaker.running)orbitPause('自動停止 · 再開で続ける');accumulator=0;}
    if(breaker.running){
     accumulator+=dt;let steps=0;
@@ -1000,6 +1158,7 @@
    }else accumulator=0;
    drawBreaker(breaker.running?accumulator*120:1);
    hudClock+=dt;if(hudClock>=.1||!breaker.running){orbitHud();hudClock=0;}
+   if(breaker.running){saveClock+=dt;if(saveClock>=10){saveClock=0;orbitSave();}}
    if(breaker.running&&!breakerFrame)breakerFrame=requestAnimationFrame(frame);
   }
   view.wake=()=>{
@@ -1034,18 +1193,20 @@
   on(document,'keyup',e=>{if(e.key==='ArrowLeft')breakerKeys.left=false;if(e.key==='ArrowRight')breakerKeys.right=false;});
   on(window,'blur',()=>orbitPause('自動停止 · 再開で続ける'));
   on(document,'visibilitychange',()=>{if(document.hidden)orbitPause('自動停止 · 再開で続ける');});
-  on(window,'pagehide',()=>orbitPause());
+  on(window,'pagehide',()=>{orbitPause();orbitSave();});
   const overlayObserver=new MutationObserver(()=>{if(!$('#overlay').hidden)orbitPause();});
   overlayObserver.observe($('#overlay'),{attributes:true,attributeFilter:['hidden']});
-  const resize=()=>{if(disposed||breakerView!==view)return;orbitResize();orbitWake();};
+  const resize=()=>{if(disposed||breakerView!==view)return;fitArena();orbitResize();orbitWake();};
+  view.resize=resize;
   let observer=null;
-  if(window.ResizeObserver){observer=new ResizeObserver(resize);observer.observe(canvas);}else on(window,'resize',resize);
-  const media=window.matchMedia('(prefers-reduced-motion: reduce)');on(media,'change',()=>orbitWake());
+  if(window.ResizeObserver){observer=new ResizeObserver(resize);observer.observe(canvas);observer.observe(content);}
+  on(window,'resize',resize);
+  on(orbitMotionQuery,'change',()=>orbitWake());
   on($('#breaker-angle'),'input',e=>{if(!breaker.launched&&!breaker.over){breaker.angle=orbitClamp(Number(e.target.value),-55,55);orbitWake();}});
   on($('#breaker-mode'),'change',e=>{
    const mode=e.target.value;e.target.value=breaker.mode;if(!Object.hasOwn(orbitModes,mode)||mode===breaker.mode)return;
    orbitPause();A.confirm('難易度を変更？','現在のフライトを終了して新しく開始します。記録は難易度ごとに保存します。',()=>{
-    orbitSave();orbitPrefs.mode=mode;A.save('breakerPreferences',orbitPrefs);resetBreaker(mode);$('#breaker-mode').value=mode;orbitWake();
+    orbitSave();orbitPrefs.mode=mode;A.save('breakerPreferences',orbitPrefs);resetBreaker(mode);orbitSave();$('#breaker-mode').value=mode;orbitWake();
    });
   });
   on($('#breaker-quality'),'change',e=>{orbitPrefs.quality=e.target.value==='light'?'light':'high';A.save('breakerPreferences',orbitPrefs);view.background=null;resize();});
@@ -1058,21 +1219,29 @@
  }
  A.actions.breakerToggle=()=>{
   if(!breakerView)return;
-  if(breaker.over){orbitSave();resetBreaker(breaker.mode);}
-  if(breaker.running)orbitPause();else{breaker.running=true;orbitMessage(breaker.launched?'フライト再開':'発射ボタン / Space / 盤面タップで発射');orbitTone(360);orbitWake();}
+  if(breaker.over){orbitSave();resetBreaker(breaker.mode);orbitSave();}
+  if(breaker.running)orbitPause();else{breaker.restored=false;breaker.countdown=breaker.launched?3:0;breaker.running=true;orbitMessage(breaker.launched?'フライト再開':'発射ボタン / Space / 盤面タップで発射');orbitTone(360);orbitWake();}
  };
  A.actions.breakerLaunch=orbitLaunch;
  A.actions.breakerFocus=()=>{
   const b=breaker;if(!b||!b.running||!b.launched||b.energy<100||b.focus>0)return;
+  if(b.countdown>0)return;
   b.energy=0;b.focus=4;orbitMessage('FOCUS · 4秒間のスローモーション');orbitTone(600);orbitWake();
  };
- A.actions.breakerRestart=()=>{if(!breakerView)return;orbitPause();A.confirm('新しいフライト？','現在の進行をリセットします。ベスト記録は残ります。',()=>{orbitSave();resetBreaker(breaker.mode);orbitWake();});};
+ A.actions.breakerRestart=()=>{if(!breakerView)return;orbitPause();A.confirm('新しいフライト？','現在の進行をリセットします。ベスト記録は残ります。',()=>{orbitSave();resetBreaker(breaker.mode);orbitSave();orbitWake();});};
+ A.actions.breakerSave=()=>{if(!breakerView)return;orbitPause();orbitSave();orbitWake();};
+ A.actions.breakerCockpit=()=>{
+  if(!breakerView)return;orbitPause();orbitPrefs.cockpit=!orbitPrefs.cockpit;A.save('breakerPreferences',orbitPrefs);
+  const content=breakerView.canvas.closest('.arcade-play');content.dataset.cockpit=String(orbitPrefs.cockpit);content.scrollTop=0;
+  const button=$('#breaker-cockpit');button.textContent=orbitPrefs.cockpit?'通常表示':'盤面重視';button.setAttribute('aria-pressed',String(orbitPrefs.cockpit));breakerView.resize();
+ };
  A.actions.breakerSound=()=>{orbitPrefs.sound=!orbitPrefs.sound;A.save('breakerPreferences',orbitPrefs);const button=$('#breaker-sound');if(button){button.textContent='音 '+(orbitPrefs.sound?'ON':'OFF');button.setAttribute('aria-pressed',String(orbitPrefs.sound));}if(orbitPrefs.sound)orbitTone(540);};
  A.actions.breakerHelp=()=>{orbitPause();help('Orbit Breaker',
   '<strong>操作</strong><br>開始 → 発射。ドラッグ・マウス・左右キー・左右ボタンで移動。発射前は角度を調整できます。Spaceで開始/発射、Pで一時停止、FでFOCUS。パドル端で斜め、中央で上向きに反射します。<br><br>'+ 
   '<strong>スコアとステージ</strong><br>パドルに戻るまでの連続ヒット5回ごとに倍率アップ（最大5倍）。耐久ブロックの点（N付きは数字）が残り耐久、Nは周囲にダメージを与えるノヴァ。6種類の配置が巡回し、速度・耐久が段階的に上がります。3ステージクリアごとに残機+1（最大7）。<br><br>'+ 
   '<strong>強化とFOCUS</strong><br>7個破壊ごとにW（ワイド14秒）、T（スロー9秒）、S（落球防止1回、最大2回）が順番に落下。パドルで取得します。ヒットでチャージが100%になったらFOCUSで4秒間スロー。Tとの減速は重複しません。強化の残り秒数はボール飛行中のみ進みます。<br><br>'+ 
-  '<strong>難易度・保存</strong><br>リラックスは5機・広いパドル、標準は3機、エキスパートは高速・狭いパドル。加点係数は順に1 / 1.5 / 2倍。モード別最高点・到達ステージ・最大連続ヒット、設定を端末に保存。盤面は同じページ内のみ保持し、再読み込みで新規になります。<br><br>'+ 
+  '<strong>難易度・保存</strong><br>リラックスは5機・広いパドル、標準は3機、エキスパートは高速・狭いパドル。加点係数は順に1 / 1.5 / 2倍。モード別最高点・到達ステージ・最大連続ヒット、設定を端末に保存。盤面・残機・強化・ミッションは10秒ごとと停止時に1枠へ保存。再読み込み後は停止状態で復元し、飛行中なら再開時に3秒カウントダウンします。不正な保存データは新規開始へ戻します。<br><br>'+ 
+  '<strong>ミッションと操作</strong><br>各セクターで12ヒット、8連続ヒット、アイテム2個回収を目指します。達成ごとに加点とFOCUS +20。落球なしのクリアには追加得点。「盤面重視」で装飾を畳み、「通常表示」で設定・記録へ戻れます。発射ガイドは最初のブロックまでの軌道を壁反射込みで表示します。<br><br>'+
   '<strong>表示と中断</strong><br>高画質/軽量を選択可能。「動きを減らす」では背景移動・軌跡・破片を抑えます。別タブ・ヘルプ・画面移動時は停止し、自動では再開しません。音は初期OFFでauraのサウンド・音量にも従います。');};
 
  // Sudoku: transformations preserve a known unique puzzle; notes, undo and daily seeds.
