@@ -14,21 +14,46 @@
  // Notes: folders, templates, checklists, previews and recoverable deletion.
  let noteFolder='all',noteQuery='',noteCurrent=null,notePreview=false;
  const folderNames=()=>[...new Set([...list('noteFolders'),...A.noteModel.get().map(n=>n.folder).filter(Boolean)])];
- // Presentation is derived from IDs; legacy records are never rewritten for styling.
- const noteTone=n=>['sand','sage','rose','lavender'][Array.from(String(n.id)).reduce((h,c)=>(h*31+c.codePointAt(0))>>>0,0)%4];
+ // Optional visual fields never migrate or rewrite existing notes on read.
+ const noteColors={auto:'自動',sand:'サンド',sage:'セージ',rose:'ローズ',lavender:'ラベンダー'};
+ const notePapers={ruled:'罫線',dots:'ドット',plain:'無地'},noteFonts={sans:'ゴシック',serif:'明朝'};
+ const noteTone=n=>Object.hasOwn(noteColors,n.tone)&&n.tone!=='auto'?n.tone:['sand','sage','rose','lavender'][Array.from(String(n.id)).reduce((h,c)=>(h*31+c.codePointAt(0))>>>0,0)%4];
+ const notePaper=n=>Object.hasOwn(notePapers,n.paper)?n.paper:'ruled';
+ const noteFont=n=>Object.hasOwn(noteFonts,n.font)?n.font:'sans';
+ const noteListIcon=()=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h1M3 12h1M3 18h1"/></svg>';
+ let noteFocus=false;
+ // Failed text writes survive in this tab, including navigation and editor redraws.
+ // Nothing is reported as saved until the existing atomic model write succeeds.
+ const noteDrafts=new Map();
+ const warnNoteUnload=e=>{if(noteDrafts.size){e.preventDefault();e.returnValue='';}};
+ const syncNoteWarning=()=>{window.removeEventListener('beforeunload',warnNoteUnload);if(noteDrafts.size)window.addEventListener('beforeunload',warnNoteUnload);};
+ const noteWithDraft=n=>({...n,...noteDrafts.get(n.id)});
+ function saveNoteDraft(id){
+  const draft=noteDrafts.get(id);if(!draft)return true;
+  if(!A.noteModel.get().some(n=>n.id===id))return false;
+  const updated=Date.now(),ok=A.noteModel.replace(A.noteModel.get().map(n=>n.id===id?{...n,...draft,updated}:n));
+  if(ok)noteDrafts.delete(id);syncNoteWarning();
+  if(id===noteCurrent&&$('#note-save-status')){
+   $('#note-save-status').textContent=ok?'保存済み':'未保存・再試行できます';$('#note-save-status').dataset.state=ok?'saved':'error';
+   $('#memo-save-retry').hidden=ok;$('#memo-save-warning').hidden=ok;
+   if(ok)$('#memo-updated').textContent=noteDate(updated);
+  }
+  return ok;
+ }
+ const noteStyleControls=n=>`<details class="memo-style-panel"><summary>${A.icon('layers')}紙と色を選ぶ<span>自分らしい一冊に</span></summary><div class="memo-style-options"><div role="group" aria-label="メモの色"><span class="memo-option-label">COLOR</span><div class="memo-swatches">${Object.entries(noteColors).map(([value,label])=>`<button class="memo-swatch" data-action="pdNoteStyle" data-key="tone" data-id="${value}" data-tone="${value==='auto'?noteTone(n):value}" aria-label="${label}" aria-pressed="${(Object.hasOwn(noteColors,n.tone)?n.tone:'auto')===value}"><i aria-hidden="true">${value==='auto'?'A':'✓'}</i><span>${label}</span></button>`).join('')}</div></div>${[['paper','PAPER',notePapers,notePaper(n)],['font','TYPE',noteFonts,noteFont(n)]].map(([key,label,values,current])=>`<div role="group" aria-label="${key==='paper'?'紙の模様':'本文の書体'}"><span class="memo-option-label">${label}</span><div class="memo-style-segments">${Object.entries(values).map(([value,name])=>`<button data-action="pdNoteStyle" data-key="${key}" data-id="${value}" aria-pressed="${current===value}">${key==='paper'?`<i class="memo-paper-sample" data-paper="${value}" aria-hidden="true"></i>`:''}${name}</button>`).join('')}</div></div>`).join('')}</div></details>`;
  const noteDate=value=>{const d=new Date(value);return Number.isNaN(d.getTime())?'日付なし':d.toLocaleDateString('ja-JP',{month:'short',day:'numeric'});};
  let noteLayout=A.load('noteLayout','grid')==='list'?'list':'grid';
  const notePage=(content,right='',back='home',editor=false)=>A.view(A.nav('メモ',right,back,back==='home'?'':'一覧')+`<div class="app-content productivity memo-studio ${editor?'memo-editor':'memo-library'}">${content}</div>`);
  const notebookArt=()=>'<div class="memo-art" aria-hidden="true"><i class="memo-art-orbit"></i><div class="memo-book"><span>aura<span>NOTES</span></span><i></i></div><div class="memo-pencil"></div></div>';
  function notes(){
-  noteCurrent=null;
+  noteCurrent=null;noteFocus=false;
   const all=A.noteModel.get();
   notePage(`<header class="memo-hero"><div class="memo-hero-copy"><span class="memo-eyebrow">YOUR EVERYDAY NOTES</span><h1>ひらめきを、<br>この一冊に。</h1><p>何気ない日々を、書きとめよう。</p><button class="memo-compose" data-action="noteNew">${A.icon('edit')}メモを書く</button></div>${notebookArt()}<div class="memo-hero-foot"><span>${all.length} NOTES</span><span>${folderNames().length} FOLDERS</span>${A.icon('lock')}<span>このブラウザに保存</span></div></header>
    <div class="memo-quickstart"><span>すぐに書き始める</span><button data-action="pdNoteTemplate" data-id="checklist">${A.icon('check')}チェックリスト</button><button data-action="pdNoteTemplates">${A.icon('layers')}テンプレート</button></div>
    ${A.search('notes-search','メモ・タグを検索')}
    <div class="memo-collection-bar"><div class="memo-filters" role="group" aria-label="メモの絞り込み"><button data-action="pdNoteFilter" data-id="all">すべて <span>${all.length}</span></button><button data-action="pdNoteFilter" data-id="pinned">${A.icon('pin')}ピン留め <span>${all.filter(n=>n.pinned).length}</span></button></div>${button('pdNoteFolders','フォルダを管理','files')}${button('pdNoteTrash','ごみ箱','trash')}</div>
    <div class="pd-folder-bar memo-folder-bar"><select id="pd-note-folder" aria-label="メモのフォルダ"><option value="all">すべてのフォルダ</option><option value="pinned">ピン留め</option><option value="">未分類</option>${folderNames().map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('')}</select></div>
-   <div class="notes-toolbar"><span id="notes-count" role="status"></span><select id="notes-sort" aria-label="メモの並べ替え"><option value="updated">更新順</option><option value="title">タイトル順</option></select><div class="memo-layout" role="group" aria-label="メモの表示方法">${[['grid','カード表示','grid'],['list','リスト表示','menu']].map(([id,label,icon])=>`<button data-action="pdNoteLayout" data-id="${id}" aria-label="${label}" aria-pressed="${noteLayout===id}">${A.icon(icon)}</button>`).join('')}</div></div>
+   <div class="notes-toolbar"><span id="notes-count" role="status"></span><select id="notes-sort" aria-label="メモの並べ替え"><option value="updated">更新順</option><option value="title">タイトル順</option></select><div class="memo-layout" role="group" aria-label="メモの表示方法">${[['grid','カード表示','grid'],['list','リスト表示','list']].map(([id,label,icon])=>`<button data-action="pdNoteLayout" data-id="${id}" aria-label="${label}" aria-pressed="${noteLayout===id}">${icon==='list'?noteListIcon():A.icon(icon)}</button>`).join('')}</div></div>
    <div class="notes-grid" id="notes-grid"></div><p class="memo-library-foot">小さなメモから、次のアイデアへ。</p>`,button('pdNoteTemplates','テンプレート','layers')+button('noteNew','新規メモ','edit'));
   $('#notes-sort').value=A.load('noteSort','updated')==='title'?'title':'updated';
   $('#notes-search').value=noteQuery;
@@ -39,19 +64,19 @@
  }
  function renderNotes(){
   const query=noteQuery.trim().toLowerCase(),sort=A.load('noteSort','updated');
-  const rows=A.noteModel.get().filter(n=>(noteFolder==='all'||noteFolder==='pinned'&&n.pinned||noteFolder===(n.folder||''))&&(n.title+' '+n.body+' '+(n.tags||'')).toLowerCase().includes(query)).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||(sort==='title'?a.title.localeCompare(b.title,'ja'):b.updated-a.updated));
+  const rows=A.noteModel.get().map(noteWithDraft).filter(n=>(noteFolder==='all'||noteFolder==='pinned'&&n.pinned||noteFolder===(n.folder||''))&&(n.title+' '+n.body+' '+(n.tags||'')).toLowerCase().includes(query)).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||(sort==='title'?a.title.localeCompare(b.title,'ja'):b.updated-a.updated));
   $('#notes-count').textContent=rows.length+'件のメモ';
   $('#pd-note-folder').value=noteFolder;
   A.$$('.memo-filters button').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.id===noteFolder)));
   const grid=$('#notes-grid');grid.dataset.layout=noteLayout;
   grid.innerHTML=rows.map(n=>{
    const checks=n.body.split('\n').filter(x=>/^\s*[☐☑]/.test(x)),done=checks.filter(x=>/^\s*☑/.test(x)).length;
-   return `<button class="note-card memo-card ${n.pinned?'is-pinned':''}" data-tone="${noteTone(n)}" data-action="noteOpen" data-id="${esc(n.id)}">
+   return `<button class="note-card memo-card ${n.pinned?'is-pinned':''}" data-tone="${noteTone(n)}" data-paper="${notePaper(n)}" data-font="${noteFont(n)}" data-action="noteOpen" data-id="${esc(n.id)}">
     <span class="memo-card-top"><span class="memo-card-kind">${A.icon(checks.length?'check':'document')}<span>${checks.length?'CHECKLIST':'NOTE'}</span></span>${n.pinned?`<span class="note-pin-label">${A.icon('pin')}<span>ピン留め</span></span>`:''}</span>
     <h3>${esc(n.title||'新しいメモ')}</h3><p class="memo-excerpt">${esc(n.body.slice(0,320))||'まだ白紙のメモ。ここから始めよう。'}${n.body.length>320?'…':''}</p>
     ${checks.length?`<span class="memo-progress"><span>${done} / ${checks.length} 完了</span><span class="memo-progress-track" aria-hidden="true"><i style="width:${done/checks.length*100}%"></i></span></span>`:''}
     ${n.tags?`<span class="pd-tags">${n.tags.trim().split(/[\s,、]+/).filter(Boolean).slice(0,3).map(t=>`<span>${esc(t.startsWith('#')?t:'#'+t)}</span>`).join('')}</span>`:''}
-    <span class="memo-card-bottom"><time>${noteDate(n.updated)}</time><span>${n.folder?esc(n.folder):'未分類'}</span>${A.icon('arrow')}</span></button>`;
+    <span class="memo-card-bottom"><time>${noteDrafts.has(n.id)?'未保存':noteDate(n.updated)}</time><span>${n.folder?esc(n.folder):'未分類'}</span>${A.icon('arrow')}</span></button>`;
   }).join('')||`<div class="memo-empty">${notebookArt()}<h2>${query?'見つかりませんでした':'まだ、白紙のページ。'}</h2><p>${query?'別の言葉やタグで探してみてください。':noteFolder==='pinned'?'大切なメモを、編集画面でピン留め。':'最初のひとことを、残してみませんか。'}</p><button class="memo-compose" data-action="${query||noteFolder==='pinned'?'pdNoteReset':'noteNew'}">${A.icon(query?'search':'edit')}${query||noteFolder==='pinned'?'すべてのメモを見る':'メモを書く'}</button></div>`;
  }
  A.actions.pdNoteFilter=el=>{noteFolder=el.dataset.id;renderNotes();};
@@ -61,23 +86,40 @@
   noteLayout=value;renderNotes();A.$$('.memo-layout button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===value)));
  };
  function noteEditor(id){
-  const n=A.noteModel.get().find(x=>x.id===id);if(!n)return;noteCurrent=id;
-  notePage(`<div class="pd-editor-top"><span id="note-save-status" role="status">保存済み</span><span id="note-length">${Array.from(n.body).length}字</span></div>
+  const stored=A.noteModel.get().find(x=>x.id===id);if(!stored)return;const n=noteWithDraft(stored);noteCurrent=id;
+  notePage(`<div class="pd-editor-top"><span id="note-save-status" role="status" data-state="${noteDrafts.has(id)?'error':'saved'}">${noteDrafts.has(id)?'未保存・再試行できます':'保存済み'}</span><button id="memo-save-retry" data-action="pdNoteRetry" ${noteDrafts.has(id)?'':'hidden'}>再試行</button><span id="note-length">${Array.from(n.body).length}字</span></div>
+   <p class="memo-save-warning" id="memo-save-warning" ${noteDrafts.has(id)?'':'hidden'}>このタブ内に下書きを保持しています。タブを閉じる前に再試行、または「メモの操作」からテキスト保存してください。</p>
    <div class="note-editor-tools"><button class="note-pin-button" data-action="notePin" aria-pressed="${!!n.pinned}">${A.icon('pin')}<span>ピン留め</span></button><button class="pd-text-button memo-organize" data-action="pdNoteOrganize">${A.icon('files')}<span>${esc(n.folder||'未分類')}</span>${A.icon('arrow')}</button></div>
-   <section class="memo-paper" data-tone="${noteTone(n)}" aria-label="メモの編集"><div class="memo-paper-heading"><span class="memo-eyebrow">A LITTLE SPACE FOR YOUR MIND</span><span id="memo-updated">${noteDate(n.updated)}</span></div>
+   <div class="memo-workspace-bar"><span>WRITING ROOM</span><button data-action="pdNoteFocus" aria-pressed="${noteFocus}">${A.icon('eye')}<span>${noteFocus?'集中表示を終了':'集中表示'}</span></button></div>${noteStyleControls(n)}
+   <section class="memo-paper" data-tone="${noteTone(n)}" data-paper="${notePaper(n)}" data-font="${noteFont(n)}" aria-label="メモの編集"><div class="memo-paper-heading"><span class="memo-eyebrow">A LITTLE SPACE FOR YOUR MIND</span><span id="memo-updated">${noteDate(n.updated)}</span></div>
    <input class="note-title-input" id="note-title" aria-label="メモのタイトル" placeholder="タイトル" maxlength="120" value="${esc(n.title)}">
-   <div class="pd-format-bar" role="group" aria-label="メモの書式"><button data-action="pdNoteInsert" data-id="☐ " aria-label="チェック項目">${A.icon('check')}</button><button data-action="pdNoteInsert" data-id="• " aria-label="箇条書き">${A.icon('menu')}</button><button data-action="pdNoteInsert" data-id="# " aria-label="見出し">H</button><button data-action="pdNoteInsert" data-id="date" aria-label="日付を挿入">${A.icon('calendar')}</button><button data-action="pdNotePreview" class="${notePreview?'selected':''}" aria-pressed="${notePreview}">${A.icon(notePreview?'edit':'eye')}${notePreview?'編集':'表示'}</button></div>
+   <div class="pd-format-bar" role="group" aria-label="メモの書式"><button data-action="pdNoteInsert" data-id="☐ " aria-label="チェック項目">${A.icon('check')}</button><button data-action="pdNoteInsert" data-id="• " aria-label="箇条書き">${noteListIcon()}</button><button data-action="pdNoteInsert" data-id="# " aria-label="見出し">H</button><button data-action="pdNoteInsert" data-id="date" aria-label="日付を挿入">${A.icon('calendar')}</button><button data-action="pdNotePreview" class="${notePreview?'selected':''}" aria-pressed="${notePreview}">${A.icon(notePreview?'edit':'eye')}${notePreview?'編集':'表示'}</button></div>
    <textarea class="note-body-input pd-note-body" id="note-body" aria-label="メモ本文" maxlength="50000" placeholder="思いついたことを、自由に。" ${notePreview?'hidden':''}>${esc(n.body)}</textarea><div id="pd-note-preview" class="pd-markdown" ${notePreview?'':'hidden'}></div>
    <div class="memo-paper-foot">${A.icon('lock')}このブラウザに自動保存</div></section>`,button('pdNoteMenu','メモの操作','layers'),'noteList',true);
-  const save=()=>{
-   const next={...n,title:$('#note-title').value,body:$('#note-body').value,updated:Date.now()},ok=A.noteModel.replace(A.noteModel.get().map(x=>x.id===id?next:x));
-   if(ok)Object.assign(n,next);
-   $('#note-save-status').textContent=ok?'保存済み':'保存できません';$('#note-save-status').dataset.state=ok?'saved':'error';
-   $('#note-length').textContent=Array.from(next.body).length+'字';
-   if(ok)$('#memo-updated').textContent=noteDate(next.updated);
+  $('.memo-editor').dataset.focus=String(noteFocus);
+  const save=e=>{
+   if(e?.isComposing)return;
+   const draft={title:$('#note-title').value,body:$('#note-body').value};
+   noteDrafts.set(id,draft);$('#note-length').textContent=Array.from(draft.body).length+'字';saveNoteDraft(id);
   };
-  $('#note-title').oninput=save;$('#note-body').oninput=save;if(notePreview)renderNotePreview(n);
+  for(const el of [$('#note-title'),$('#note-body')]){el.oninput=save;el.oncompositionend=save;}
+  if(notePreview)renderNotePreview(n);
+
  }
+ A.actions.pdNoteRetry=()=>saveNoteDraft(noteCurrent);
+ A.actions.pdNoteStyle=el=>{
+  const key=el.dataset.key,value=el.dataset.id,choices={tone:noteColors,paper:notePapers,font:noteFonts};
+  if(!Object.hasOwn(choices,key)||!Object.hasOwn(choices[key],value)||!saveNoteDraft(noteCurrent))return;
+  const n=A.noteModel.get().find(x=>x.id===noteCurrent);if(!n)return;
+  const next={...n,[key]:value};if(!A.noteModel.replace(A.noteModel.get().map(x=>x.id===n.id?next:x)))return;
+  const paper=$('.memo-paper');paper.dataset.tone=noteTone(next);paper.dataset.paper=notePaper(next);paper.dataset.font=noteFont(next);
+  A.$$(`.memo-style-panel [data-key="${key}"]`).forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===value)));
+  $('.memo-swatch[data-id="auto"]').dataset.tone=noteTone({...next,tone:'auto'});
+ };
+ A.actions.pdNoteFocus=el=>{
+  noteFocus=!noteFocus;$('.memo-editor').dataset.focus=String(noteFocus);
+  el.setAttribute('aria-pressed',String(noteFocus));el.querySelector('span').textContent=noteFocus?'集中表示を終了':'集中表示';
+ };
  function renderNotePreview(n){$('#pd-note-preview').innerHTML=n.body.split('\n').map((line,i)=>/^\s*[☐☑]/.test(line)?`<button class="pd-checkline ${/^\s*☑/.test(line)?'done':''}" data-action="pdNoteCheck" data-id="${i}" aria-pressed="${/^\s*☑/.test(line)}"><span>${/^\s*☑/.test(line)?'✓':''}</span>${esc(line.replace(/^\s*[☐☑]\s*/,''))}</button>`:/^#{1,3}\s/.test(line)?`<h3>${esc(line.replace(/^#{1,3}\s/,''))}</h3>`:/^[-•]\s/.test(line)?`<div class="pd-bullet">${esc(line.replace(/^[-•]\s/,''))}</div>`:`<p>${esc(line)||'<br>'}</p>`).join('');}
  function newNote(template={title:'',body:''}){const n={id:A.id(),...template,folder:['all','pinned'].includes(noteFolder)?'':noteFolder,updated:Date.now(),pinned:false,tags:''};if(!A.noteModel.replace([n,...A.noteModel.get()]))return;A.closeOverlay();notePreview=false;noteEditor(n.id);$('#note-title').focus();}
  A.apps.notes.render=notes;A.actions.noteList=notes;A.actions.noteOpen=el=>{notePreview=false;noteEditor(el.dataset.id);};A.actions.noteNew=()=>newNote();
@@ -93,11 +135,15 @@
  A.actions.pdNoteTemplates=()=>A.overlay(`${A.overlayTitle('テンプレート')}<div class="pd-template-grid">${Object.entries(templates).map(([id,t])=>`<button data-action="pdNoteTemplate" data-id="${id}">${A.icon(id==='checklist'?'check':id==='trip'?'maps':id==='meeting'?'calendar':'notes')}<strong>${t.title}</strong></button>`).join('')}</div>`);A.actions.pdNoteTemplate=el=>newNote(templates[el.dataset.id]);
  A.actions.pdNoteMenu=()=>A.overlay(`${A.overlayTitle('メモ')}<div class="pd-menu"><button data-action="pdNoteOrganize">${A.icon('files')}フォルダ・タグ</button><button data-action="pdNoteDuplicate">${A.icon('layers')}複製</button><button data-action="pdNoteExport">${A.icon('download')}テキスト保存</button><button data-action="noteDelete" class="pd-danger">${A.icon('trash')}ごみ箱へ</button></div>`);
  A.actions.pdNoteDuplicate=()=>{const n=A.noteModel.get().find(x=>x.id===noteCurrent);if(!n)return;const copy={...n,id:A.id(),title:(n.title+' コピー').slice(0,120),updated:Date.now()};if(A.noteModel.replace([copy,...A.noteModel.get()])){A.closeOverlay();noteEditor(copy.id);}};
- A.actions.pdNoteExport=()=>{const n=A.noteModel.get().find(x=>x.id===noteCurrent);if(n)download((n.title||'メモ').replace(/[\\/:*?"<>|]/g,'_')+'.txt',n.title+'\n\n'+n.body);};
+ A.actions.pdNoteExport=()=>{const n=A.noteModel.get().find(x=>x.id===noteCurrent);if(n){const draft=noteWithDraft(n);download((draft.title||'メモ').replace(/[\\/:*?"<>|]/g,'_')+'.txt',draft.title+'\n\n'+draft.body);}};
  A.actions.noteDelete=()=>{const n=A.noteModel.get().find(x=>x.id===noteCurrent);if(!n)return;const trash=[{...n,deletedAt:Date.now()},...list('noteTrash').filter(x=>x.id!==n.id)];if(!A.noteModel.replace(A.noteModel.get().filter(x=>x.id!==n.id),{noteTrash:trash}))return;A.closeOverlay();notes();A.toast('ごみ箱に移動済み');};
  A.actions.pdNoteTrash=()=>page('ごみ箱',`${list('noteTrash').map(n=>`<div class="pd-trash-row"><div><strong>${esc(n.title||'メモ')}</strong><small>${new Date(n.deletedAt).toLocaleDateString('ja-JP')}</small></div>${button('pdNoteRestore','復元','refresh',n.id)}${button('pdNotePurge','完全に削除','trash',n.id)}</div>`).join('')||empty('ごみ箱は空です')}`,'','noteList');
  A.actions.pdNoteRestore=el=>{const n=list('noteTrash').find(x=>x.id===el.dataset.id);if(!n)return;const {deletedAt,...rest}=n;const notes=A.noteModel.get(),next=notes.some(x=>x.id===n.id)?notes:[{...rest,updated:Date.now()},...notes];if(A.noteModel.replace(next,{noteTrash:list('noteTrash').filter(x=>x.id!==n.id)}))A.actions.pdNoteTrash();};
  A.actions.pdNotePurge=el=>A.confirm('完全に削除？','この操作は元に戻せません。',()=>{if(A.save('noteTrash',list('noteTrash').filter(x=>x.id!==el.dataset.id)))A.actions.pdNoteTrash();});
+
+ for(const action of ['notePin','pdNotePreview','pdNoteOrganize','pdNoteDuplicate','noteDelete','pdNoteCheck']){
+  const run=A.actions[action];A.actions[action]=el=>{if(saveNoteDraft(noteCurrent))return run(el);};
+ }
 
  // Calendar: month/week/agenda views, colors, durations and bounded recurrence.
  const eventColors={rose:'#c98895',sage:'#80a18a',blue:'#83a5c4',gold:'#c6a36c',violet:'#a591bb'};
