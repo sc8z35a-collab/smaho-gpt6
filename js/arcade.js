@@ -117,6 +117,8 @@
   if(saved.day&&!validMineDay(saved.day))return false;
   const elapsed=mineNumber(saved.elapsed),elapsedMs=Number.isFinite(saved.elapsedMs)&&saved.elapsedMs>=0?saved.elapsedMs:elapsed*1000;
   mines={version:3,difficulty:saved.difficulty,size,count,day:validMineDay(saved.day)?saved.day:'',bombs:[...saved.bombs],open:[...saved.open],flags:[...saved.flags],started:saved.started,over:saved.over,won:saved.won,hit:saved.over&&!saved.won?saved.hit:undefined,elapsed:saved.over?Math.max(1,Math.ceil(elapsedMs/1000)):Math.floor(elapsedMs/1000),elapsedMs,paused:saved.started&&!saved.over,hintsUsed:Math.min(3,mineNumber(saved.hintsUsed)),moves:mineNumber(saved.moves)};
+  mineFocus=mines.day&&!mines.started?mineStart():0;
+  mineMessage=mines.paused?'保存した探索を再開できます。':mines.day?'中央の＋マスから、日替わりの探索を始めましょう。':'保存した盤面を読み込みました。';
   return true;
  }
  const saveMines=()=>A.save('minesState',mines);
@@ -244,6 +246,8 @@
   $('#mine-quality').setAttribute('aria-pressed',String(mineLite));$('#mine-quality').textContent=mineLite?'軽量描画':'高精細描画';
   $('#mine-sound').setAttribute('aria-pressed',String(mineSound));$('#mine-sound').textContent=mineSound?'効果音 ON':'効果音 OFF';
   $('#mine-theme').textContent='結晶色：'+mineThemes[mineTheme];
+  $('#mine-theme').setAttribute('aria-label',`結晶色：${mineThemes[mineTheme]}。押すと次の色に切り替え`);
+  $('#mine-quality').setAttribute('aria-label',`${mineLite?'軽量':'高精細'}描画。押すと${mineLite?'高精細':'軽量'}に切り替え`);
   $('#mine-daily').setAttribute('aria-pressed',String(!!m.day));$('#mine-free').setAttribute('aria-pressed',String(!m.day));
   $('#mines-mode-label').textContent=m.day?`DAILY · ${m.day} · 同じ鉱脈を何度でも`:'FREE EXPLORE · 毎回、新しい鉱脈';
   A.$$('[data-action="mineDifficulty"]').forEach(el=>{el.classList.toggle('active',el.dataset.value===m.difficulty);el.setAttribute('aria-pressed',String(el.dataset.value===m.difficulty));});
@@ -326,7 +330,7 @@
  };
  A.actions.mineHint=()=>{
   if(!mineCanPlay()||mines.hintsUsed>=3)return;
-  if(!mines.started){mineMessage='まず好きなマスを開いてください。初手と周囲は安全です。';renderMines();return;}
+  if(!mines.started){mineMessage=mines.day?'まず中央の＋マスから開始してください。':'まず好きなマスを開いてください。初手と周囲は安全です。';renderMines();return;}
   tickMines();if(!mineCanPlay())return;
   const candidates=Array.from({length:mines.size**2},(_,i)=>i).filter(i=>!mines.open.includes(i)&&!mines.flags.includes(i)&&!mines.bombs.includes(i));
   if(!candidates.length){mineMessage='安全な未開封マスに旗が残っています。旗を見直してください。';renderMines();return;}
@@ -340,7 +344,7 @@
  A.actions.mineSound=()=>{mineSound=!mineSound;if(!mineSound)closeMineAudio();saveMinePrefs();renderMines();if(mineSound)mineTone('scan');};
  A.actions.mineDaily=()=>A.confirm('今日の鉱脈に挑戦？','現在の盤面を置き換えます。端末の日付と難易度で決まる同じ盤面に、中央から挑戦。記録はフリー探索と別に保存します。',()=>{resetMines(mines.difficulty,mineDay());saveMines();open('mines');});
  A.actions.mineFree=()=>{if(!mines.day)return;A.confirm('フリー探索へ戻る？','日替わりの盤面を置き換え、ランダムな新しい鉱脈を探索します。',()=>{resetMines(mines.difficulty);saveMines();open('mines');});};
- A.actions.mineRestart=()=>A.confirm('新しい鉱脈を探索？','現在の盤面は置き換わります。勝利数と最短記録は残ります。',()=>{const d=mines.difficulty,day=mines.day;resetMines(d,day);saveMines();open('mines');});
+ A.actions.mineRestart=()=>A.confirm(mines.day?'この日の鉱脈に再挑戦？':'新しい鉱脈を探索？',mines.day?'同じ日・難易度の盤面を最初から探索します。保存済みの成績は残ります。':'現在の盤面は置き換わります。勝利数と最短記録は残ります。',()=>{const d=mines.difficulty,day=mines.day;resetMines(d,day);saveMines();open('mines');});
  A.actions.mineDifficulty=el=>{const difficulty=el.dataset.value;if(!Object.hasOwn(mineDifficulties,difficulty)||difficulty===mines.difficulty)return;A.confirm('難易度を変更？','現在の盤面を置き換えて、新しい探索を始めます。',()=>{resetMines(difficulty,mines.day);saveMines();open('mines');});};
  A.actions.mineRecords=()=>{
   const stored=A.load('minesHistory',[]),history=(Array.isArray(stored)?stored:[]).filter(r=>r&&Object.hasOwn(mineDifficulties,r.difficulty)&&typeof r.won==='boolean').slice(0,30);
