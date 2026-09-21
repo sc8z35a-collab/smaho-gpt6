@@ -720,7 +720,7 @@
  const orbitClamp=(v,min,max)=>Math.max(min,Math.min(max,v));
  const orbitInteger=v=>Number.isSafeInteger(v)&&v>=0?v:0;
  const orbitStored=A.load('breakerPreferences',{});
- const orbitPrefs={mode:Object.hasOwn(orbitModes,orbitStored?.mode)?orbitStored.mode:'normal',quality:orbitStored?.quality==='light'?'light':'high',sound:orbitStored?.sound===true,cockpit:orbitStored?.cockpit===true};
+ const orbitPrefs={mode:typeof orbitStored?.mode==='string'&&Object.hasOwn(orbitModes,orbitStored.mode)?orbitStored.mode:'normal',quality:orbitStored?.quality==='light'?'light':'high',sound:orbitStored?.sound===true,cockpit:orbitStored?.cockpit===true};
  const orbitSaved=A.load('breakerRecords',{});
  const orbitRecords=Object.fromEntries(Object.keys(orbitModes).map(mode=>[mode,{best:orbitInteger(orbitSaved?.[mode]?.best),stage:orbitInteger(orbitSaved?.[mode]?.stage),combo:orbitInteger(orbitSaved?.[mode]?.combo)}]));
  let breaker=null,breakerKeys={left:false,right:false},breakerFrame=0,breakerView=null,breakerAudio=null;
@@ -766,7 +766,7 @@
   const finite=(v,min,max)=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
   const integer=(v,min,max)=>Number.isSafeInteger(v)&&v>=min&&v<=max;
   const reject=()=>{orbitSaveStatus='保存データを復元できないため新規開始';return false;};
-  if(!saved||saved.version!==1||!Object.hasOwn(orbitModes,saved.mode)||!integer(saved.stage,1,1000000)||
+  if(!saved||saved.version!==1||typeof saved.mode!=='string'||!Object.hasOwn(orbitModes,saved.mode)||!integer(saved.stage,1,1000000)||
    !integer(saved.lives,0,7)||typeof saved.over!=='boolean'||typeof saved.launched!=='boolean'||
    saved.over!==(saved.lives===0)||!finite(saved.paddle,0,360)||!finite(saved.target,0,360)||
    !integer(saved.angle,-55,55)||!finite(saved.elapsed,0,1e9)||!integer(saved.energy,0,100)||
@@ -778,7 +778,7 @@
   const bricks=stageBricks(saved.stage);
   if(!Array.isArray(saved.hp)||saved.hp.length!==bricks.length||!saved.hp.every((hp,i)=>integer(hp,0,bricks[i].maxHp))||
    !saved.hp.some(hp=>hp>0)||!Array.isArray(saved.drops)||saved.drops.length>6||
-   !saved.drops.every(drop=>drop&&Object.hasOwn(orbitDrops,drop.type)&&finite(drop.x,0,360)&&finite(drop.y,0,510))||
+   !saved.drops.every(drop=>drop&&typeof drop.type==='string'&&Object.hasOwn(orbitDrops,drop.type)&&finite(drop.x,0,360)&&finite(drop.y,0,510))||
    !Array.isArray(saved.claimed)||saved.claimed.length>3||new Set(saved.claimed).size!==saved.claimed.length||
    !saved.claimed.every(id=>['hits','combo','collect'].includes(id)))return reject();
   resetBreaker(saved.mode);
@@ -795,10 +795,13 @@
  }
  function orbitSave(){
   if(!breaker)return false;
-  const b=breaker,r=orbitRecords[b.mode],next={best:Math.max(r.best,b.score),stage:Math.max(r.stage,b.stage),combo:Math.max(r.combo,b.maxCombo)};
-  const records={...orbitRecords,[b.mode]:next};
+  const b=breaker,latest=A.load('breakerRecords',{});
+  // Preserve previously saved highs from other tabs; the single flight slot is last-writer-wins.
+  const records=Object.fromEntries(Object.keys(orbitModes).map(mode=>[mode,Object.fromEntries(['best','stage','combo'].map(key=>[key,Math.max(orbitRecords[mode][key],orbitInteger(latest?.[mode]?.[key]))]))]));
+  const r=records[b.mode],next={best:Math.max(r.best,b.score),stage:Math.max(r.stage,b.stage),combo:Math.max(r.combo,b.maxCombo)};
+  records[b.mode]=next;
   const saved=A.saveBatch({breakerRecords:records,breakerBest:Math.max(orbitInteger(A.load('breakerBest',0)),b.score),breakerState:orbitCheckpoint()});
-  if(saved){orbitRecords[b.mode]=next;orbitSaveStatus='この端末に保存しました';}
+  if(saved){Object.assign(orbitRecords,records);orbitSaveStatus='この端末に保存しました';}
   else orbitSaveStatus='保存できませんでした · 空き容量を確認してください';
   return saved;
  }
@@ -979,6 +982,8 @@
  function orbitHud(){
   if(!breakerView)return;
   const b=breaker,v=breakerView,remaining=b.bricks.filter(brick=>brick.hp>0).length;
+  const content=v.canvas.closest('.arcade-play'),flying=String(b.launched);
+  if(content.dataset.flying!==flying)content.dataset.flying=flying;
   const text=(id,value)=>{const node=v.nodes[id];value=String(value);if(node&&node.textContent!==value)node.textContent=value;};
   text('score',number(b.score));text('best',number(Math.max(orbitRecords[b.mode].best,b.score)));
   text('lives',b.lives+' 機');text('stage',String(b.stage).padStart(2,'0'));text('combo','×'+(1+Math.min(4,Math.floor(b.combo/5))));
