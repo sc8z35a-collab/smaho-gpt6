@@ -530,7 +530,26 @@ function walletApp(result){
   };
   stage.onpointerleave=reset;stage.onpointercancel=reset;
 }
-A.apps.wallet.render=walletApp;A.actions.walletCharge=()=>A.form('デモ残高を追加','<p>実決済なし</p><label class="form-label">金額（デモ）</label><select class="text-input" name="amount"><option value="1000">¥1,000</option><option value="3000">¥3,000</option><option value="5000">¥5,000</option></select>',v=>{wallet.balance+=+v.amount;wallet.transactions.unshift({id:A.id(),title:'デモチャージ',amount:+v.amount,date:Date.now()});A.save('wallet',wallet);walletApp();A.toast('デモ残高を追加済み');},'デモチャージ');A.actions.walletPay=()=>A.form('デモのお買いもの','<label class="form-label">購入するもの（架空）</label><select class="text-input" name="item"><option value="coffee">喫茶 余白 · コーヒー ¥580</option><option value="train">青葉線 · 乗車 ¥220</option><option value="book">栞の書店 · 文庫本 ¥820</option></select>',v=>{const items={coffee:['喫茶 余白',580],train:['青葉線 デモ乗車',220],book:['栞の書店',820]},[title,amount]=items[v.item];if(wallet.balance<amount){A.toast('デモ残高が足りません。チャージしてください。');return false;}wallet.balance-=amount;wallet.transactions.unshift({id:A.id(),title,amount:-amount,date:Date.now()});A.save('wallet',wallet);walletApp();A.toast('デモ完了・実決済なし');},'デモ支払い');
+function walletCommit(title,amount,kind){
+  const next={...wallet,balance:wallet.balance+amount,transactions:[{id:A.id(),title,amount,date:Date.now()},...wallet.transactions]};
+  // Never celebrate or change the displayed balance if persistence failed.
+  if(!Number.isSafeInteger(next.balance)){A.toast('デモ残高の上限を超えています');return false;}
+  if(!A.save('wallet',next)){A.toast('保存できませんでした。もう一度お試しください');return false;}
+  wallet=next;walletApp({kind,amount:Math.abs(amount)});
+  A.toast(kind==='charge'?'デモ残高を追加済み':'デモ完了・実決済なし');
+}
+A.apps.wallet.render=walletApp;
+A.actions.walletCharge=()=>A.form('デモ残高を追加',`<div class="mori-form-art">${walletArt('charge')}<span>架空の残高を追加します。<br>実際のお金は移動しません。</span></div><label class="form-label">金額（デモ）</label><select class="text-input" name="amount"><option value="1000">¥1,000</option><option value="3000">¥3,000</option><option value="5000">¥5,000</option></select>`,v=>{
+  const amount=Number(v.amount);if(![1000,3000,5000].includes(amount))return false;
+  return walletCommit('デモチャージ',amount,'charge');
+},'デモチャージ');
+A.actions.walletPay=()=>A.form('デモのお買いもの',`<div class="mori-form-art">${walletArt('pay')}<span>架空の商品でお買いもの。<br>実決済・乗車はできません。</span></div><label class="form-label">購入するもの（架空）</label><select class="text-input" name="item"><option value="coffee">喫茶 余白 · コーヒー ¥580</option><option value="train">青葉線 · 乗車 ¥220</option><option value="book">栞の書店 · 文庫本 ¥820</option></select>`,v=>{
+  const items={coffee:['喫茶 余白',580],train:['青葉線 デモ乗車',220],book:['栞の書店',820]};
+  if(!Object.hasOwn(items,v.item))return false;
+  const [title,amount]=items[v.item];
+  if(wallet.balance<amount){A.toast('デモ残高が足りません。チャージしてください。');return false;}
+  return walletCommit(title,-amount,'pay');
+},'デモ支払い');
 // Local text file CRUD and client-side downloads.
 let files=A.load('files',[{id:'file-welcome',name:'はじめに.txt',content:'auraへようこそ。\n\nこのファイルアプリでは、テキストファイルを作成・保存・読み込むことができます。\n\n端末にあるすべてのファイルにはアクセスしません。\n選択して読み込んだテキストだけを、このブラウザに保存します。\n\nダウンロードボタンから、実際の端末に保存できます。',date:Date.now()},{id:'file-journey',name:'小さな旅の計画.md',content:'# 次の週末\n\n## 持っていくもの\n- 読みかけの本\n- カメラ\n- 小さなノート\n\n## やってみたいこと\n1. 知らない道を歩く\n2. 喫茶店でひと休み\n3. 空の写真を一枚撮る\n\n急がなくても、大丈夫。',date:Date.now()-86400000}]);let selectedFile=null;
 function filesApp(){const bytes=new Blob([JSON.stringify(files)]).size;A.view(A.nav('ファイル',`<button data-action="fileNew" aria-label="ファイル作成">${icon('plus')}</button>`)+`<div class="app-content"><div class="storage-card"><header><span>このaura内のテキスト</span><small>${(bytes/1024).toFixed(1)} KB · ${files.length}ファイル</small></header><div class="storage-bar"><span></span><span></span><span></span></div><p>ブラウザ内保存 · 端末本体の容量表示ではありません</p></div>${A.search('file-search','ファイルを検索')}<div class="files-grid" id="files-grid"></div><button class="primary-button" data-action="fileImport" style="margin-top:22px">${icon('download')}テキストを読み込む</button><button class="secondary-button" data-action="fileExportNotes" style="width:100%;margin-top:10px">保存済みメモをJSONで書き出す</button><p class="setting-description" style="margin-top:17px">TXT・MD・JSON・CSV（100KB以下）</p></div>`);const render=q=>{$('#files-grid').innerHTML=files.filter(f=>f.name.includes(q)).map(f=>`<button class="file-tile" data-action="fileOpen" data-id="${f.id}">${icon('document')}<h3>${esc(f.name)}</h3><small>${new Blob([f.content]).size.toLocaleString()} bytes</small></button>`).join('')||'<p class="empty-state" style="grid-column:span 2">ファイルがありません。</p>';};render('');$('#file-search').oninput=e=>render(e.target.value);}
