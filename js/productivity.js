@@ -212,8 +212,8 @@
  const settings=A.apps.settings.render;
  const enhancedSettings=()=>{if(A.renderSettingsHub)return A.renderSettingsHub();settings();$('.profile-card')?.insertAdjacentHTML('afterend',`<div class="group-card">${A.row('download','データを書き出す','','pdDataExport','','#809cae')}${A.row('files','保存容量','','pdStorage','','#a38eae')}</div>`);};
  A.apps.settings.render=enhancedSettings;A.actions.settingsHome=enhancedSettings;
- A.actions.pdDataExport=()=>{const data={};for(const key of Object.keys(localStorage).filter(k=>k.startsWith('aura.')))try{data[key.slice(5)]=JSON.parse(localStorage.getItem(key));}catch{data[key.slice(5)]=localStorage.getItem(key);}download('aura-data-'+day()+'.json',JSON.stringify({app:'aura',version:document.documentElement.dataset.auraVersion,exportedAt:new Date().toISOString(),data},null,2),'application/json');};
- A.actions.pdStorage=()=>{const groups={};for(const key of Object.keys(localStorage).filter(k=>k.startsWith('aura.'))){const name=key.slice(5),label=/photo/i.test(name)?'写真':/note/i.test(name)?'メモ':/file/i.test(name)?'ファイル':/sketch/i.test(name)?'スケッチ':/journal/i.test(name)?'日記':/expense/i.test(name)?'家計簿':/reading/i.test(name)?'読書':/focus/i.test(name)?'集中':/event|calendar/i.test(name)?'カレンダー':/shopping/i.test(name)?'買い物':/weather/i.test(name)?'天気':/map/i.test(name)?'地図':/habit/i.test(name)?'習慣':/contact/i.test(name)?'連絡先':/reminder/i.test(name)?'リマインダー':/conversion/i.test(name)?'単位換算':/dailyIntention/i.test(name)?'今日':/2048|snake|memory|blocks|mines|reversi|breaker|sudoku|arcade/i.test(name)?'ゲーム':'その他';groups[label]=(groups[label]||0)+new Blob([localStorage.getItem(key)]).size;}const sizes=Object.entries(groups).map(([label,bytes])=>({label,bytes})).sort((a,b)=>b.bytes-a.bytes),sum=sizes.reduce((n,x)=>n+x.bytes,0);page('保存容量',`<div class="pd-storage-total"><strong>${(sum/1024).toFixed(1)}<small>KB</small></strong><span>ブラウザ内のauraデータ</span></div><div class="pd-storage-list">${sizes.map(x=>`<div><span>${esc(x.label)}</span><strong>${(x.bytes/1024).toFixed(1)}KB</strong><i style="width:${Math.max(1,x.bytes/(sum||1)*100)}%"></i></div>`).join('')}</div><button class="secondary-button pd-wide" data-action="pdDataExport">データを書き出す</button>`,'','settingsHome');};
+ A.actions.pdDataExport=()=>{const data={};for(const key of Object.keys(localStorage).filter(k=>k.startsWith('aura.')))try{data[key.slice(5)]=JSON.parse(localStorage.getItem(key));}catch{data[key.slice(5)]=localStorage.getItem(key);}download('aura-data-'+day()+'.json',JSON.stringify({app:'aura',version:document.documentElement.dataset.auraVersion,exportedAt:new Date().toISOString(),excluded:['Voice Studio audio and metadata (IndexedDB); export recordings individually'],data},null,2),'application/json');A.toast('JSONを書き出しました。録音は含まれません。ボイスメモから個別に保存してください。');};
+ A.actions.pdStorage=()=>{const groups={};for(const key of Object.keys(localStorage).filter(k=>k.startsWith('aura.'))){const name=key.slice(5),label=/photo/i.test(name)?'写真':/note/i.test(name)?'メモ':/file/i.test(name)?'ファイル':/sketch/i.test(name)?'スケッチ':/journal/i.test(name)?'日記':/expense/i.test(name)?'家計簿':/reading/i.test(name)?'読書':/focus/i.test(name)?'集中':/event|calendar/i.test(name)?'カレンダー':/shopping/i.test(name)?'買い物':/weather/i.test(name)?'天気':/map/i.test(name)?'地図':/habit/i.test(name)?'習慣':/contact/i.test(name)?'連絡先':/reminder/i.test(name)?'リマインダー':/conversion/i.test(name)?'単位換算':/dailyIntention/i.test(name)?'今日':/2048|snake|memory|blocks|mines|reversi|breaker|sudoku|arcade/i.test(name)?'ゲーム':'その他';groups[label]=(groups[label]||0)+new Blob([localStorage.getItem(key)]).size;}const sizes=Object.entries(groups).map(([label,bytes])=>({label,bytes})).sort((a,b)=>b.bytes-a.bytes),sum=sizes.reduce((n,x)=>n+x.bytes,0);page('保存容量',`<div class="pd-storage-total"><strong>${(sum/1024).toFixed(1)}<small>KB</small></strong><span>localStorageのauraデータ（録音を除く）</span></div><div class="pd-storage-list">${sizes.map(x=>`<div><span>${esc(x.label)}</span><strong>${(x.bytes/1024).toFixed(1)}KB</strong><i style="width:${Math.max(1,x.bytes/(sum||1)*100)}%"></i></div>`).join('')}</div><button class="secondary-button pd-wide" data-action="pdDataExport">データを書き出す</button><p class="pd-caption">録音は別の保存領域（IndexedDB）を使用し、この容量・JSONには含まれません。</p><button class="secondary-button pd-wide" data-app="recorder">録音の容量・書き出しを確認</button>`,'','settingsHome');};
  const settingToggle=A.actions.settingToggle;A.actions.settingToggle=el=>{settingToggle(el);if(!$('#settings-brightness'))enhancedSettings();};
  const priorSearch=A.searchAdditional;
  A.searchAdditional=q=>(priorSearch?.(q)||'')+[['files','ファイル',A.fileModel.get().filter(x=>(x.name+' '+x.content).toLowerCase().includes(q)).slice(0,4),'pdSearchFile'],['calendar','予定',A.eventModel.get().filter(x=>(x.title+' '+x.place).toLowerCase().includes(q)).slice(0,4),'pdSearchEvent']].map(([app,title,rows,action])=>rows.length?`<p class="spotlight-label">${title}</p><div class="search-content-group">${rows.map(x=>`<button data-action="${action}" data-id="${esc(x.id)}">${A.icon(app)}<span><strong>${esc(x.name||x.title)}</strong><small>${esc(x.date?String(x.date):'')}</small></span>${A.icon('arrow')}</button>`).join('')}</div>`:'').join('');
@@ -225,7 +225,18 @@
   const A = window.Aura, $ = A.$, esc = A.escape;
   const defaults = {textSize:'standard', boldText:false, highContrast:false, reduceTransparency:false,
     hideLabels:false, hideWidgets:false, clock12:false, clockSeconds:false,
+    lineSpacing:'standard', letterSpacing:'standard', underlineLinks:false, largeControls:false,
+    homeColumns:'4', hideBadges:false, hideSearch:false, dateStyle:'long',
+    hapticDuration:'short', keyboardShortcuts:true,
     developerMode:false, devFps:false, devBounds:false, devTouches:false, devLog:false};
+  const choices = {
+    textSize:[['standard','標準'],['large','大きい'],['largest','さらに大きい']],
+    lineSpacing:[['standard','標準'],['relaxed','ゆったり'],['wide','広い']],
+    letterSpacing:[['standard','標準'],['wide','広い']],
+    homeColumns:[['4','4列'],['3','3列']],
+    dateStyle:[['long','月日・曜日'],['short','短い月日'],['year','年・月日・曜日']],
+    hapticDuration:[['short','短い · 7ms'],['medium','標準 · 14ms'],['long','長い · 25ms']]
+  };
   const devKeys = ['devFps','devBounds','devTouches','devLog'];
   let section = 'home', query = '', apiOffline = false, logs = [], logEpoch = 0;
   let raf = 0, frames = 0, frameStart = 0;
@@ -234,6 +245,7 @@
   const link = (action, title, detail, icon='settings') => A.row(icon,title,detail,action,'','#8f819f');
   const toggle = (key, title, detail='') => `<button class="st-toggle" data-action="stToggle" data-key="${key}" aria-pressed="${!!A.settings[key]}"><span><strong>${title}</strong>${detail?`<small>${detail}</small>`:''}</span><i class="preview-switch ${A.settings[key]?'on':''}" aria-hidden="true"></i></button>`;
   const select = (key, title, options, value) => `<label class="st-select"><span>${title}</span><select data-st-select="${key}">${options.map(([v,t])=>`<option value="${v}" ${String(value)===v?'selected':''}>${t}</option>`).join('')}</select></label>`;
+  const preference = (key,title) => select(key,title,choices[key],A.settings[key]);
   // Local vector materials are decorative; existing controls own all interactions.
   let artSerial = 0;
   function materialArt(kind='dial') {
@@ -285,13 +297,13 @@
   const catalog = [
     ['表示と操作',[
       ['settingsDisplay','画面表示と明るさ','明るさ・ダークモード','sun'],
-      ['stAccessibility','文字と見やすさ','文字サイズ・太字・コントラスト・透明度','eye'],
-      ['stHome','ホームと時計','アプリ名・ウィジェット・12時間表示・秒表示','clock'],
+      ['stAccessibility','文字と見やすさ','文字サイズ・太字・コントラスト・透明度・行間・文字間隔・リンクの下線・タップ領域・キーボード','eye'],
+      ['stHome','ホームと時計','アプリ名・ウィジェット・12時間表示・秒表示・列数・バッジ・検索ボタン・日付','clock'],
       ['personalize','壁紙とアイコン','壁紙・アイコンスタイル・時計スタイル・配置','photos'],
       ['settingsAppearance','光と動き','影の深さ・動きを抑える・FHD MOVE APP','layers']]],
     ['通知とサウンド',[
       ['noticeSettings','通知設定','バナー・予定通知・アプリ別・ロック画面の本文','messages'],
-      ['stSound','サウンドと集中','音量・触覚フィードバック・集中モード','volume'],
+      ['stSound','サウンドと集中','音量・触覚フィードバック・振動の長さ・集中モード','volume'],
       ['showNotifications','通知センター','通知の履歴・既読・再通知','messages']]],
     ['接続とデータ',[
       ['stConnection','通信と検索','Wi-Fi・Bluetooth・機内モードのデモ / 検索エンジン','globe'],
@@ -327,15 +339,23 @@
   }
   A.actions.stAccessibility = () => {
     section = 'accessibility';
-    page('文字と見やすさ',group('読みやすさ',select('textSize','本文の文字サイズ',[['standard','標準'],['large','大きい'],['largest','さらに大きい']],A.settings.textSize)+toggle('boldText','本文を太字に')+toggle('highContrast','文字のコントラスト')+toggle('reduceTransparency','透明度を下げる'))+'<div class="st-preview"><strong>本文</strong><p>入力欄・リスト</p><small>ゲーム盤やアイコンは対象外</small></div>'+link('settingsAppearance','動きを抑える','','layers'));
+    page('文字と見やすさ',
+      group('読みやすさ',preference('textSize','本文の文字サイズ')+toggle('boldText','本文を太字に')+toggle('highContrast','文字のコントラスト')+toggle('reduceTransparency','透明度を下げる'))+
+      group('文字の間隔',preference('lineSpacing','本文の行間')+preference('letterSpacing','本文の文字間隔')+toggle('underlineLinks','リンクに下線'))+
+      '<div class="st-preview"><strong>読みやすさのプレビュー</strong><p>文字の間隔を変えて、<br>自分に合う読み心地に。</p><small>共通の本文・入力欄・リストが対象。ゲーム盤・アイコン・アプリ独自の表示は対象外。</small></div>'+
+      group('操作',toggle('largeControls','タップ領域を広げる','共通の入力欄・ナビ・ホーム操作を48px以上に')+toggle('keyboardShortcuts','ホームのキーボード操作','Hでホーム / Alt+Tabでアプリ切替。Escape・アプリ内操作は対象外。'))+
+      link('settingsAppearance','動きを抑える','','layers'));
   };
   A.actions.stHome = () => {
     section = 'homeOptions';
-    page('ホームと時計',group('ホーム画面',toggle('hideLabels','アプリ名を隠す')+toggle('hideWidgets','ウィジェットを隠す'))+group('時計表示',toggle('clock12','12時間表示','上部の時計とロック画面')+toggle('clockSeconds','秒を表示','上部の時計'))+'<p class="st-footnote">日時・タイムゾーンは端末の設定</p>');
+    page('ホームと時計',
+      group('ホーム画面',preference('homeColumns','アプリの列数')+toggle('hideLabels','アプリ名を隠す')+toggle('hideWidgets','ウィジェットを隠す')+toggle('hideBadges','アイコンのバッジを隠す','未読データは削除しません')+toggle('hideSearch','検索ボタンを隠す','ホーム下部のみ'))+
+      group('時計表示',toggle('clock12','12時間表示','上部の時計とロック画面')+toggle('clockSeconds','秒を表示','上部の時計')+preference('dateStyle','日付の表示'))+
+      '<p class="st-footnote">列数を変えても並び順・ドックは維持。日付表示はホームとロック画面に反映。日時・タイムゾーンは端末の設定です。</p>');
   };
   A.actions.stSound = () => {
     section = 'sound';
-    page('サウンドと集中',group('音量',`<label class="st-range">オリジナル音源 <output id="st-volume-value">${A.settings.volume}%</output><input id="st-volume" type="range" min="0" max="100" value="${A.settings.volume}" aria-label="オリジナル音源の音量"></label>`)+group('操作と通知',toggle('sound','触覚フィードバック','振動対応端末のみ')+toggle('focus','集中モード','バナーを抑制。履歴には保存'))+'<p class="st-footnote">端末全体や外部試聴の音量は変更しません。</p>');
+    page('サウンドと集中',group('音量',`<label class="st-range">オリジナル音源 <output id="st-volume-value">${A.settings.volume}%</output><input id="st-volume" type="range" min="0" max="100" value="${A.settings.volume}" aria-label="オリジナル音源の音量"></label>`)+group('操作と通知',toggle('sound','触覚フィードバック','振動対応端末のみ')+preference('hapticDuration','振動の長さ')+toggle('focus','集中モード','バナーを抑制。履歴には保存'))+'<p class="st-footnote">端末全体や外部試聴の音量は変更しません。</p>');
     $('#st-volume').oninput = e => {
       if(save({volume:Number(e.target.value)})){A.music?.setVolume();$('#st-volume-value').textContent=e.target.value+'%';}
       else e.target.value=A.settings.volume;
@@ -349,9 +369,10 @@
   A.actions.stToggle = el => {
     const key=el.dataset.key;
     if(!Object.hasOwn(defaults,key)&&!['sound','focus','airplane','wifi','bluetooth','cellular'].includes(key))return;
-    if(key==='textSize'||key==='developerMode'||(devKeys.includes(key)&&!enabled()))return;
+    if(Object.hasOwn(choices,key)||key==='developerMode'||(devKeys.includes(key)&&!enabled()))return;
     const patch = {[key]:!A.settings[key]};
     if(key==='airplane'&&patch.airplane)patch.cellular=false;
+    if(key==='cellular'&&patch.cellular)patch.airplane=false;
     const scroll=$('.st-settings')?.scrollTop||0;
     if(save(patch)){
       renders[section]?.();
@@ -361,14 +382,14 @@
   };
   document.addEventListener('change', e => {
     const key=e.target.dataset.stSelect, value=e.target.value;
-    if(key==='textSize'&&['standard','large','largest'].includes(value)){
-      if(!save({textSize:value}))e.target.value=A.settings.textSize;
+    if(Object.hasOwn(choices,key)){
+      if(!choices[key].some(([id])=>id===value)||!save({[key]:value}))e.target.value=A.settings[key];
     }
     if(key==='webEngine'&&['wiki','google','bing','duck'].includes(value)){
       if(!A.save('webEngine',value))e.target.value=A.load('webEngine','wiki');
     }
   });
-  A.actions.stReset = () => A.confirm('追加設定をリセット？','文字・ホーム・時計・開発者設定を初期化します。メモ・写真・壁紙・通知設定は残ります。',()=>{
+  A.actions.stReset = () => A.confirm('追加設定をリセット？','文字・ホーム・時計・振動の長さ・キーボード・開発者設定を初期化します。メモ・写真・壁紙・通知設定は残ります。',()=>{
     if(save(defaults)){query='';A.actions.settingsHome();A.toast('追加設定をリセットしました');}
   });
 
@@ -465,11 +486,13 @@
     for(const [key,value] of Object.entries(defaults)){
       if(typeof value==='boolean'&&typeof A.settings[key]!=='boolean')A.settings[key]=value;
     }
-    if(!['standard','large','largest'].includes(A.settings.textSize))A.settings.textSize='standard';
+    for(const [key,options] of Object.entries(choices)){
+      if(!options.some(([id])=>id===A.settings[key]))A.settings[key]=defaults[key];
+    }
     applySettings();
     const screen=$('#phone-screen');
     screen.dataset.textSize=A.settings.textSize;
-    for(const key of ['boldText','highContrast','reduceTransparency','hideLabels','hideWidgets','clockSeconds','clock12'])screen.dataset[key]=String(A.settings[key]);
+    for(const key of ['boldText','highContrast','reduceTransparency','hideLabels','hideWidgets','clockSeconds','clock12','lineSpacing','letterSpacing','underlineLinks','largeControls','homeColumns','hideBadges','hideSearch'])screen.dataset[key]=String(A.settings[key]);
     syncTools();
   };
   const updateClock=A.updateClock;
@@ -478,6 +501,9 @@
     const date=new Date(),options={hour:'numeric',minute:'2-digit',hour12:A.settings.clock12};
     $('#status-time').textContent=date.toLocaleTimeString('ja-JP',{...options,...(A.settings.clockSeconds?{second:'2-digit'}:{})});
     $('#lock-time').textContent=date.toLocaleTimeString('ja-JP',options);
+    const format=A.settings.dateStyle==='short'?{month:'numeric',day:'numeric'}:
+      {month:'long',day:'numeric',weekday:'long',...(A.settings.dateStyle==='year'?{year:'numeric'}:{})};
+    for(const id of ['home-date','lock-date'])$('#'+id).textContent=date.toLocaleDateString('ja-JP',format);
   };
   A.applySettings();A.updateClock();
 })();

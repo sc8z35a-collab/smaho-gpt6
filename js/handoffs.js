@@ -107,10 +107,10 @@
     files:['URLからテキスト読込・共有','HTTPS・CORS対応のみ。自動アップロードなし'],
     photos:['実写真・OS共有','OS共有・端末保存。クラウド同期なし'],
     camera:['実カメラ・写真への保存','許可後に撮影。自動アップロードなし'],
-    recorder:['実録音・音声共有','録音はアプリ終了時に破棄'],
+    recorder:['実録音・ブラウザ内保存・音声共有','IndexedDBに保存。外部送信・クラウド同期なし。全データJSONには音声を含みません'],
     calculator:['実為替レート換算','Frankfurter日次基準値。取引レートではありません'],
     clock:['実時刻・端末通知','許可後に通知。ページ終了・スリープ時は保証なし'],
-    health:['手入力データ書き出し','サンプル・手入力。健康アカウント・センサー未接続'],
+    health:['実記録・許可後のセンサー取得','対応端末の推定歩数・Bluetooth心拍計。画面表示中のみ。健康アカウント同期なし'],
     wallet:['デモのみ・実決済未接続','架空残高・実決済未接続'],
     games:['端末内で実動作','外部接続を必要としない8ゲーム。スコアは端末内保存。'],
     settings:['接続状況・権限・プライバシー','通信設定はシミュレーション']
@@ -120,7 +120,7 @@
   A.nav = (title, right = '', ...args) => nav(title, right + (A.current && !localApps.has(A.current) ? `<button type="button" class="connection-link connection-info" data-action="appConnections" aria-label="連携と対応状況" title="連携と対応状況">${A.icon('info')}</button>` : ''), ...args);
   A.actions.appConnections = () => {
     const id = A.current, [title, detail] = capabilities[id] || capabilities.settings;
-    const tools = {calendar:button('calendarExchange','予定を書き出す'), notes:button('shareNotes','メモを共有'), reminders:button('shareReminders','リストを共有') + button('exportReminders','タスクを書き出す'), files:button('fileURLImport','URLから読む') + button('shareFile','ファイルを共有'), photos:button('photoShare','写真を共有'), camera:'<button class="connection-link" data-app="photos">写真を開く</button>', calculator:button('currencyOpen','為替換算'), clock:button('clockNotifyPermission','端末通知を有効に'), health:button('healthExport','記録をJSONで書き出す')};
+    const tools = {recorder:button('recordInfo','録音・保存の詳しい説明'),calendar:button('calendarExchange','予定を書き出す'), notes:button('shareNotes','メモを共有'), reminders:button('shareReminders','リストを共有') + button('exportReminders','タスクを書き出す'), files:button('fileURLImport','URLから読む') + button('shareFile','ファイルを共有'), photos:button('photoShare','写真を共有'), camera:'<button class="connection-link" data-app="photos">写真を開く</button>', calculator:button('currencyOpen','為替換算'), clock:button('clockNotifyPermission','端末通知を有効に'), health:button('healthExport','記録をJSONで書き出す')+button('healthImport','JSONを一括取込')};
     A.overlay(`${A.overlayTitle('外部との連携')}<div class="connected-overlay"><h3>${esc(title)}</h3><p class="connected-caption">${esc(detail)}</p><div class="connection-toolbar">${tools[id] || ''}</div><p class="connected-caption">共有は選択データのみ。検索語・座標の送信先は各画面に表示</p>${button('connectionCenter','すべての接続状況')}</div>`);
   };
   A.actions.connectionCenter = () => A.overlay(`${A.overlayTitle('接続とプライバシー')}<div class="connected-overlay"><div id="network-status" class="connected-status ${navigator.onLine ? '' : 'offline'}">${navigator.onLine ? 'オンライン・外部接続未確認' : 'オフライン'}</div><p class="connected-caption">公開APIは利用制限あり。データ同期・認証情報の保存なし</p>${Object.entries(capabilities).map(([id,[title,detail]]) => `<button class="list-row" data-app="${id}"><span class="row-main"><strong>${esc(A.apps[id].name)}</strong><small>${esc(detail)}</small></span></button>`).join('')}${button('forgetLocation','保存した位置情報と天気を消去')}</div>`);
@@ -162,7 +162,7 @@
       finally { clearTimeout(timer); lifecycle.signal.removeEventListener('abort',cancel); form.querySelector('button').disabled = false; }
     };
   };
-  A.actions.healthExport = () => A.download(new Blob([JSON.stringify({source:'aura manual/sample data; not sensor measurements',exportedAt:new Date().toISOString(),values:A.healthData?.() || {}},null,2)],{type:'application/json'}),'aura-health.json');
+  A.actions.healthExport = () => A.download(new Blob([JSON.stringify(A.healthExportData(),null,2)],{type:'application/json'}),'aura-health.json');
   A.actions.clockNotifyPermission = async () => { if (!('Notification' in window)) return A.toast('この環境ではブラウザ通知は利用できません'); try { const permission = await Notification.requestPermission(); A.toast(permission === 'granted' ? '通知を許可・ページ稼働中のみ' : '端末通知は未許可・画面内のみ'); } catch { A.toast('この環境では通知権限を利用できません'); } };
   N.clockNotice = title => { if ('Notification' in window && Notification.permission === 'granted') { try { const notice = new Notification('aura 時計',{body:title,tag:'aura-clock'}); setTimeout(() => notice.close(),15000); } catch { /* In-app notification remains available on mobile. */ } } };
 

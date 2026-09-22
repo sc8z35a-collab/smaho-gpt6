@@ -630,3 +630,24 @@ a.primary-button{text-decoration:none;text-align:center;display:inline-flex;just
 .ui-help>summary{min-height:40px;line-height:40px}
 .ui-help>summary:focus-visible{outline:2px solid currentColor;outline-offset:3px}
 .g2048-combo:empty,.crystal-mode-label:empty{display:none}
+
+/* Real health records: compact controls, explicit unavailable values and provenance. */
+.health-real .health-heading>span{font-size:11px;color:var(--muted);white-space:nowrap}
+.health-real .health-save-status{font-size:11px;line-height:1.7;margin:0 0 14px;color:var(--ink);overflow-wrap:anywhere}
+.health-real .health-save-status button{display:block;color:var(--blue);min-height:40px}
+.health-real .health-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.health-real .health-controls button,.health-real .health-card>button{min-height:44px;font-size:12px;padding:10px 12px;white-space:normal}
+.health-real .health-card header{gap:12px;align-items:flex-start}
+.health-real .health-card header small{max-width:55%;font-size:10px;line-height:1.6;text-align:right}
+.health-real .health-caption{font-size:11px;line-height:1.8;overflow-wrap:anywhere}
+.health-real .activity-stat>small:last-child{font-size:9px;line-height:1.5;display:block;overflow-wrap:anywhere}
+.health-real .health-metrics{min-width:0}
+.health-real .bar-chart{height:145px;padding-top:18px;margin-bottom:22px}
+.health-real .bar-chart>div{position:relative;font-size:9px;min-width:0}
+.health-real .bar-chart>div>small{position:absolute;bottom:-17px;font-size:9px}
+.health-real details summary{font-size:13px;font-weight:600;cursor:pointer;min-height:32px}
+.health-record{display:flex;gap:10px;align-items:center;border-top:1px solid #8883;padding:12px 0;font-size:12px}
+.health-record>div{flex:1;min-width:0}.health-record small{display:block;font-size:10px;line-height:1.6;margin-top:4px;overflow-wrap:anywhere}
+.health-record button{min-height:44px;font-size:11px;color:var(--blue)}
+.health-real .health-water .health-controls{position:relative;z-index:1}
+@media(max-width:360px){.health-real .health-hero{gap:12px;padding:15px 12px}.health-real .health-ring-art{width:115px}.health-real .health-heading h1{font-size:22px}}

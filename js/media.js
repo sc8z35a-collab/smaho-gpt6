@@ -59,13 +59,238 @@ function player(){const t=M.track;A.view(A.nav('再生中',`<button data-action=
 function refreshMusic(){if($('#mini-play'))$('#mini-play').innerHTML=icon(M.playing?'pause':'play');if($('#player-play'))$('#player-play').innerHTML=icon(M.playing?'pause':'play');}
 A.apps.music.render=music;A.actions.musicHome=()=>music('home');A.actions.musicPlayer=()=>music('player');A.actions.musicToggle=M.toggle;A.actions.musicNext=()=>M.next(1);A.actions.musicPrevious=()=>M.next(-1);A.actions.musicPlayTrack=el=>{M.select(el.dataset.id,true);music('player');};A.actions.musicLike=()=>{M.liked=M.liked.includes(M.track.id)?M.liked.filter(x=>x!==M.track.id):[...M.liked,M.track.id];A.save('musicLikes',M.liked);$('#music-like').textContent=M.liked.includes(M.track.id)?'♥':'♡';$('#music-like').setAttribute('aria-pressed',M.liked.includes(M.track.id));};A.actions.musicInfo=()=>A.toast('aura originals — このブラウザで生成したオリジナル音源です');
 A.actions.musicFavorites=()=>{A.view(A.nav('お気に入り','','musicHome','戻る')+`<div class="app-content">${tracks.filter(t=>M.liked.includes(t.id)).map(t=>`<button class="track-row" data-action="musicPlayTrack" data-id="${t.id}">${art(t)}<div><strong>${t.title}</strong><small>${t.artist}</small></div>${icon('play','style="width:18px"')}</button>`).join('')||A.empty('お気に入りなし','heart')}</div>${miniPlayer()}`);};
-// Voice recorder: real microphone, explicit permission, temporary session blobs.
-let recording=null,recorderStream=null,recordStart=0,recordInterval=null,recordItems=[],recorderGeneration=0;
-function recorder(){A.statusTheme(false);A.view(A.nav('ボイスメモ')+`<div class="app-content" id="recorder-content"><div class="recorder-wave">${Array.from({length:65},(_,i)=>`<i style="height:${4+Math.abs(Math.sin(i*.71)*Math.cos(i*.19))*52}px;animation-delay:-${i*.08}s"></i>`).join('')}</div><div class="recorder-time" id="record-time">00:00</div><button class="record-button" id="record-button" data-action="recordToggle" aria-label="録音開始・停止"></button><p class="setting-description" id="record-hint" style="text-align:center">マイク許可が必要。終了で録音削除・先に保存</p><div id="record-list"></div></div>`);renderRecordList();const token=++recorderGeneration;A.cleanups.push(()=>{if(recorderGeneration!==token)return;recorderGeneration++;if(recording?.state==='recording'){recording.onstop=null;recording.stop();}recorderStream?.getTracks().forEach(t=>t.stop());clearInterval(recordInterval);recording=null;recorderStream=null;recordItems.forEach(r=>URL.revokeObjectURL(r.url));recordItems=[];});}
-function renderRecordList(){const el=$('#record-list');if(!el)return;el.innerHTML=recordItems.map(r=>`<article class="recording-row"><div style="flex:1;min-width:0"><strong style="font-size:11px;display:block;margin-bottom:10px">${esc(r.name)} · ${r.duration}</strong><audio controls playsinline src="${r.url}" aria-label="${esc(r.name)}"></audio></div><button data-action="recordShare" data-id="${r.id}" aria-label="録音を共有">${icon('share','style="width:19px"')}</button><button data-action="recordDownload" data-id="${r.id}" aria-label="録音を保存" style="color:#7488a4">${icon('download','style="width:19px"')}</button></article>`).join('')||'<p class="empty-state" style="padding:10px">録音なし</p>';}
+// Voice Studio: local-only audio, transactional IndexedDB, recoverable failed writes.
+const VOICE_DB='aura-voice-studio',VOICE_LIMIT=50*1024*1024;
+const voiceCategories=['未分類','アイデア','仕事','日常','学習'];
+let voiceDB=null,voiceLoaded=false,voiceLoading=null,voiceLoadError=false;
+let voiceItems=[],voiceSession=null,voiceRoot=null,voiceGeneration=0,voicePending=false;
+let voiceFilter='all',voiceQuery='',voiceSort='new',voiceSelected=null,voiceAudio=null,voiceURL=null;
+let voiceSpeed=1,voiceLoop=false,voiceImporting=false,voiceResetting=false,voiceCategory='all';
+const voiceClock=s=>fmt(Math.max(0,Number(s)||0)).padStart(5,'0');
+const voiceSize=n=>n<1048576?`${Math.ceil(n/1024)} KB`:`${(n/1048576).toFixed(1)} MB`;
+const voiceItem=id=>voiceItems.find(r=>r.id===id);
+const voiceVisible=()=>A.current==='recorder'&&voiceRoot?.isConnected;
+function openVoiceDB(){
+  if(voiceDB)return Promise.resolve(voiceDB);
+  return new Promise((resolve,reject)=>{
+    const request=indexedDB.open(VOICE_DB,1);
+    request.onupgradeneeded=()=>request.result.createObjectStore('recordings',{keyPath:'id'});
+    request.onerror=()=>reject(request.error);request.onblocked=()=>reject(Error('Storage blocked'));
+    request.onsuccess=()=>{voiceDB=request.result;voiceDB.onversionchange=()=>{voiceDB.close();voiceDB=null;};resolve(voiceDB);};
+  });
+}
+async function voiceStore(operation,value){
+  const db=await openVoiceDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction('recordings',operation==='getAll'?'readonly':'readwrite');
+    const request=tx.objectStore('recordings')[operation](value);
+    tx.oncomplete=()=>resolve(request.result);tx.onerror=tx.onabort=()=>reject(tx.error||Error('Storage failed'));
+  });
+}
+async function loadVoices(){
+  if(voiceLoaded)return;if(voiceLoading)return voiceLoading;
+  voiceLoading=(async()=>{
+    try{const stored=await voiceStore('getAll'),ids=new Set(voiceItems.map(r=>r.id));voiceItems.push(...stored.filter(r=>r.blob instanceof Blob&&!ids.has(r.id)));voiceLoaded=true;voiceLoadError=false;}
+    catch{voiceLoadError=true;}
+    finally{voiceLoading=null;renderRecordList();}
+  })();return voiceLoading;
+}
+async function saveVoice(item){
+  if(item.saving)return false;item.saving=true;renderRecordList();
+  try{const {saving,unsaved,...stored}=item;await voiceStore('put',stored);item.unsaved=false;return true;}
+  catch{item.unsaved=true;A.toast('保存できません。再試行するかダウンロードしてください。',true);return false;}
+  finally{item.saving=false;renderRecordList();}
+}
+A.clearVoiceData=async()=>{
+  if(voiceSession||voicePending||voiceImporting||voiceItems.some(r=>r.saving))throw Error('録音・保存・読込が完了してからリセットしてください');
+  voiceResetting=true;
+  try{if(window.indexedDB)await voiceStore('clear');closeVoicePlayer();voiceItems=[];voiceLoaded=true;}
+  finally{voiceResetting=false;}
+};
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&voiceSession){stopVoice();A.toast('画面が非表示になったため録音を停止して保存します');}});
+// Guard only while audio could be lost, including after navigating away.
+window.addEventListener('beforeunload',e=>{if(voiceSession||voiceItems.some(r=>r.unsaved||r.saving)||voiceImporting){e.preventDefault();e.returnValue='';}});
+function voiceWave(peaks=[]){
+  return `<svg class="vs-wave" viewBox="0 0 300 70" preserveAspectRatio="none" aria-hidden="true">${Array.from({length:60},(_,i)=>{const h=Math.max(2,Math.min(1,peaks[Math.floor(i*peaks.length/60)]||0)*62);return `<rect x="${i*5+1}" y="${35-h/2}" width="2.5" height="${h}" rx="1.25"/>`;}).join('')}</svg>`;
+}
+function recorder(){
+  const generation=++voiceGeneration;A.statusTheme(false);
+  A.view(A.nav('ボイスメモ',`<button data-action="recordInfo" aria-label="保存と録音のヘルプ">${icon('info')}</button>`)+`<div class="app-content vs-studio" id="recorder-content">
+    <header class="vs-heading"><div><span class="vs-eyebrow">AURA / SOUND JOURNAL</span><h1>Voice Studio<span>.</span></h1></div><span class="vs-monogram" aria-hidden="true">${icon('mic')}</span></header>
+    <section class="vs-console" aria-label="録音スタジオ"><div class="vs-console-top"><span class="vs-status" id="record-status" role="status">READY TO RECORD</span><span>MIC / 01</span></div>
+      <div class="vs-scope"><div class="vs-scope-grid"></div><canvas id="record-scope" width="600" height="160" aria-label="マイクの入力波形"></canvas><span class="vs-scope-axis">INPUT SIGNAL <i>MONO VIEW</i> LIVE</span></div>
+      <div class="vs-clock" id="record-time">00:00</div><div class="vs-meter"><span id="record-level"></span></div>
+      <div class="vs-record-controls"><button data-action="recordPause" id="record-pause" disabled aria-label="録音を一時停止">${icon('pause')}</button><button class="vs-record-button" id="record-button" data-action="recordToggle" aria-label="録音を開始"><span></span></button><button data-action="recordMark" id="record-mark" disabled aria-label="録音にマーカーを追加">${icon('plus')}</button></div>
+      <p id="record-hint">タップして、声を残す。</p><div class="vs-session-marks" id="record-marks"></div>
+      <label class="vs-input-mode">録音モード<select id="record-mode"><option value="voice">会話 · ノイズ抑制を要求</option><option value="raw">環境音 · 音の処理なしを要求</option></select></label>
+    </section>
+    <div class="vs-library-head"><h2>ライブラリ <span id="voice-count">0</span></h2><button data-action="recordImport">${icon('plus')} 読み込む</button></div>
+    <div class="vs-stats" id="voice-stats">ブラウザ内に保存 / 自動送信なし</div>${A.search('voice-search','名前・メモを検索')}
+    <div class="vs-filters" role="group" aria-label="録音の絞り込み">${[['all','すべて'],['favorite','お気に入り'],['trash','ゴミ箱']].map(([value,label])=>`<button data-action="recordFilter" data-value="${value}" aria-pressed="${voiceFilter===value}">${label}</button>`).join('')}</div>
+    <div class="vs-sort-row"><span id="voice-results" aria-live="polite"></span><select id="voice-category-filter" aria-label="カテゴリで絞り込み"><option value="all">全カテゴリ</option>${voiceCategories.map(c=>`<option value="${c}" ${voiceCategory===c?'selected':''}>${c}</option>`).join('')}</select><select id="voice-sort" aria-label="録音の並び順"><option value="new">新しい順</option><option value="old">古い順</option><option value="name">名前順</option><option value="long">長い順</option></select></div>
+    <div id="voice-unsaved" role="status"></div><div id="voice-player"></div><div id="record-list"></div><footer class="vs-footer">LOCAL FIRST · YOUR VOICE, YOURS.<br><span>保存先はこのブラウザ。大切な音声は書き出してください。</span></footer>
+  </div>`);
+  voiceRoot=$('#recorder-content');$('#voice-search').value=voiceQuery;$('#voice-search').oninput=e=>{voiceQuery=e.target.value;renderRecordList();};
+  $('#voice-sort').value=voiceSort;$('#voice-sort').onchange=e=>{voiceSort=e.target.value;renderRecordList();};
+  $('#voice-category-filter').onchange=e=>{voiceCategory=e.target.value;renderRecordList();};
+  renderRecordList();updateVoiceConsole();drawVoiceScope();loadVoices();
+  const interval=setInterval(()=>{if(!voiceVisible())return;updateVoiceConsole();if(voiceSession&&voiceElapsed(voiceSession)>=1800)stopVoice();},200);
+  let frame=0,lastFrame=0;const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+  const animate=now=>{if(generation!==voiceGeneration)return;if(!document.hidden&&now-lastFrame>(A.settings.reduceMotion||reduced.matches?180:33)){if(voiceSession)drawVoiceScope();lastFrame=now;}frame=requestAnimationFrame(animate);};frame=requestAnimationFrame(animate);
+  A.cleanups.push(()=>{if(generation!==voiceGeneration)return;voiceGeneration++;voiceRoot=null;voicePending=false;clearInterval(interval);cancelAnimationFrame(frame);stopVoice();closeVoicePlayer();});
+}
 A.apps.recorder.render=recorder;
-A.actions.recordToggle=async()=>{if(recording?.state==='recording'){recording.stop();clearInterval(recordInterval);recorderStream?.getTracks().forEach(t=>t.stop());$('#recorder-content')?.classList.remove('recording');return;}if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)return A.toast('この環境では録音を利用できません');const token=recorderGeneration;let acquiredStream=null;$('#record-button').disabled=true;try{const stream=acquiredStream=await navigator.mediaDevices.getUserMedia({audio:true});if(token!==recorderGeneration||A.current!=='recorder'){stream.getTracks().forEach(t=>t.stop());return;}recorderStream=stream;recording=new MediaRecorder(stream);const chunks=[];recording.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};recording.onstop=()=>{if(token!==recorderGeneration)return;const type=recording.mimeType||'audio/webm';const blob=new Blob(chunks,{type});const duration=fmt((Date.now()-recordStart)/1000);recordItems.unshift({id:A.id(),name:'新規録音 '+(recordItems.length+1),blob,url:URL.createObjectURL(blob),duration,type});renderRecordList();A.toast('録音済み。終了前に保存を。');};recording.start();recordStart=Date.now();$('#recorder-content').classList.add('recording');$('#record-time').textContent='00:00';recordInterval=setInterval(()=>{const el=$('#record-time');if(el)el.textContent=fmt((Date.now()-recordStart)/1000).padStart(5,'0');},300);}catch(e){acquiredStream?.getTracks().forEach(t=>t.stop());if(token===recorderGeneration){if(recording){recording.onstop=null;if(recording.state==='recording')recording.stop();}recording=null;recorderStream=null;clearInterval(recordInterval);$('#recorder-content')?.classList.remove('recording');A.toast(e.name==='NotAllowedError'?'マイクの許可を確認してください':'録音を開始できませんでした');}}finally{if(token===recorderGeneration&&$('#record-button'))$('#record-button').disabled=false;}};
-A.actions.recordShare=el=>{const r=recordItems.find(r=>r.id===el.dataset.id);if(r)A.network.offerFile(r.blob,`aura-recording-${r.id}.${r.type.includes('mp4')?'m4a':r.type.includes('ogg')?'ogg':'webm'}`);};
-A.actions.recordDownload=el=>{const r=recordItems.find(r=>r.id===el.dataset.id);if(r)A.download(r.blob,`aura-recording-${r.id}.${r.type.includes('mp4')?'m4a':r.type.includes('ogg')?'ogg':'webm'}`);};
+function voiceElapsed(s){return s.elapsed+(!s.stopping&&!s.paused?(performance.now()-s.started)/1000:0);}
+function updateVoiceConsole(){
+  if(!voiceVisible())return;
+  const s=voiceSession,active=s&&!s.stopping,paused=active&&s.recorder.state==='paused';
+  voiceRoot.classList.toggle('is-recording',!!active&&!paused);voiceRoot.classList.toggle('is-paused',!!paused);
+  $('#record-time').textContent=voiceClock(s?voiceElapsed(s):0);
+  const status=voicePending?'マイクに接続中':s?.stopping?'保存の準備中':paused?'PAUSED':active?'RECORDING':'READY TO RECORD';
+  if($('#record-status').textContent!==status)$('#record-status').textContent=status;
+  $('#record-button').disabled=voicePending||!!s?.stopping;$('#record-button').setAttribute('aria-label',active?'録音を停止して保存':'録音を開始');
+  $('#record-pause').disabled=!active;$('#record-mark').disabled=!active;$('#record-mode').disabled=!!s||voicePending;
+  const pauseLabel=paused?'録音を再開':'録音を一時停止';
+  if($('#record-pause').getAttribute('aria-label')!==pauseLabel){$('#record-pause').innerHTML=icon(paused?'play':'pause');$('#record-pause').setAttribute('aria-label',pauseLabel);}
+  $('#record-hint').textContent=active?(paused?'ひと休み。続きは再開ボタンから。':'停止すると自動保存 · ＋でマーカー'):'タップして、声を残す。';
+  $('#record-marks').textContent=s?.markers.length?`${s.markers.length} マーカー · 最新 ${voiceClock(s.markers.at(-1).time)}`:'';
+}
+function drawVoiceScope(){
+  const canvas=$('#record-scope');if(!canvas||document.hidden)return;
+  const ctx=canvas.getContext('2d'),s=voiceSession;let level=0;
+  ctx.clearRect(0,0,600,160);ctx.lineWidth=2;ctx.strokeStyle='#ef9b87';ctx.beginPath();
+  if(s?.analyser&&s.recorder.state==='recording'){
+    s.analyser.getByteTimeDomainData(s.samples);
+    for(let i=0;i<s.samples.length;i++){const v=(s.samples[i]-128)/128;level+=v*v;const x=i/(s.samples.length-1)*600,y=80+v*72;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+    level=Math.sqrt(level/s.samples.length);
+    const bin=Math.min(1799,Math.floor(voiceElapsed(s)));s.peaks[bin]=Math.max(s.peaks[bin]||0,Math.min(1,level*4));
+  }else{ctx.moveTo(0,80);ctx.lineTo(600,80);}
+  ctx.stroke();$('#record-level').style.width=`${Math.min(100,level*300)}%`;$('#record-level').classList.toggle('is-hot',level>.7);
+}
+function releaseVoice(s){s.stream.getTracks().forEach(t=>t.stop());if(s.context&&s.context.state!=='closed')s.context.close().catch(()=>{});}
+function stopVoice(){
+  const s=voiceSession;if(!s||s.stopping)return;s.elapsed=voiceElapsed(s);s.stopping=true;
+  if(s.recorder.state!=='inactive')s.recorder.stop();releaseVoice(s);updateVoiceConsole();
+}
+A.actions.recordToggle=async()=>{
+  if(voiceSession)return stopVoice();if(voicePending||voiceResetting)return;
+  if(voiceImporting)return A.toast('音声の読込が終わってから録音してください');
+  if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)return A.toast('HTTPSとマイク対応ブラウザが必要です。音声の読込は利用できます。');
+  const requestedGeneration=voiceGeneration;await loadVoices();
+  if(!voiceVisible()||voicePending||voiceSession||voiceResetting||voiceImporting||requestedGeneration!==voiceGeneration)return;
+  if(voiceItems.length>=200)return A.toast('録音はゴミ箱を含め200件までです');
+  if(voiceItems.reduce((n,r)=>n+r.blob.size,0)>200*1024*1024)return A.toast('200MBを超えています。不要な音声を完全削除してください。');
+  const token=voiceGeneration,mode=$('#record-mode')?.value;voicePending=true;updateVoiceConsole();closeVoicePlayer();
+  if(M.playing)M.pause();let stream;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:mode!=='raw',noiseSuppression:mode!=='raw',autoGainControl:mode!=='raw'}});
+    if(token!==voiceGeneration||!voiceVisible()){stream.getTracks().forEach(t=>t.stop());return;}
+    const type=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported(t));
+    const rec=new MediaRecorder(stream,type?{mimeType:type}:undefined);
+    const s={recorder:rec,stream,chunks:[],elapsed:0,started:performance.now(),markers:[],peaks:[],bytes:0,paused:false,stopping:false};voiceSession=s;
+    try{const C=window.AudioContext||window.webkitAudioContext;s.context=new C();s.analyser=s.context.createAnalyser();s.analyser.fftSize=512;s.samples=new Uint8Array(512);s.context.createMediaStreamSource(stream).connect(s.analyser);s.context.resume().catch(()=>{});}catch{/* Visualization is optional, never block recording. */}
+    rec.ondataavailable=e=>{if(e.data.size){s.chunks.push(e.data);s.bytes+=e.data.size;if(s.bytes>=VOICE_LIMIT){stopVoice();A.toast('50MBに達したため録音を停止しました');}}};
+    rec.onstop=async()=>{
+      // A stop event can also come from a disconnected input device.
+      if(!s.stopping){s.elapsed=voiceElapsed(s);s.stopping=true;}releaseVoice(s);if(voiceSession===s)voiceSession=null;
+      const blob=new Blob(s.chunks,{type:rec.mimeType||s.chunks[0]?.type||'audio/webm'});updateVoiceConsole();if(voiceVisible())drawVoiceScope();
+      if(!blob.size)return A.toast('音声データがありません。マイクを確認してください。');
+      const bins=Array.from({length:Math.max(1,Math.ceil(s.elapsed))},(_,i)=>s.peaks[i]||0);
+      const peaks=Array.from({length:120},(_,i)=>{const a=Math.floor(i*bins.length/120),b=Math.max(a+1,Math.floor((i+1)*bins.length/120));return Math.max(0,...bins.slice(a,b));});
+      const item={id:A.id(),name:'録音 '+new Date().toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}),created:Date.now(),duration:s.elapsed,blob,category:'未分類',note:'',favorite:false,markers:s.markers,peaks,unsaved:true};
+      voiceItems.unshift(item);if(await saveVoice(item))A.toast('録音をブラウザ内に保存しました');
+    };
+    rec.onerror=()=>{A.toast('録音が中断されました。取得できた音声を保存します。',true);stopVoice();};
+    rec.start(1000);s.started=performance.now();A.haptic();
+  }catch(e){stream?.getTracks().forEach(t=>t.stop());if(token===voiceGeneration){if(voiceSession){releaseVoice(voiceSession);voiceSession=null;}A.toast(e.name==='NotAllowedError'?'マイクの許可を確認してください':e.name==='NotFoundError'?'マイクが見つかりません':'録音を開始できませんでした',true);}}
+  finally{if(token===voiceGeneration){voicePending=false;updateVoiceConsole();}}
+};
+A.actions.recordPause=()=>{const s=voiceSession;if(!s||s.stopping)return;if(s.recorder.state==='recording'){s.elapsed=voiceElapsed(s);s.paused=true;s.recorder.pause();}else if(s.recorder.state==='paused'){s.started=performance.now();s.paused=false;s.recorder.resume();}updateVoiceConsole();};
+A.actions.recordMark=()=>{const s=voiceSession;if(!s||s.stopping)return;if(s.markers.length>=100)return A.toast('マーカーは100件まで');s.markers.push({id:A.id(),time:voiceElapsed(s),label:`マーカー ${s.markers.length+1}`});updateVoiceConsole();A.haptic();};
+function renderRecordList(){
+  if(!voiceVisible())return;
+  const active=voiceItems.filter(r=>!r.deleted),q=voiceQuery.trim().toLocaleLowerCase();
+  const list=voiceItems.filter(r=>(voiceFilter==='trash'?r.deleted:!r.deleted)&&(voiceFilter!=='favorite'||r.favorite)&&(voiceCategory==='all'||r.category===voiceCategory)&&(!q||`${r.name} ${r.note} ${r.category}`.toLocaleLowerCase().includes(q)));
+  list.sort((a,b)=>voiceSort==='name'?a.name.localeCompare(b.name,'ja'):voiceSort==='long'?b.duration-a.duration:voiceSort==='old'?a.created-b.created:b.created-a.created);
+  $('#voice-count').textContent=active.length;$('#voice-stats').textContent=`${voiceClock(active.reduce((n,r)=>n+r.duration,0))} 合計 · ${voiceSize(voiceItems.reduce((n,r)=>n+r.blob.size,0))} 使用中`;
+  $('#voice-results').textContent=`${list.length} 件${voiceFilter==='trash'?' · 自動削除なし':''}`;
+  const unsaved=voiceItems.filter(r=>r.unsaved&&!r.saving);
+  $('#voice-unsaved').innerHTML=unsaved.length?`<div class="vs-warning">未保存 ${unsaved.length} 件 · タブを閉じる前に保存してください。${unsaved.map(r=>`<div>${esc(r.name)}<button data-action="recordRetry" data-id="${r.id}">再試行</button><button data-action="recordDownload" data-id="${r.id}">ダウンロード</button></div>`).join('')}</div>`:'';
+  $('#record-list').innerHTML=(voiceLoadError?'<div class="vs-warning" role="alert">保存領域を開けません。未保存の音声はダウンロードしてください。<button data-action="recordReload">再読込</button></div>':'')+(!voiceLoaded&&!voiceLoadError?'<p class="vs-empty">ライブラリを読み込み中…</p>':'')+list.map((r,i)=>`<article class="vs-card ${r.id===voiceSelected?'is-selected':''}" style="--vs-order:${Math.min(i,8)}">
+    <div class="vs-card-top"><span class="vs-category">${esc(r.category)}</span><time>${new Date(r.created).toLocaleDateString('ja-JP',{month:'short',day:'numeric'})}</time><button data-action="recordFavorite" data-id="${r.id}" aria-label="${esc(r.name)}のお気に入り" aria-pressed="${!!r.favorite}" ${r.saving?'disabled':''}>${icon('heart')}</button></div>
+    <button class="vs-card-open" data-action="recordOpen" data-id="${r.id}" ${r.deleted?'disabled':''}><span class="vs-card-play">${icon(r.id===voiceSelected?'close':'play')}</span><span><strong>${esc(r.name)}</strong><small>${voiceClock(r.duration)} <b>·</b> ${voiceSize(r.blob.size)}${r.markers?.length?` <b>·</b> ${r.markers.length} マーカー`:''}</small></span></button>
+    <div class="vs-card-wave">${voiceWave(r.peaks)}</div>${r.note?`<p class="vs-card-note">${esc(r.note)}</p>`:''}
+    <div class="vs-card-actions">${r.deleted?`<button data-action="recordRestore" data-id="${r.id}">復元</button><button data-action="recordErase" data-id="${r.id}" ${r.saving?'disabled':''}>完全削除</button>`:`<button data-action="recordEdit" data-id="${r.id}" ${r.saving?'disabled':''}>編集</button><button data-action="recordShare" data-id="${r.id}" aria-label="${esc(r.name)}を共有">${icon('share')}</button><button data-action="recordDelete" data-id="${r.id}" ${r.saving?'disabled':''} aria-label="${esc(r.name)}をゴミ箱へ">${icon('trash')}</button>`}<button data-action="recordDownload" data-id="${r.id}" aria-label="${esc(r.name)}をダウンロード">${icon('download')}</button></div>
+    ${r.saving?'<p class="vs-save-status" role="status">保存中…</p>':r.unsaved?`<div class="vs-warning" role="alert">未保存 · タブを閉じないでください<button data-action="recordRetry" data-id="${r.id}">再試行</button></div>`:''}
+  </article>`).join('')+(!list.length&&voiceLoaded?`<div class="vs-empty"><span class="vs-empty-art">${icon(voiceFilter==='trash'?'trash':'mic')}</span><h3>${q?'見つかりませんでした':voiceFilter==='trash'?'ゴミ箱は空です':voiceFilter==='favorite'?'大切な声を、ここに。':'まだ、まっさらな音のノート。'}</h3><p>${q?'名前・メモ・カテゴリで検索できます。':voiceFilter==='favorite'?'ハートをタップして追加できます。':voiceFilter==='trash'?'削除した音声はここから復元できます。':'上のボタンで録音するか、音声を読み込めます。'}</p></div>`:'');
+}
+A.actions.recordFilter=el=>{voiceFilter=el.dataset.value;document.querySelectorAll('[data-action="recordFilter"]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.value===voiceFilter));closeVoicePlayer();renderRecordList();};
+A.actions.recordReload=()=>loadVoices();A.actions.recordRetry=el=>{const r=voiceItem(el.dataset.id);if(r)saveVoice(r);};
+async function changeVoice(r,patch){if(!r||r.saving)return;Object.assign(r,patch);await saveVoice(r);}
+A.actions.recordFavorite=el=>{const r=voiceItem(el.dataset.id);if(r)changeVoice(r,{favorite:!r.favorite});};
+A.actions.recordDelete=el=>{const r=voiceItem(el.dataset.id);if(!r||r.saving)return;A.confirm('ゴミ箱に移動',`「${esc(r.name)}」はあとで復元できます。`,()=>{if(r.id===voiceSelected)closeVoicePlayer();changeVoice(r,{deleted:Date.now()});});};
+A.actions.recordRestore=el=>changeVoice(voiceItem(el.dataset.id),{deleted:null});
+A.actions.recordErase=el=>{const r=voiceItem(el.dataset.id);if(!r||r.saving)return;A.confirm('音声を完全に削除',`「${esc(r.name)}」を削除します。この操作は取り消せません。`,async()=>{if(r.saving)return;r.saving=true;renderRecordList();try{await voiceStore('delete',r.id);voiceItems=voiceItems.filter(v=>v.id!==r.id);}catch{A.toast('削除できませんでした。再試行してください。',true);}finally{r.saving=false;renderRecordList();}});};
+A.actions.recordEdit=el=>{
+  const r=voiceItem(el.dataset.id);if(!r||r.saving)return;
+  A.form('録音を編集',`<label class="form-label" for="voice-name">名前</label><input class="text-input" id="voice-name" name="name" maxlength="100" required value="${esc(r.name)}"><label class="form-label" for="voice-category">カテゴリ</label><select class="text-input" id="voice-category" name="category">${voiceCategories.map(c=>`<option ${c===r.category?'selected':''}>${c}</option>`).join('')}</select><label class="form-label" for="voice-note">メモ</label><textarea class="text-input" id="voice-note" name="note" maxlength="4000" rows="5">${esc(r.note)}</textarea>`,v=>{if(!v.name.trim()){A.toast('名前を入力してください');return false;}changeVoice(r,{name:v.name.trim(),category:v.category,note:v.note});if(r.id===voiceSelected)$('#voice-player-title').textContent=v.name.trim();});
+};
+function closeVoicePlayer(){
+  if(voiceAudio){const audio=voiceAudio;voiceAudio=null;audio.pause();audio.removeAttribute('src');audio.load();}
+  if(voiceURL)URL.revokeObjectURL(voiceURL);voiceURL=null;voiceSelected=null;const el=$('#voice-player');if(el)el.innerHTML='';
+}
+A.actions.recordOpen=el=>{
+  const r=voiceItem(el.dataset.id);if(!r||r.deleted)return;if(voiceSession||voicePending)return A.toast('録音を停止してから再生してください');
+  if(voiceSelected===r.id){closeVoicePlayer();renderRecordList();return;}closeVoicePlayer();voiceSelected=r.id;voiceURL=URL.createObjectURL(r.blob);
+  $('#voice-player').innerHTML=`<section class="vs-player"><div class="vs-player-head"><span>NOW LISTENING</span><button data-action="recordClose" aria-label="プレーヤーを閉じる">${icon('close')}</button></div><h3 id="voice-player-title">${esc(r.name)}</h3><div class="vs-player-wave">${voiceWave(r.peaks)}<span id="voice-playhead"></span></div><input id="voice-seek" type="range" min="0" max="${r.duration||1}" step="0.01" value="0" aria-label="再生位置"><div class="vs-play-times"><span id="voice-position">00:00</span><span>${voiceClock(r.duration)}</span></div><div class="vs-play-controls"><button data-action="recordSkip" data-value="-10" aria-label="10秒戻る">−10</button><button class="vs-main-play" data-action="recordPlay" id="voice-play-toggle" aria-label="再生">${icon('play')}</button><button data-action="recordSkip" data-value="10" aria-label="10秒進む">+10</button></div><div class="vs-play-options"><select id="voice-speed" aria-label="再生速度">${[.5,.75,1,1.25,1.5,2].map(n=>`<option value="${n}" ${n===voiceSpeed?'selected':''}>${n}× 速度</option>`).join('')}</select><button data-action="recordLoop" id="voice-loop" aria-pressed="${voiceLoop}">ループ</button><button data-action="recordPlayMark">＋ マーカー</button></div><div class="vs-player-markers" id="voice-marker-list"></div><button class="vs-export-notes" data-action="recordNotes" data-id="${r.id}">メモ・マーカーを書き出す</button><p id="voice-play-error" role="status"></p></section>`;
+  const audio=voiceAudio=new Audio(voiceURL);audio.preload='metadata';audio.playbackRate=voiceSpeed;audio.loop=voiceLoop;
+  audio.ontimeupdate=()=>{if(voiceAudio!==audio||!voiceVisible())return;$('#voice-position').textContent=voiceClock(audio.currentTime);$('#voice-seek').value=audio.currentTime;$('#voice-playhead').style.left=`${Math.min(100,audio.currentTime/(r.duration||1)*100)}%`;};
+  const state=()=>{if(voiceAudio!==audio||!voiceVisible())return;$('#voice-play-toggle').innerHTML=icon(audio.paused?'play':'pause');$('#voice-play-toggle').setAttribute('aria-label',audio.paused?'再生':'一時停止');$('#voice-player .vs-player').classList.toggle('is-playing',!audio.paused);};
+  audio.onplay=audio.onpause=audio.onended=state;audio.onerror=()=>{if(voiceAudio===audio&&voiceVisible())$('#voice-play-error').textContent='再生できません。ダウンロードして対応アプリで開いてください。';};
+  $('#voice-seek').oninput=e=>{audio.currentTime=Number(e.target.value);};$('#voice-speed').onchange=e=>{voiceSpeed=+e.target.value;audio.playbackRate=voiceSpeed;};
+  renderVoiceMarkers();renderRecordList();$('#voice-player').scrollIntoView({block:'nearest',behavior:'instant'});
+};
+A.actions.recordClose=()=>{closeVoicePlayer();renderRecordList();};
+A.actions.recordPlay=async()=>{const audio=voiceAudio;if(!audio)return;if(!audio.paused)return audio.pause();try{if(M.playing)M.pause();await audio.play();}catch{if(voiceAudio===audio)A.toast('音声形式とブラウザを確認してください。',true);}};
+A.actions.recordSkip=el=>{if(voiceAudio)voiceAudio.currentTime=Math.max(0,Math.min(voiceItem(voiceSelected)?.duration||0,voiceAudio.currentTime+Number(el.dataset.value)));};
+A.actions.recordLoop=()=>{voiceLoop=!voiceLoop;if(voiceAudio)voiceAudio.loop=voiceLoop;$('#voice-loop')?.setAttribute('aria-pressed',voiceLoop);};
+function renderVoiceMarkers(){const r=voiceItem(voiceSelected),list=$('#voice-marker-list');if(!r||!list)return;list.innerHTML=(r.markers||[]).map(m=>`<div><button data-action="recordSeekMark" data-id="${m.id}"><time>${voiceClock(m.time)}</time>${esc(m.label)}</button><button data-action="recordRemoveMark" data-id="${m.id}" aria-label="${esc(m.label)}を削除">${icon('close')}</button></div>`).join('');}
+A.actions.recordPlayMark=()=>{const r=voiceItem(voiceSelected);if(!r||r.saving||!voiceAudio)return;if(r.markers.length>=100)return A.toast('マーカーは100件まで');const time=voiceAudio.currentTime;A.form('マーカーを追加',`<p>${voiceClock(time)}</p><label class="form-label" for="voice-marker-label">ラベル</label><input class="text-input" id="voice-marker-label" name="label" maxlength="80" required value="マーカー ${r.markers.length+1}">`,v=>{if(!v.label.trim())return false;changeVoice(r,{markers:[...r.markers,{id:A.id(),time,label:v.label.trim()}].sort((a,b)=>a.time-b.time)});renderVoiceMarkers();});};
+A.actions.recordSeekMark=el=>{const m=voiceItem(voiceSelected)?.markers.find(m=>m.id===el.dataset.id);if(m&&voiceAudio)voiceAudio.currentTime=m.time;};
+A.actions.recordRemoveMark=el=>{const r=voiceItem(voiceSelected);if(r&&!r.saving){changeVoice(r,{markers:r.markers.filter(m=>m.id!==el.dataset.id)});renderVoiceMarkers();}};
+function voiceFilename(r){const type=r.blob.type;const ext=r.blob instanceof File?r.blob.name.split('.').pop().replace(/[^a-z0-9]/gi,'').slice(0,8):type.includes('mp4')?'m4a':type.includes('ogg')?'ogg':'webm';return `${r.name.replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').slice(0,100)||'aura-recording'}.${ext||'audio'}`;}
+A.actions.recordShare=el=>{const r=voiceItem(el.dataset.id);if(r)A.network.offerFile(r.blob,voiceFilename(r));};
+A.actions.recordDownload=el=>{const r=voiceItem(el.dataset.id);if(r)A.download(r.blob,voiceFilename(r));};
+A.actions.recordNotes=el=>{const r=voiceItem(el.dataset.id);if(r)A.download(new Blob([`${r.name}\n${new Date(r.created).toLocaleString('ja-JP')} · ${voiceClock(r.duration)} · ${r.category}\n\n${r.note}\n\n${r.markers.map(m=>`${voiceClock(m.time)} ${m.label}`).join('\n')}`],{type:'text/plain;charset=utf-8'}),'aura-voice-notes.txt');};
+async function voiceFileInfo(file){
+  const url=URL.createObjectURL(file),audio=new Audio();let timer;
+  try{return await new Promise((resolve,reject)=>{
+    timer=setTimeout(()=>reject(Error('音声の長さを取得できませんでした')),12000);
+    const duration=()=>{if(Number.isFinite(audio.duration)&&audio.duration>0)resolve(audio.duration);};
+    audio.ondurationchange=duration;audio.onloadedmetadata=()=>{duration();if(audio.duration===Infinity)audio.currentTime=1e10;};
+    audio.onerror=()=>reject(Error('この音声形式を読み込めません'));audio.preload='auto';audio.src=url;
+  });}
+  finally{clearTimeout(timer);audio.onloadedmetadata=audio.ondurationchange=audio.onerror=null;audio.removeAttribute('src');audio.load();URL.revokeObjectURL(url);}
+}
+async function voiceFilePeaks(file,duration){
+  // Bound decoding memory; large/long imports show a neutral baseline instead.
+  if(file.size>12*1024*1024||duration>600)return [];let context;
+  try{const C=window.AudioContext||window.webkitAudioContext;context=new C();const buffer=await context.decodeAudioData(await file.arrayBuffer()),data=buffer.getChannelData(0);return Array.from({length:120},(_,i)=>{const a=Math.floor(i*data.length/120),b=Math.floor((i+1)*data.length/120);let sum=0,n=0;for(let k=a;k<b;k+=8){sum+=data[k]*data[k];n++;}return Math.min(1,Math.sqrt(sum/Math.max(1,n))*4);});}
+  catch{return [];}
+  finally{if(context)context.close().catch(()=>{});}
+}
+A.actions.recordImport=()=>{
+  if(voiceImporting)return A.toast('音声を読み込み中です');const input=document.createElement('input');input.type='file';input.accept='audio/*,.webm,.m4a,.mp3,.wav,.ogg,.flac';
+  input.onchange=async()=>{
+    const file=input.files[0];if(!file)return;
+    if(voiceImporting||voiceResetting||voiceSession||voicePending)return A.toast('録音・保存・読込が終わってから追加してください');
+    if(!file.size||file.size>VOICE_LIMIT)return A.toast('0バイトより大きい50MB以下の音声を選択してください');
+    voiceImporting=true;A.toast('音声を読み込み中…');
+    try{await loadVoices();if(voiceItems.length>=200)throw Error('録音はゴミ箱を含め200件までです');if(voiceItems.reduce((n,r)=>n+r.blob.size,0)+file.size>250*1024*1024)throw Error('上限は250MBです。不要な音声を完全削除してください');const duration=await voiceFileInfo(file);if(duration>1800)throw Error('30分以下の音声を選択してください');const peaks=await voiceFilePeaks(file,duration);const r={id:A.id(),name:file.name.replace(/\.[^.]+$/,'').slice(0,100)||'読み込んだ音声',created:Date.now(),duration,blob:file,category:'未分類',note:'',favorite:false,markers:[],peaks,unsaved:true};voiceItems.unshift(r);if(await saveVoice(r))A.toast('音声をライブラリに追加しました');}
+    catch(e){A.toast(e.message||'音声を読み込めませんでした',true);}
+    finally{voiceImporting=false;renderRecordList();}
+  };input.click();
+};
+A.actions.recordInfo=()=>A.overlay(`${A.overlayTitle('Voice Studioについて')}<div class="vs-help"><h3>あなたの声は、このブラウザに。</h3><p>音声とメモはIndexedDBに保存します。外部送信・クラウド同期・自動文字起こしはありません。全データJSONには音声を含みません。音声は各カードのダウンロードから保存してください。</p><h3>録音と波形</h3><p>マイクにはHTTPSと許可が必要です。1件あたり最大30分・約50MB、合計約250MB・200件まで（録音開始には50MBの空き枠が必要）。アプリ切替・ロック・タブ非表示時は録音を停止して保存します。タブ終了・スリープ時の保存は保証されません。</p><p>波形は実入力の概形、レベルはデジタル振幅です。校正された騒音計ではありません。録音モードの音声処理は対応ブラウザでのみ適用されます。読み込んだ音声は12MB・10分以下で波形を解析し、それ以外は中央線を表示します。</p><h3>保存に失敗したら</h3><p>「未保存」の音声はタブ内に残します。再試行するか、タブを閉じる前にダウンロードしてください。ブラウザデータの削除で録音も消えます。ゴミ箱の音声も容量を使い、完全削除まで残ります。同じ録音の編集は複数タブで同時に行わないでください。</p></div>`);
 // Live weather and maps are implemented in connected.js.
 })();

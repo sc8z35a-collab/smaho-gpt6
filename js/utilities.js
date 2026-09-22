@@ -214,40 +214,253 @@ A.actions.timerDeletePreset=el=>{const p=timerStore.presets.find(p=>p.id===el.da
 A.actions.timerHistory=()=>A.overlay(`${A.overlayTitle('時間の記録')}<p class="tm-history-intro">完了履歴・最新40件</p><div class="tm-history-list">${timerStore.history.map(h=>`<article><span class="tm-history-check">${icon('check')}</span><div><strong>${esc(h.label)}</strong><small>${new Date(h.date).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${timerModes[h.mode].name}</small></div><b>${timerLength(h.duration)}</b></article>`).join('')||'<div class="tm-history-empty">履歴なし</div>'}</div>${timerStore.history.length?'<button class="tm-history-clear" data-action="timerClearHistory">完了履歴を削除</button>':''}`);
 A.actions.timerClearHistory=()=>A.confirm('完了履歴を削除','すべてのタイマー完了履歴を削除します。進行中のタイマーとプリセットは残ります。',()=>{if(saveTimer(timer,{history:[]})){if(A.current==='clock'&&clockTab==='timer')clock();A.actions.timerHistory();}});
 A.actions.alarmToggle=el=>{const a=alarms.find(a=>a.id===el.dataset.id);a.enabled=!a.enabled;A.save('alarms',alarms);if(a.enabled){try{getAudioContext();}catch{}}clock();};A.actions.alarmDelete=el=>{alarms=alarms.filter(a=>a.id!==el.dataset.id);A.save('alarms',alarms);clock();};A.actions.alarmAdd=()=>A.form('新しいアラーム','<label class="form-label">時刻</label><input class="text-input" type="time" name="time" value="07:00" required><label class="form-label">ラベル</label><input class="text-input" name="label" placeholder="一日をはじめよう" maxlength="60">',v=>{alarms.push({id:A.id(),...v,enabled:true});A.save('alarms',alarms);try{getAudioContext();}catch{}clock();});
-// Health is sample/manual data, not measurements or medical advice.
-let health=A.load('health',{steps:6240,minutes:24,water:1200});
-function healthRings(){
-  const values=[health.steps/8000,health.minutes/30,health.water/2000];
+// Health: consent-based sensor observations and timestamped local records only.
+const HEALTH_LIMIT=20000;
+const healthKinds={steps:['歩数','歩',100000],minutes:['運動','分',1440],water:['水分','ml',20000],bedtime:['就床','分',1440],heartRate:['心拍','bpm',300]};
+const healthSources={manual:'手動記録',motion:'動作センサー推定',timer:'開始・終了時刻',bluetooth:'Bluetooth心拍計'};
+const healthBlank=()=>({version:2,records:[],session:null,cup:200});
+const healthDate=at=>{const d=new Date(at);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+const healthValidDate=(date,at)=>typeof date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(date)&&Number.isFinite(Date.parse(date+'T12:00:00Z'))&&new Date(date+'T12:00:00Z').toISOString().slice(0,10)===date&&Math.abs(Date.parse(date+'T12:00:00Z')-at)<38*3600000;
+const healthValidRecord=r=>r&&typeof r.id==='string'&&/^[a-zA-Z0-9:_-]{1,100}$/.test(r.id)&&Object.hasOwn(healthKinds,r.kind)&&Object.hasOwn(healthSources,r.source)&&Number.isFinite(r.value)&&r.value>=0&&r.value<=healthKinds[r.kind][2]&&Number.isFinite(r.at)&&r.at>=946684800000&&r.at<=Date.now()+60000&&healthValidDate(r.date,r.at)&&(!['steps','water','heartRate'].includes(r.kind)||Number.isInteger(r.value))&&(r.kind!=='heartRate'||r.value>=20)&&(r.source!=='bluetooth'||r.kind==='heartRate')&&(r.source!=='motion'||r.kind==='steps')&&(r.source!=='timer'||['minutes','bedtime'].includes(r.kind));
+function healthValidStore(s){return s?.version===2&&Array.isArray(s.records)&&s.records.length<=HEALTH_LIMIT&&s.records.every(healthValidRecord)&&new Set(s.records.map(r=>r.id)).size===s.records.length&&[100,150,200,250,300,500].includes(s.cup)&&(s.session===null||(s.session&&typeof s.session.id==='string'&&/^[a-zA-Z0-9_-]{1,80}$/.test(s.session.id)&&['minutes','bedtime'].includes(s.session.kind)&&Number.isFinite(s.session.start)&&s.session.start>=946684800000&&s.session.start<=Date.now()));}
+let healthStore=healthBlank(),healthError='',healthDay=healthDate(Date.now()),healthPending=[],healthFlushing=false,healthInFlight=[],healthEpoch=0;
+let healthMotion=false,healthMotionBusy=false,healthMotionRelease=null,healthMotionToken=0,healthMotionStatus='停止中',healthMotionAt=0,healthMotionBase=null,healthMotionHigh=false,healthLastStep=0,healthCandidate=0;
+let healthDevice=null,healthCharacteristic=null,healthBluetoothBusy=false,healthBluetoothToken=0,healthBluetoothStatus='未接続',healthLiveHeart=null,healthLastHeartMinute='';
+function healthRead(){
+  try{
+    const raw=localStorage.getItem('aura.health');
+    if(raw===null){healthStore=healthBlank();return true;}
+    const s=JSON.parse(raw);
+    if(!healthValidStore(s))throw new Error('記録形式を確認できません。書き出して退避後、ヘルスケアの記録を削除してください。');
+    healthStore=s;return true;
+  }catch(e){healthStore=healthBlank();healthError=e.message||'保存領域を利用できません';return false;}
+}
+function healthMigrate(){
+  try{
+    const raw=localStorage.getItem('aura.health');if(raw===null)return;
+    const old=JSON.parse(raw);if(old?.version===2)return;
+    if(!old||Object.keys(old).some(k=>!['steps','minutes','water'].includes(k))||!['steps','minutes','water'].every(k=>Number.isFinite(old[k])))return;
+    // Old totals have neither dates nor provenance; never silently treat them as real observations.
+    const seed=old.steps===6240&&old.minutes===24&&old.water===1200;
+    const next={health:healthBlank()};if(!seed)next.healthLegacy=old;
+    if(!A.saveBatch(next))healthError='旧データの分離に失敗しました。保存容量を確認してください。';
+  }catch{healthError='旧データを読み込めません。書き出して確認してください。';}
+}
+async function healthWrite(change){
+  const run=()=>{
+    if(!healthRead()){healthRefresh();return false;}
+    const next=change(structuredClone(healthStore));if(!next)return false;
+    if(!healthValidStore(next)){healthError='保存上限または記録形式を確認してください。上限は20,000件です。';healthRefresh();return false;}
+    if(!A.save('health',next)){healthError='未保存です。容量・ブラウザ設定を確認し、再試行してください。';healthRefresh();return false;}
+    healthStore=next;healthError='';healthRefresh();return true;
+  };
+  try{return navigator.locks?await navigator.locks.request('aura-health-write',run):run();}catch{healthError='保存処理を完了できませんでした。再試行してください。';healthRefresh();return false;}
+}
+function healthRecord(kind,value,source='manual',at=Date.now(),id=A.id()){return {id,kind,value,source,at,date:healthDate(at)};}
+function healthSummary(date=healthDate(Date.now())){
+  const records=healthStore.records.filter(r=>r.date===date),out={};
+  for(const kind of Object.keys(healthKinds)){const list=records.filter(r=>r.kind===kind);out[kind]=list.length?(kind==='heartRate'?list.reduce((a,b)=>a.at>b.at?a:b).value:list.reduce((n,r)=>n+r.value,0)):null;}
+  return out;
+}
+const healthNumber=value=>value===null?'—':Number(value.toFixed(1)).toLocaleString('ja-JP');
+const healthProvenance=kind=>[...new Set(healthStore.records.filter(r=>r.date===healthDate(Date.now())&&r.kind===kind).map(r=>(r.imported?'取込・':'')+healthSources[r.source]))].join('・')||'未記録';
+function healthRings(health){
+  const values=[(health.steps||0)/8000,(health.minutes||0)/30,(health.water||0)/2000];
   return `<svg class="health-ring-art" viewBox="0 0 180 180" aria-hidden="true" focusable="false"><defs>${[['#ffb6cb','#ec527e'],['#e0f3a3','#8bc29b'],['#bdedf6','#6cb9d6']].map(([a,b],i)=>`<linearGradient id="health-ring-${i}" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient>`).join('')}</defs><circle cx="90" cy="90" r="85" fill="#ffffff04" stroke="#ffffff0b"/>
   ${values.map((v,i)=>`<circle cx="90" cy="90" r="${70-i*19}" fill="none" stroke="#ffffff0c" stroke-width="13"/><circle class="health-progress-ring" cx="90" cy="90" r="${70-i*19}" fill="none" stroke="url(#health-ring-${i})" stroke-width="13" pathLength="100" stroke-dasharray="${Math.max(0,Math.min(1,v))*100} 100" stroke-linecap="${v>0?'round':'butt'}" transform="rotate(-90 90 90)"/>`).join('')}
   <path d="M78 91h7l4-9 5 16 4-7h5" fill="none" stroke="#e6e8e4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
-function waterVessel(){
-  const level=Math.max(0,Math.min(1,health.water/2000)),y=122-level*95;
+function waterVessel(health){
+  const level=Math.max(0,Math.min(1,(health.water||0)/2000)),y=122-level*95;
   return `<svg class="water-vessel" viewBox="0 0 110 140" aria-hidden="true" focusable="false"><defs><linearGradient id="water-glass" x2="1" y2="0"><stop stop-color="#b9dbe8" stop-opacity=".3"/><stop offset=".4" stop-color="#e3f3fa" stop-opacity=".1"/><stop offset="1" stop-color="#97bfce" stop-opacity=".4"/></linearGradient><linearGradient id="water-fill" x2=".6" y2="1"><stop stop-color="#96d9e8"/><stop offset="1" stop-color="#418cae"/></linearGradient><clipPath id="water-clip"><path d="M24 21h62l-7 92c-1 12-47 12-48 0Z"/></clipPath></defs><ellipse cx="55" cy="128" rx="31" ry="5" fill="#3a769d" opacity=".12"/><path d="M22 20h66l-7 95c-2 17-51 17-53 0Z" fill="url(#water-glass)" stroke="#a6cadb"/>
   ${level>0?`<g clip-path="url(#water-clip)"><path class="water-level" d="M18 ${y}q18-5 37 0t38 0v125H18Z" fill="url(#water-fill)"/><path d="M18 ${y}q18-5 37 0t38 0" fill="none" stroke="#d4f7ff" stroke-width="2"/></g>`:''}<path d="m32 33 5 70" stroke="#fff" stroke-opacity=".65" stroke-width="3" stroke-linecap="round"/><ellipse cx="55" cy="20" rx="33" ry="5" fill="none" stroke="#bcdbe7"/><path d="M73 49h5m-7 22h5m-7 22h5" stroke="#e4f3f9" stroke-width="2"/></svg>`;
 }
 function healthApp(){
-  A.view(A.nav('ヘルスケア',`<button data-action="healthAdd" aria-label="記録を追加">${icon('plus')}</button>`)+`<div class="app-content health-dashboard"><div class="health-heading"><h1>アクティビティ</h1><span class="demo-label">サンプル・手入力</span></div>
-  <section class="health-hero">${healthRings()}<div class="health-metrics"><div class="activity-stat"><small>歩数</small><strong>${health.steps.toLocaleString()}<span> / 8,000歩</span></strong></div><div class="activity-stat"><small>運動</small><strong>${health.minutes}<span> / 30分</span></strong></div><div class="activity-stat"><small>水分</small><strong>${health.water.toLocaleString()}<span> / 2,000 ml</span></strong></div></div><p class="health-energy">ムーブ ${Math.round(health.steps*.042)} kcal · デモ推計</p></section>
-  <article class="health-card health-steps"><header><h3>歩数</h3><small>週間サンプル</small></header><strong>${health.steps.toLocaleString()}</strong> <small>歩</small><div class="bar-chart">${[48,67,52,86,73,94,Math.min(100,health.steps/90)].map((v,i)=>`<div><span style="height:${v}%"></span>${i===6?'入力値':['月','火','水','木','金','土'][i]}</div>`).join('')}</div><p class="health-caption">過去6本はサンプル・右端は入力値</p></article>
-  <article class="health-card health-water">${waterVessel()}<h3>水分補給</h3><strong>${health.water.toLocaleString()}</strong><small class="health-water-goal"> / 2,000 ml</small><div class="health-water-track" aria-hidden="true"><span style="width:${Math.max(0,Math.min(100,health.water/20))}%"></span></div><button class="secondary-button" data-action="healthWater">+ 200 ml</button></article>
-  <article class="health-card health-sleep"><span class="health-moon" aria-hidden="true"></span><h3>睡眠</h3><strong>7<small>時間</small> 32<small>分</small></strong><p class="health-caption">サンプル · スタンド 9 / 12時間</p></article><p class="setting-description">センサー・医療連携なし</p></div>`);
+  const h=healthSummary(),session=healthStore.session,week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return {date:healthDate(d),value:healthSummary(healthDate(d)).steps};});
+  const scale=Math.max(1,...week.map(d=>d.value||0));healthDay=healthDate(Date.now());
+  A.view(A.nav('ヘルスケア',`<button data-action="healthAdd" aria-label="記録を追加">${icon('plus')}</button>`)+`<div class="app-content health-dashboard health-real"><div class="health-heading"><h1>今日の記録</h1><span>${esc(healthDay)}</span></div>
+  <div class="health-save-status" role="status">${esc(healthError|| (healthPending.length||healthFlushing?'記録を保存待ち':'このブラウザに保存・外部送信なし'))}${healthError||healthPending.length||healthFlushing?'<button data-action="healthRetry">保存を再試行</button>':''}</div>
+  <section class="health-hero">${healthRings(h)}<div class="health-metrics">${['steps','minutes','water'].map(k=>`<div class="activity-stat"><small>${healthKinds[k][0]}</small><strong>${healthNumber(h[k])}<span> ${healthKinds[k][1]}</span></strong><small>${healthProvenance(k)}</small></div>`).join('')}</div><p class="health-energy">記録なしは「—」・自動取得は下で開始</p></section>
+  <article class="health-card"><header><h3>歩数の自動記録</h3><small id="health-motion-status"></small></header><p class="health-caption">スマホを携帯して歩くと推定。振動でも増える場合があります。画面表示中のみ。</p><button class="secondary-button" data-action="healthMotion" ${healthMotionBusy?'disabled':''}>${healthMotion?'停止する':'動作センサーを有効にする'}</button></article>
+  <article class="health-card"><header><h3>心拍計</h3><small id="health-bluetooth-status"></small></header><strong id="health-live-heart">—</strong><small> bpm</small><p class="health-caption" id="health-heart-caption"></p><button class="secondary-button" data-action="healthBluetooth" ${healthBluetoothBusy?'disabled':''}>${healthDevice?'切断する':'Bluetooth心拍計に接続'}</button><p class="health-caption">標準Heart Rate Service対応機器が必要。心拍は1分ごとに保存。</p></article>
+  <article class="health-card health-water">${waterVessel(h)}<h3>水分補給</h3><strong>${healthNumber(h.water)}</strong><small> ml</small><div class="health-controls"><button class="secondary-button" data-action="healthWater">+ ${healthStore.cup} ml</button><button data-action="healthCup">容量を変更</button><button data-action="healthWaterUndo">直前の1杯を戻す</button></div></article>
+  <article class="health-card"><h3>運動・就床の時間</h3><div class="health-controls">${[['minutes','運動'],['bedtime','就床']].map(([k,label])=>`<button class="secondary-button" data-action="healthSession" data-kind="${k}" ${session&&session.kind!==k?'disabled':''}>${session?.kind===k?label+'を終了・確認':label+'を開始'}</button>`).join('')}</div><p class="health-caption" id="health-session-status"></p>${session?'<button data-action="healthSessionDiscard">この計時を取り消す</button>':''}<p class="health-caption">今日の就床：${healthNumber(h.bedtime)} 分。就床は睡眠の実測ではありません。終了し忘れた場合は保存前に時刻を修正できます。</p></article>
+  <article class="health-card health-steps"><header><h3>7日間の歩数</h3><small>保存された記録のみ</small></header><div class="bar-chart">${week.map(d=>`<div aria-label="${d.date} ${d.value===null?'未記録':healthNumber(d.value)+'歩'}"><span style="height:${(d.value||0)/scale*100}%"></span><small>${healthNumber(d.value)}</small>${d.date.slice(5)}</div>`).join('')}</div></article>
+  <details class="health-card" id="health-history"><summary>履歴・削除（${healthStore.records.length}件）</summary><p class="health-caption">最新50件。すべての記録はJSONに書き出せます。</p>${healthStore.records.slice().sort((a,b)=>b.at-a.at).slice(0,50).map(r=>`<div class="health-record"><div><b>${healthKinds[r.kind][0]} ${healthNumber(r.value)} ${healthKinds[r.kind][1]}</b><small>${esc(new Date(r.at).toLocaleString('ja-JP'))} · ${r.imported?'取込・':''}${healthSources[r.source]}</small></div><button data-action="healthDelete" data-id="${esc(r.id)}" aria-label="${healthKinds[r.kind][0]}の記録を削除">削除</button></div>`).join('')||'<p>記録はまだありません。</p>'}</details>
+  <details class="health-card" id="health-help"><summary>保存・連携・できること</summary><p class="health-caption">センサーは毎回の開始操作と許可が必要です。動作センサーは対応スマホ、Bluetoothは対応するChrome等とHTTPSで利用できます。iPhoneのSafariはWeb Bluetoothに非対応です。非対応・拒否時は手動記録を使えます。</p><p class="health-caption">画面非表示・アプリ移動でセンサーを停止します。ブラウザ終了中の常時計測、Appleヘルスケア・Health Connectの直接同期はありません。時間記録のみ開始時刻から復元できます。医療診断・緊急監視には使用できません。</p><p class="health-caption">リングの目盛りは8,000歩・30分・2,000mlを基準にした表示です。個人の推奨量ではありません。日付は記録した端末の現地日付。容量上限20,000件では自動削除せず保存を停止します。ブラウザのデータ消去で記録は消えます。</p><p class="health-caption">JSON取込はこの版の書き出し形式のみ。重複IDは追加しません。別機器で重複する活動を取り込むと合算されるため、不要な記録を削除してください。${navigator.locks?'':'このブラウザでは複数タブで同時編集しないでください。'}</p><div class="health-controls"><button data-action="healthExport">JSONを書き出す</button><button data-action="healthImport">JSONを一括取込</button><button data-action="healthClear">ヘルスケアの記録を削除</button></div></details>
+  ${A.load('healthLegacy',null)?'<article class="health-card"><h3>旧形式の記録は集計から除外しました</h3><p class="health-caption">日付・出所がなく初期値との区別ができないため、別保管しています。必要な実記録だけ確認して追加してください。</p><button data-action="healthLegacyExport">旧記録を退避</button><button data-action="healthLegacyDelete">旧記録を削除</button></article>':''}</div>`);
+  healthUpdateLive();
 }
-A.healthData=()=>({...health});
-A.apps.health.render=healthApp;
-A.actions.healthWater=()=>{
-  const next={...health,water:health.water+200},scroll=$('.health-dashboard')?.scrollTop||0;
-  if(!A.save('health',next))return;
-  health=next;healthApp();$('.health-dashboard').scrollTop=scroll;
-  $('[data-action="healthWater"]').focus({preventScroll:true});A.haptic();
+function healthRefresh(){
+  if(A.current!=='health')return;
+  const scroll=$('.health-dashboard')?.scrollTop||0,active=document.activeElement?.dataset,opened=A.$$('.health-dashboard details[open]').map(d=>d.id);
+  healthApp();$('.health-dashboard').scrollTop=scroll;opened.forEach(id=>{if($('#'+id))$('#'+id).open=true;});
+  if(active?.action)A.$$('[data-action]',$('.health-dashboard')).find(b=>b.dataset.action===active.action&&b.dataset.id===active.id&&b.dataset.kind===active.kind)?.focus({preventScroll:true});
+}
+function healthUpdateLive(){
+  if(A.current!=='health')return;
+  const set=(id,value)=>{const el=$('#'+id);if(el)el.textContent=value;};
+  set('health-motion-status',healthMotion?(healthMotionAt&&Date.now()-healthMotionAt<4000?'受信中・歩数は推定':'データ受信待ち'):healthMotionStatus);
+  const fresh=healthLiveHeart&&Date.now()-healthLiveHeart.at<15000&&healthDevice?.gatt?.connected;
+  set('health-bluetooth-status',healthDevice?.gatt?.connected&&healthLiveHeart&&!fresh?'接続中・15秒以上受信なし':healthBluetoothStatus);
+  set('health-live-heart',fresh?String(healthLiveHeart.value):'—');
+  const last=healthStore.records.filter(r=>r.kind==='heartRate').sort((a,b)=>b.at-a.at)[0];
+  set('health-heart-caption',fresh?'機器から受信中・医療用途ではありません':last?`最新の保存値：${last.value} bpm（${new Date(last.at).toLocaleString('ja-JP')}）。現在値ではありません。`:'心拍は未取得です。未接続時に数値を補いません。');
+  const s=healthStore.session;set('health-session-status',s?`${healthKinds[s.kind][0]}の計時中 ${timeString((Date.now()-s.start)/1000)} · ${new Date(s.start).toLocaleString('ja-JP')}から`:'開始と終了の確認だけで時刻を記録');
+}
+A.healthData=()=>({...healthSummary()});
+A.healthExportData=()=>{
+  if(!healthRead()){let raw=null;try{raw=localStorage.getItem('aura.health');}catch{}return {format:'aura-health-recovery',raw,pending:[...healthInFlight,...healthPending]};}
+  const records=new Map([...healthStore.records,...healthInFlight,...healthPending].map(r=>[r.id,r]));
+  return {format:'aura-health',version:2,exportedAt:new Date().toISOString(),records:structuredClone([...records.values()]),pendingCount:healthPending.length+healthInFlight.length,session:healthStore.session};
 };
-A.actions.healthAdd=()=>A.form('アクティビティを記録',`<label class="form-label">今日の歩数</label><input class="text-input" type="number" name="steps" min="0" max="100000" value="${health.steps}" required><label class="form-label">運動した時間（分）</label><input class="text-input" type="number" name="minutes" min="0" max="1440" value="${health.minutes}" required>`,v=>{
-  const steps=Number(v.steps),minutes=Number(v.minutes);
-  if(!Number.isInteger(steps)||steps<0||steps>100000||!Number.isInteger(minutes)||minutes<0||minutes>1440)return false;
-  const next={...health,steps,minutes};if(!A.save('health',next))return false;
-  health=next;healthApp();
+A.apps.health.render=()=>{
+  healthMigrate();healthRead();healthApp();
+  const tick=setInterval(()=>{if(document.hidden)return;if(healthDay!==healthDate(Date.now()))healthRefresh();healthUpdateLive();},1000);
+  const flush=setInterval(()=>{if(healthPending.length&&!healthError)healthFlush();},5000);
+  A.cleanups.push(()=>{clearInterval(tick);clearInterval(flush);healthStopMotion('アプリ移動で停止');healthDisconnect('アプリ移動で切断');});
+};
+A.actions.healthWater=async()=>{
+  if(!healthRead()){healthRefresh();return;}
+  if(!healthQueue(healthRecord('water',healthStore.cup)))return;
+  if(await healthFlush()){A.haptic();if(A.current==='health')$('[data-action="healthWater"]')?.focus({preventScroll:true});}
+};
+A.actions.healthWaterUndo=async()=>healthWrite(s=>{const r=s.records.filter(r=>r.kind==='water'&&r.source==='manual'&&!r.imported&&r.date===healthDate(Date.now())).sort((a,b)=>b.at-a.at)[0];if(!r){A.toast('今日の取り消せる水分記録はありません');return null;}s.records=s.records.filter(x=>x.id!==r.id);return s;});
+function healthForm(title,html,save){
+  A.form(title,html,()=>false);const form=$('#modal-form');
+  form.onsubmit=async e=>{e.preventDefault();if(form.dataset.busy)return;form.dataset.busy='1';const button=form.querySelector('[type="submit"]');button.disabled=true;try{if(await save(Object.fromEntries(new FormData(form)))){if(form.isConnected)A.closeOverlay();}}catch{healthError='保存を完了できませんでした。入力を残しています。再試行してください。';A.toast(healthError);healthRefresh();}finally{delete form.dataset.busy;button.disabled=false;}};
+}
+A.actions.healthCup=()=>healthForm('いつもの1杯',`<label class="form-label" for="health-cup">容量（ml）</label><select class="text-input" id="health-cup" name="cup">${[100,150,200,250,300,500].map(n=>`<option ${healthStore.cup===n?'selected':''}>${n}</option>`).join('')}</select>`,v=>healthWrite(s=>({...s,cup:Number(v.cup)})));
+A.actions.healthAdd=()=>healthForm('記録を追加',`<p>未取得分だけ追加してください。自動記録とは合算されます。</p><label class="form-label" for="health-kind">種類</label><select class="text-input" name="kind" id="health-kind">${Object.entries(healthKinds).filter(([k])=>k!=='heartRate').map(([k,[label,unit]])=>`<option value="${k}">${label}（${unit}）</option>`).join('')}</select><label class="form-label" for="health-value">追加する値</label><input class="text-input" id="health-value" name="value" type="number" min="0" max="100000" step="1" required><label class="form-label" for="health-date">日付</label><input class="text-input" id="health-date" name="date" type="date" min="2000-01-01" max="${healthDate(Date.now())}" value="${healthDate(Date.now())}" required>`,v=>{
+  const at=v.date===healthDate(Date.now())?Date.now():new Date(v.date+'T12:00:00').getTime(),r=healthRecord(v.kind,Number(v.value),'manual',at);
+  if(!v.value.trim()||!healthValidRecord(r)){A.toast('日付・値を確認してください');return false;}
+  return healthWrite(s=>{s.records.push(r);return s;});
 });
+A.actions.healthSession=async el=>{
+  healthRead();const kind=el.dataset.kind;if(!['minutes','bedtime'].includes(kind))return;
+  const s=healthStore.session;if(s){if(s.kind!==kind)return;return healthFinishSession(s);}
+  await healthWrite(store=>{if(store.session){A.toast('別の計時が進行中です');return null;}store.session={id:A.id(),kind,start:Date.now()};return store;});
+};
+const healthLocalTime=at=>{const d=new Date(at);return `${healthDate(at)}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;};
+function healthFinishSession(session){
+  healthForm('終了時刻を確認',`<p>そのまま保存できます。終了し忘れた場合だけ修正してください。最大24時間です。</p><label class="form-label" for="health-end">終了時刻</label><input class="text-input" type="datetime-local" step="1" name="end" id="health-end" value="${healthLocalTime(Math.ceil(Date.now()/1000)*1000)}" required>`,v=>{
+    const end=new Date(v.end).getTime();if(!Number.isFinite(end)||end<session.start||end>Date.now()+1000||end-session.start>86400000){A.toast('開始以降・現在以前の24時間以内を指定してください');return false;}
+    return healthWrite(s=>{
+      if(s.session?.id!==session.id){A.toast('この計時は別の画面で変更されました');return null;}
+      // Split across local midnight instead of assigning a whole session to the end date.
+      let at=session.start;while(at<end){const midnight=new Date(at);midnight.setHours(24,0,0,0);const next=Math.min(end,midnight.getTime());s.records.push(healthRecord(session.kind,(next-at)/60000,'timer',at,`${session.id}:${healthDate(at)}`));at=next;}
+      s.session=null;return s;
+    });
+  });
+}
+A.actions.healthSessionDiscard=()=>{
+  const id=healthStore.session?.id;if(!id)return;
+  A.confirm('計時を取り消す','進行中の時間は記録しません。',()=>healthWrite(s=>{if(s.session?.id!==id){A.toast('この計時は別の画面で変更されました');return null;}return {...s,session:null};}));
+};
+A.actions.healthDelete=el=>{const id=el.dataset.id;A.confirm('この記録を削除','削除すると日別の合計にも反映されます。',()=>healthWrite(s=>({...s,records:s.records.filter(r=>r.id!==id)})));};
+function healthOnMotion(e){
+  if(!healthMotion||document.hidden)return;
+  const a=e.accelerationIncludingGravity;if(!a||![a.x,a.y,a.z].every(Number.isFinite))return;
+  const now=Date.now(),m=Math.hypot(a.x,a.y,a.z);healthMotionAt=now;
+  if(healthMotionBase===null){healthMotionBase=m;return;}
+  healthMotionBase=.9*healthMotionBase+.1*m;const delta=m-healthMotionBase;
+  if(delta<.3)healthMotionHigh=false;
+  if(delta>1.2&&!healthMotionHigh&&now-healthLastStep>280){
+    healthMotionHigh=true;healthLastStep=now;
+    if(healthCandidate&&now-healthCandidate<2000){healthQueue(healthRecord('steps',1,'motion',now));}healthCandidate=now;
+  }
+}
+function healthQueue(r){
+  if(healthPending.length+healthInFlight.length>=1000){healthError='未保存の記録が多いため新しい記録の受付と計測を停止しました。再試行か退避をしてください。';healthStopMotion('保存待ちで停止');healthDisconnect('保存待ちで切断');return false;}
+  // Coalesce step observations in the same local minute; keep timestamp and source.
+  const last=healthPending.at(-1);if(r.kind==='steps'&&last?.kind==='steps'&&last.date===r.date&&Math.floor(last.at/60000)===Math.floor(r.at/60000)){last.value+=r.value;}else healthPending.push(r);
+  return true;
+}
+async function healthFlush(){
+  if(healthFlushing||!healthPending.length)return;healthFlushing=true;
+  const batch=healthPending,epoch=healthEpoch;healthInFlight=batch;healthPending=[];
+  let saved=false;
+  try{
+    saved=await healthWrite(s=>{if(epoch!==healthEpoch)return null;const ids=new Set(s.records.map(r=>r.id));s.records.push(...batch.filter(r=>!ids.has(r.id)));return s;});
+    if(!saved&&epoch===healthEpoch)healthPending.unshift(...batch);
+  }finally{healthInFlight=[];healthFlushing=false;healthRefresh();}
+  if(saved&&healthPending.length&&epoch===healthEpoch)return healthFlush();
+  return saved;
+}
+function healthStopMotion(status='停止中'){
+  healthMotionToken++;healthMotion=false;healthMotionStatus=status;window.removeEventListener('devicemotion',healthOnMotion);healthMotionRelease?.();healthMotionRelease=null;healthFlush();healthRefresh();
+}
+A.actions.healthMotion=async()=>{
+  if(healthMotion)return healthStopMotion();if(healthMotionBusy)return;
+  if(!window.isSecureContext||!window.DeviceMotionEvent){healthMotionStatus='この環境は非対応';healthRefresh();return;}
+  healthMotionBusy=true;const token=++healthMotionToken;
+  try{
+    if(typeof DeviceMotionEvent.requestPermission==='function'&&await DeviceMotionEvent.requestPermission()!=='granted')throw new Error('動作センサーが許可されていません');
+    if(token!==healthMotionToken||A.current!=='health'||document.hidden)return;
+    if(navigator.locks){const acquired=await new Promise(resolve=>navigator.locks.request('aura-health-motion',{ifAvailable:true},lock=>{if(!lock){resolve(false);return;}return new Promise(release=>{healthMotionRelease=release;resolve(true);});}).catch(()=>resolve(false)));if(!acquired)throw new Error('別のタブが動作センサーを使用中です');}
+    if(token!==healthMotionToken||A.current!=='health'||document.hidden){healthMotionRelease?.();healthMotionRelease=null;return;}
+    healthMotion=true;healthMotionAt=0;healthMotionBase=null;healthMotionHigh=false;healthLastStep=0;healthCandidate=0;
+    window.addEventListener('devicemotion',healthOnMotion);
+  }catch(e){if(token===healthMotionToken)healthMotionStatus=e.message||'動作センサーを開始できません';}finally{healthMotionBusy=false;healthRefresh();}
+};
+function healthOnHeart(e){
+  if(!healthDevice?.gatt?.connected||document.hidden)return;
+  const v=e.target.value;if(!(v instanceof DataView)||v.byteLength<2)return;
+  const flags=v.getUint8(0),wide=!!(flags&1);if(wide&&v.byteLength<3)return;
+  // If the device supports contact detection, ignore samples while contact is absent.
+  if((flags&4)&&!(flags&2)){healthLiveHeart=null;healthBluetoothStatus='装着を確認してください';healthUpdateLive();return;}
+  const value=wide?v.getUint16(1,true):v.getUint8(1);if(value<20||value>300)return;
+  const at=Date.now();healthLiveHeart={value,at};healthBluetoothStatus='接続・受信中';healthUpdateLive();
+  const minute=String(Math.floor(at/60000));if(minute!==healthLastHeartMinute){healthLastHeartMinute=minute;healthQueue(healthRecord('heartRate',value,'bluetooth',at));healthFlush();}
+}
+function healthDisconnected(){healthDisconnect('機器が切断されました。再接続してください');}
+function healthDisconnect(status='未接続'){
+  healthBluetoothToken++;healthCharacteristic?.removeEventListener('characteristicvaluechanged',healthOnHeart);healthCharacteristic=null;
+  const device=healthDevice;healthDevice=null;device?.removeEventListener('gattserverdisconnected',healthDisconnected);try{device?.gatt?.disconnect();}catch{/* Already disconnected or adapter unavailable. */}healthLiveHeart=null;healthBluetoothStatus=status;healthFlush();healthRefresh();
+}
+A.actions.healthBluetooth=async()=>{
+  if(healthBluetoothBusy)return;if(healthDevice)return healthDisconnect();
+  if(!window.isSecureContext||!navigator.bluetooth?.requestDevice){healthBluetoothStatus='この環境は非対応';healthRefresh();return;}
+  healthBluetoothBusy=true;healthBluetoothStatus='機器の選択・接続待ち';healthRefresh();const token=++healthBluetoothToken;let device;
+  try{
+    device=await navigator.bluetooth.requestDevice({filters:[{services:['heart_rate']}]});
+    if(token!==healthBluetoothToken||A.current!=='health'||document.hidden)return;
+    healthDevice=device;device.addEventListener('gattserverdisconnected',healthDisconnected);
+    const server=await device.gatt.connect(),service=await server.getPrimaryService('heart_rate'),characteristic=await service.getCharacteristic('heart_rate_measurement');
+    if(token!==healthBluetoothToken||A.current!=='health'||document.hidden){device.gatt.disconnect();return;}
+    healthCharacteristic=characteristic;characteristic.addEventListener('characteristicvaluechanged',healthOnHeart);await characteristic.startNotifications();
+    if(token!==healthBluetoothToken){device.gatt.disconnect();return;}
+    healthBluetoothStatus=healthLiveHeart?'接続・受信中':'接続済み・データ受信待ち';
+  }catch(e){if(token===healthBluetoothToken)healthDisconnect(e.name==='NotFoundError'?'接続をキャンセルしました':'接続できません。許可・対応機器・電源を確認してください');else device?.gatt?.disconnect();}
+  finally{healthBluetoothBusy=false;healthRefresh();}
+};
+A.actions.healthRetry=async()=>{if(healthFlushing)return;if(healthPending.length)await healthFlush();else{healthMigrate();if(healthRead())healthError='';healthRefresh();}};
+A.actions.healthImport=()=>{
+  A.overlay(`${A.overlayTitle('記録を一括取込')}<p>この版で書き出したaura-health JSON（5MB以下）。プレビュー後に追加します。端末内で処理し、外部送信しません。</p><input id="health-import" type="file" accept=".json,application/json" aria-label="ヘルスケアJSON"><p id="health-import-status" role="status"></p>`);
+  $('#health-import').onchange=async e=>{
+    const file=e.target.files[0],status=$('#health-import-status');if(!file)return;
+    try{
+      if(file.size>5*1024*1024)throw new Error('5MB以下のJSONを選択してください');const data=JSON.parse(await file.text());
+      if(data?.format!=='aura-health'||data.version!==2||!Array.isArray(data.records)||data.records.length>HEALTH_LIMIT||!data.records.every(healthValidRecord)||new Set(data.records.map(r=>r.id)).size!==data.records.length)throw new Error('形式・日付・値に不正な記録があります。取り込みませんでした。');
+      if(!status.isConnected)return;
+      if(!healthRead())throw new Error(healthError);
+      const ids=new Set(healthStore.records.map(r=>r.id)),fresh=data.records.filter(r=>!ids.has(r.id));
+      A.confirm('取込内容を確認',`${fresh.length}件を追加、${data.records.length-fresh.length}件は既存IDのためスキップします。別IDの同じ活動は重複集計されます。`,async()=>{
+        if(await healthWrite(s=>{const existing=new Set(s.records.map(r=>r.id));s.records.push(...data.records.filter(r=>!existing.has(r.id)).map(({id,kind,value,source,at,date})=>({id,kind,value,source,at,date,imported:true})));return s;}))A.toast('記録を取り込みました');
+      });
+    }catch(error){if(status.isConnected)status.textContent=error.message;}
+  };
+};
+A.actions.healthLegacyExport=()=>A.download(new Blob([JSON.stringify(A.load('healthLegacy',null),null,2)],{type:'application/json'}),'aura-health-legacy-unverified.json');
+A.actions.healthLegacyDelete=()=>A.confirm('旧形式の記録を削除','元に戻せません。必要なら先に旧記録を退避してください。',()=>{try{localStorage.removeItem('aura.healthLegacy');healthRefresh();}catch{A.toast('削除できませんでした');}});
+A.actions.healthClear=()=>A.confirm('ヘルスケアの記録をすべて削除','計時・未保存データ・旧記録も削除します。他のアプリの記録は残します。必要なら先にJSONを書き出してください。',async()=>{
+  const clear=()=>{if(!A.save('health',healthBlank())){healthError='記録を削除できませんでした。保存領域を確認してください。';healthRefresh();return;}healthEpoch++;healthPending=[];healthInFlight=[];healthStopMotion();healthDisconnect();healthStore=healthBlank();healthError='';try{localStorage.removeItem('aura.healthLegacy');}catch{healthError='旧記録を削除できませんでした';}healthRefresh();};
+  try{if(navigator.locks)await navigator.locks.request('aura-health-write',clear);else clear();}catch{healthError='削除処理を完了できませんでした。再試行してください。';healthRefresh();}
+});
+window.addEventListener('storage',e=>{if(e.key==='aura.health'||e.key===null){healthRead();healthRefresh();}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){healthStopMotion('画面非表示で停止');healthDisconnect('画面非表示で切断');}else if(A.current==='health'){healthRead();healthRefresh();}});
+window.addEventListener('pagehide',()=>{healthStopMotion();healthDisconnect();});
+window.addEventListener('beforeunload',e=>{if(healthPending.length||healthFlushing){e.preventDefault();e.returnValue='';}});
 // Wallet holds fictional balance only, with no payment integrations.
 let wallet=A.load('wallet',{balance:3240,transactions:[{id:'tx1',title:'喫茶 余白',amount:-580,date:Date.now()-3600000},{id:'tx2',title:'青葉駅 → 緑町駅',amount:-220,date:Date.now()-7200000},{id:'tx3',title:'デモチャージ',amount:2000,date:Date.now()-86400000}]});
 function walletApp(){A.view(A.nav('ウォレット')+`<div class="app-content"><p class="app-subtitle"><span class="demo-label">デモ・架空残高</span></p><div class="wallet-card"><h3>mori.</h3><strong>¥${wallet.balance.toLocaleString()}</strong><span>•••• 2048</span></div><div class="wallet-actions"><button class="secondary-button" data-action="walletCharge" style="background:#e3ede8;color:#739082">＋ デモチャージ</button><button class="secondary-button" data-action="walletPay" style="background:#e3ede8;color:#739082">デモで支払う</button></div><p class="section-label">デモ履歴</p>${wallet.transactions.slice(0,15).map(t=>`<div class="transaction-row"><div><strong>${esc(t.title)}</strong><small>${new Date(t.date).toLocaleDateString('ja-JP',{month:'short',day:'numeric'})}</small></div><span style="color:${t.amount>0?'#72a080':'inherit'}">${t.amount>0?'+':'−'} ¥${Math.abs(t.amount).toLocaleString()}</span></div>`).join('')}<p class="setting-description" style="margin-top:23px">実決済・乗車不可。個人情報・カード番号は入力しないでください</p></div>`);}

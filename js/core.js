@@ -189,11 +189,60 @@
     art.health = () => circle(40,40,29,'#fdeaf0')+circle(40,40,25,'none','stroke="#f4c3cd" stroke-width=".7"')+
       shadow(path('M40 65C32 59 12 45 12 29c0-15 20-20 28-5 8-15 28-10 28 5 0 16-20 30-28 36Z',rose))+
       motion('trace',line('M18 36h11l5-10 9 25 6-15h13','#fff',2.3),'40px 40px',0)+line('M19 26c2-7 9-8 13-5','#fff',2,'opacity=".65"')+circle(59,58,9,paper)+line('M59 53v10m-5-5h10','#e77e96',2.2)+circle(18,36,1.5,'#fff')+circle(62,36,1.5,'#fff')+line('M17 52a28 28 0 0 0 15 13','#ecaaba',1.1);
-    art.wallet = () => shadow(rect(11,14,57,53,7,'#121c2b'))+
-      `<g transform="rotate(-8 40 30)">${rect(15,13,47,29,4,gold)}${rect(19,18,8,6,1,'#fff0b6')}${rule(33,21,20,'#b99157')}</g>`+
-      rect(16,24,48,29,4,green)+rect(16,30,48,3,0,'#376f68')+rect(19,36,9,6,1,'#d9eeb9')+
-      shadow(rect(11,39,58,29,5,paint('leather-ink')))+texture(11,39,58,29,5,'leather-grain')+rect(15,43,49,21,3,'none','stroke="#a7a7b5" stroke-width=".7" stroke-dasharray="1.5 2"')+
-      rect(52,45,20,15,4,'#566178')+rect(54,47,16,11,3,'#65738b')+circle(61,52.5,3,gold)+circle(61,52.5,1.6,'#c49154')+line('M17 40h45','#8290a2',.8);
+    // Wallet atelier: cards sit behind the pocket; every material is vector-only.
+    art.wallet = () => {
+      const leather=paint('wallet-leather'), brass=paint('wallet-brass');
+      const stitch=d=>line(d,'#081d1b',.95,'stroke-dasharray="1.25 1.5"')+
+        line(d,'#b9b79a',.42,'stroke-dasharray="1.25 1.5"');
+      const chip=(x,y)=>rect(x,y,9,7,1.4,brass,'stroke="#826135" stroke-width=".35"')+
+        fine(line(`M${x+3} ${y}v2l-1 1v1l1 1v2m3-7v2l1 1v1l-1 1v2m-6-3.5h2m5 0h2m-6-1.5h3v3h-3Z`,'#84673f',.4))+
+        line(`M${x+1} ${y+.65}h6.5`,'#fff4d0',.45);
+      const backCard=rect(16,12,45,30,4,'#886535')+rect(16,10.5,45,30,4,paint('wallet-champagne'))+
+        rect(17,11.5,43,28,3,'none','stroke="#fff1c5" stroke-width=".45"')+
+        fine(Array.from({length:7},(_,i)=>line(`M${32+i*3} 12c-8 7 13 11 9 25`,'#aa854e',.3,'opacity=".32"')).join(''))+
+        chip(20,18)+text(48,17,'AURA',3.2,'#735c35','letter-spacing="1.15"')+
+        fine(line('M45 23q2 2 0 4m2-5q3 3 0 6m2-7q4 4 0 8','#896e42',.6));
+      const transitCard=rect(18,23,48,28,4,'#154e49')+rect(18,21.7,48,28,4,paint('wallet-jade'))+
+        rect(19,22.7,46,26,3,'none','stroke="#c5f6d6" stroke-width=".45" stroke-opacity=".65"')+
+        path('M43 48c-12-9-3-23 10-25-6 7 0 15 12 17v8Z','#d4e9b8','opacity=".2"')+
+        fine(Array.from({length:5},(_,i)=>line(`M${43+i*3} 25c-13 7-10 16 9 21`,'#e3ffe2',.35,'opacity=".38"')).join(''))+
+        text(28,31,'mori.',6,'#efffdf','font-weight="600"')+
+        fine(text(29,35.5,'TRANSIT / DEMO',1.65,'#d6f3d8','letter-spacing=".45"'))+
+        path('M57 28q5-5 6-2-1 5-6 5Z','#dcecc4')+line('m57 31 5-5','#477b64',.4);
+      return '<ellipse cx="41" cy="72" rx="28" ry="3" fill="#081814" opacity=".3"/>'+
+        shadow(rect(9,20,61,49,8,'#102522'))+
+        rect(10,18,58,49,7,leather)+texture(10,18,58,49,7,'wallet-grain')+
+        line('M12 30V25q0-5 5-5h43q5 0 5 5v34','#78958a',.65)+
+        // Static rotations are nested inside animated groups so they are preserved.
+        motion('wallet-card',`<g transform="rotate(-10 39 38)">${shadow(backCard)}</g>`,'39px 45px',-.8)+
+        motion('wallet-transit',`<g transform="rotate(4 43 43)">${shadow(transitCard)}</g>`,'43px 45px',-1.6)+
+        path('M11 39q14-5 29 0t28 0v4H11Z','#081b19')+
+        path('M11 39q14-5 29 0t28 0','#82988a','fill-opacity="0" stroke="#82988a" stroke-width=".6"')+
+        // Three exposed cut edges make the leather thickness legible at small sizes.
+        rect(10,40,60,30,7,'#081b1b')+rect(9,39,60,30,7,'#716e55')+
+        rect(8,37.5,60,30,7,leather)+texture(8,37.5,60,30,7,'wallet-grain')+
+        rect(8.6,38.1,58.8,28.8,6.4,'none','stroke="url(#ai-wallet-edge)" stroke-width=".65"')+
+        path('M10 43q0-4 5-4h46q4 0 5 4v3c-20-7-35 8-56 1Z',paint('wallet-bloom'))+
+        fine(stitch('M14 41h46q4 0 4 4v15q0 4-4 4H16q-4 0-4-4V45q0-4 2-4'))+
+        line('M11 62q0 4 5 4h45','#061e1a',.85)+line('M17 68.6h43q7 0 8-6','#a39974',.4)+
+        // Foil-stamped leaf monogram, inset into the front pocket.
+        path('M27 52c-1-6 4-8 8-8 1 5-2 10-8 8Z',brass)+
+        path('M27 53c-4 0-6-3-6-6 4-1 7 2 6 6Z',paint('wallet-champagne'))+
+        line('m25 56 7-10m-6 7-3-4','#40564a',.55)+
+        fine(text(29,61,'A U R A',3,'#c6bb91','font-weight="600"')+text(47,62,'EST. 2048',1.65,'#a9ad92'))+
+        // Strap shadow, rolled rim and concentric machined brass snap.
+        rect(49,46,23,16,4,'#051816','opacity=".5"')+
+        rect(49,43.5,23,16,4,paint('wallet-strap'))+texture(49,43.5,23,16,4,'wallet-grain')+
+        rect(49.6,44.1,21.8,14.8,3.5,'none','stroke="url(#ai-wallet-edge)" stroke-width=".6"')+
+        fine(stitch('M52 46h15q2 0 2 2v7q0 2-2 2H52'))+
+        circle(60,52,5.2,'#071d19')+circle(60,51.4,4.9,brass)+
+        circle(60,51.4,4.1,'none','stroke="#896632" stroke-width=".45"')+
+        circle(60,51.4,3.5,paint('wallet-champagne'))+
+        fine(ticks(60,51.4,4.5,32,'#987341',.15))+
+        line('m58.4 52.4 1.6-2.9 1.6 2.9m-2.6-.8h2','#8b6b39',.5)+
+        motion('wallet-glint',line('M56.3 50a4 4 0 0 1 5-2.4','#fff8df',.8)+
+          circle(57.2,48.4,.55,'#fffbe7'),'60px 51px',-.4);
+    };
     art.recorder = () => rect(9,12,62,56,8,ink)+
       Array.from({length:5},(_,i)=>line(`M14 ${23+i*8}h52`,'#60728a',.5,'opacity=".4"')).join('')+
       Array.from({length:9},(_,i)=>line(`M${16+i*6} 19v39`,'#60728a',.5,'opacity=".25"')).join('')+
@@ -300,10 +349,8 @@
         [37,40,43].map(x=>circle(x,44,.55,'#777789')).join('')+screw(16,56)+screw(64,56))+rect(37,33,6,1,.5,'#f1c6ff'),
       health: () => path('M16 29c0-10 13-16 22-4-10-5-18 2-19 10Z',paint('crystal'))+
         fine(line('M43 60c8-7 16-15 20-23','#be446c',.6,'opacity=".4"'))+rim(59,58,8.7)+circle(59,58,6.8,'none','stroke="#ead2d9" stroke-width=".35"'),
-      wallet: () => fine(line('M17 41h46','#b5c0d0',.55)+line('M14 66h48','#0d192b',.6)+
-        line('M21 19v4m-2-2h8m-4-3v6','#a4773f',.4)+line('M32 27h23','#c9e7c1',.5)+
-        [22,27,32,37].map(x=>rect(x,47,3,1,.5,'#b9c5d3','opacity=".7"')).join('')+line('M57 49h9M56 57h9','#adc0d0',.45,'stroke-dasharray="1 1.2"'))+
-        rim(61,52.5,2.9)+circle(60.5,51.7,.8,'#fff1ba','opacity=".7"'),
+      // Wallet finishing is authored with its moving card and strap layers.
+      wallet: () => '',
       recorder: () => rect(9,12,62,56,8,'none','stroke="url(#ai-rim)" stroke-width=".6"')+
         fine([8,17,11,29,43,24,12,32,19,8,14].map((h,i)=>motion('wave',line(`M${13.6+i*5} ${41-h/2}v${h-2}`,'#ffc2d1',.4,'opacity=".75"'),'40px 40px',-i*.19)).join('')+
         text(22,18,'-12',2.3,'#92a4ba')+text(60,18,'0 dB',2.3,'#92a4ba')+line('M14 61h51','#8a9cb2',.35)),
@@ -400,11 +447,8 @@
         path('M48 22c6-4 13-1 14 5-4-4-9-4-14-5Z','#ffdbe1','opacity=".4"')+
         line('M20 44c3 5 8 10 13 14','#ffbfcb',.7,'opacity=".6"')+
         circle(59,58,9.3,'none','stroke="#d8a3b3" stroke-width=".4"')+fine(deboss(40,72,'CARE',2.3,'#be8295')),
-      wallet: () => fine(line('M17 17h40M18 26h42','#fff1ca',.55)+
-          [0,1,2].map(i=>line(`M${50+i*2} 18q3 3 0 6`,'#b38649',.5)).join('')+
-          line('M13 42v20q0 4 4 4h43','#8d9aab',.4,'stroke-dasharray="1 1.4"')+
-          deboss(32,59,'AURA',3.2,'#18283b'))+
-        rect(53,46,18,13,3,'none','stroke="#adbdce" stroke-opacity=".5" stroke-width=".4"')+seam('M57 51a4 4 0 0 1 6-2','#fce6af',.5),
+      wallet: () => fine(line('M10.5 46v13q0 5 5 5','#c8d4b6',.3,'opacity=".35"')+
+        line('M68.7 61q0 7-7 8','#070f10',.5)),
       recorder: () => fine([0,1,2,3,4,5].map(i=>line(`M${16+i*9} 57v1.5`,'#acb9cc',.4)).join('')+
           text(16,64.5,'L',2.7,'#c5d0df')+text(64,64.5,'R',2.7,'#c5d0df')+line('M12 20v34m56-34v34','#12243a',.65))+
         rect(11,14,58,44,5,'none','stroke="#a2bed7" stroke-opacity=".2" stroke-width=".5"')+
@@ -489,6 +533,12 @@
     blade:['#4e718e','#1d354e','#0b1a2f'], ceramic:['#d2ded7','#ffffff','#f5faf1','#c8d6cb','#95ab9e'],
     'leather-rose':['#d79eaf','#be839a','#a66a87','#815371'], 'leather-ink':['#526279','#344358','#263549','#1b293c'],
     'paper-fold':['#b7ad99','#eee6ce','#fffbee'], binding:['#e1d6c0','#baa98d','#8c785e'],
+    'wallet-leather':['#648679','#34594b','#203f36','#142e2a','#0c211f'],
+    'wallet-strap':['#749285','#476959','#2b4b40','#17372e'],
+    'wallet-brass':['#fff6d7','#d6b675','#9f7740','#fbe3a3','#be9557','#78552c'],
+    'wallet-champagne':['#fff3cc','#e9d29a','#c7ab70','#f1dfac'],
+    'wallet-jade':['#c0dec4','#8bbf9f','#5c9d83','#2b6c5e'],
+    'wallet-edge':['#d4d7b9','#91ab95','#3a5745','#b8b591','#354734'],
     rim:['#ffffff','#d9e8f7','#74899f','#ebf6ff','#8193a7'], crystal:['#ffffff99','#ffffff35','#ffffff00']
   };
   let appIconInstance=0;
@@ -506,6 +556,8 @@
       leaf:radial('leaf',.25,.18,1,[[0,'#d7edab'],[.35,'#96c779'],[.65,'#5c9c72'],[1,'#2a6f5e']]),
       pearl:radial('pearl',.3,.2,.85,[[0,'#fff'],[.45,'#fff',.8],[1,'#eff2ff',.45]]),
       ruby:radial('ruby',.3,.2,.8,[[0,'#ffdee0'],[.25,'#fa8c99'],[.65,'#d34767'],[1,'#8b2549']]),
+      'wallet-bloom':radial('wallet-bloom',.18,.05,1,[[0,'#e8f1c9',.18],[.55,'#cfe7c4',.03],[1,'#cfe7c4',0]]),
+      'wallet-grain':'<pattern id="ai-wallet-grain" width="3.2" height="3.2" patternUnits="userSpaceOnUse"><path d="m.2.6.7-.3.6.4-.1.8-.7.3-.5-.5m1.7.8.7-.3.5.5-.3.6-.6.1" fill="none" stroke="#061d18" stroke-width=".2" opacity=".48"/><path d="m.3.8.5-.2.4.2m.9 1.4.4-.2.3.2" fill="none" stroke="#d9e4bb" stroke-width=".16" opacity=".22"/><circle cx="1.1" cy="2.5" r=".15" fill="#081e1a" opacity=".45"/></pattern>',
       'paper-grain':'<pattern id="ai-paper-grain" width="3" height="3" patternUnits="userSpaceOnUse"><path d="M.3.7h1.1m.3 1.5h.8" stroke="#9d907e" stroke-width=".13" opacity=".08"/><path d="M.4 1.1h.8" stroke="#fff" stroke-width=".2" opacity=".7"/></pattern>',
       'leather-grain':'<pattern id="ai-leather-grain" width="2.4" height="2.4" patternUnits="userSpaceOnUse"><path d="m.2.6.5-.2.5.4m.3 1.1.6-.3.2.3" fill="none" stroke="#172337" stroke-width=".16" opacity=".2"/><path d="m.3.9.4-.2m1 1.5.5-.2" stroke="#ffe3eb" stroke-width=".13" opacity=".23"/></pattern>',
       bookcloth:'<pattern id="ai-bookcloth" width="1.2" height="1.2" patternUnits="userSpaceOnUse"><path d="M0 .3h1.2M.3 0v1.2" stroke="#20446a" stroke-width=".15" opacity=".13"/><path d="M0 .7h1.2" stroke="#e6f6ff" stroke-width=".12" opacity=".25"/></pattern>',
@@ -540,7 +592,7 @@
   appData.forEach(([id,name,color]) => A.apps[id] = {id,name,color});
   A.launcher = (app, dock=false) => { return `<button class="app-launcher" data-app="${app.id}" aria-label="${app.name}を開く"><span class="app-icon ${app.id}-icon" style="background:${app.color}">${A.appIcon(app.id)}</span><span class="app-name">${app.name}</span>${app.id==='mail'&&(A.mailUnread?.()??3)>0?`<span class="app-badge">${Math.min(99,A.mailUnread?.()??3)}</span>`:app.id==='messages'&&(A.messageUnread?.()??2)>0?`<span class="app-badge">${Math.min(99,A.messageUnread?.()??2)}</span>`:''}</button>`; };
   A.renderHome = () => { A.$('#app-grid').innerHTML=appData.slice(0,-4).map(([id])=>A.launcher(A.apps[id])).join('');A.$('#home-dock').innerHTML=appData.slice(-4).map(([id])=>A.launcher(A.apps[id],true)).join(''); };
-  A.haptic = () => { if(A.settings.sound && navigator.vibrate && navigator.userActivation?.hasBeenActive) navigator.vibrate(7); };
+  A.haptic = () => { if(A.settings.sound && navigator.vibrate && navigator.userActivation?.hasBeenActive) navigator.vibrate(({short:7,medium:14,long:25})[A.settings.hapticDuration]||7); };
   let toastTimer;
   A.toast = (message,options={}) => {
     const el=A.$('#toast');clearTimeout(toastTimer);
@@ -762,13 +814,13 @@
     el.onkeydown=e=>{if(e.key==='Escape'){e.stopPropagation();close();}if(e.key==='Tab'){e.preventDefault();el.querySelector('button').focus();}};
     A.$('#phone-screen').appendChild(el);el.querySelector('button').focus();
   };
-  A.actions.about=()=>A.overlay(`${A.overlayTitle('About this little world')}<div class="about-hero">aura.</div><p class="about-copy">手のひらに、もうひとつの世界。<br>いつもの日常に、少しの好奇心を。</p><div class="about-stats"><div><strong>30</strong><span>APPS</span></div><div><strong>08</strong><span>GAMES</span></div><div><strong>∞</strong><span>CURIOSITY</span></div></div><p class="about-note">auraは、ブラウザの中で動く架空のスマートフォンです。実際のOS、通信サービス、銀行・医療サービスではありません。<br><br>天気はOpen-Meteo、地図はOpenStreetMap、記事検索はWikipediaと接続します。電話・SMS・メールは端末の対応アプリで最終操作を行います。デモと実連携は区別されます。ヘルスケアの自動計測と実決済は未接続です。<br><br>メモ、設定、写真などはこのブラウザに保存されます。録音はアプリを閉じるまで保持されます。データは他の端末へ同期されません。カメラ・マイクの利用には許可が必要です。</p><p class="control-footer">auraOS 4.5 / NOTIFICATIONS</p>`);
+  A.actions.about=()=>A.overlay(`${A.overlayTitle('About this little world')}<div class="about-hero">aura.</div><p class="about-copy">手のひらに、もうひとつの世界。<br>いつもの日常に、少しの好奇心を。</p><div class="about-stats"><div><strong>30</strong><span>APPS</span></div><div><strong>08</strong><span>GAMES</span></div><div><strong>∞</strong><span>CURIOSITY</span></div></div><p class="about-note">auraは、ブラウザの中で動く架空のスマートフォンです。実際のOS、通信サービス、銀行・医療サービスではありません。<br><br>天気はOpen-Meteo、地図はOpenStreetMap、記事検索はWikipediaと接続します。電話・SMS・メールは端末の対応アプリで最終操作を行います。デモと実連携は区別されます。ヘルスケアは対応端末で許可後に推定歩数・Bluetooth心拍を取得できます。画面非表示で停止し、健康アカウント同期はありません。実決済は未接続です。<br><br>メモ、設定、写真などはこのブラウザに保存されます。録音もこのブラウザのIndexedDBに保存されます。大切な音声は個別にダウンロードしてください。データは他の端末へ同期されません。カメラ・マイクの利用には許可が必要です。</p><p class="control-footer">auraOS 4.5 / NOTIFICATIONS</p>`);
   A.spotlight = () => { A.overlay(`${A.overlayTitle('見つけよう。')}<label class="spotlight-input">${A.icon('search')}<input id="spotlight-query" placeholder="アプリを検索" aria-label="アプリを検索" autocomplete="off"></label><p class="spotlight-label">あなたの小さな世界</p><div class="spotlight-results" id="spotlight-results"></div>`);const render=q=>{const matches=Object.values(A.apps).filter(a=>(a.name+a.id).toLowerCase().includes(q.toLowerCase()));A.$('#spotlight-results').innerHTML=matches.map(a=>A.launcher(a)).join('')||'<p style="grid-column:span 4;font-size:12px;opacity:.65">該当するアプリはありません。</p>';};render('');A.$('#spotlight-query').oninput=e=>render(e.target.value);setTimeout(()=>A.$('#spotlight-query')?.focus(),120); };
   A.updateClock = () => {const d=new Date();const time=d.toLocaleTimeString('ja-JP',{hour:'numeric',minute:'2-digit',hour12:false});A.$('#status-time').textContent=time;A.$('#lock-time').textContent=time;const date=d.toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'long'});A.$('#home-date').textContent=date;A.$('#lock-date').textContent=date;A.$('#widget-day').textContent=d.getDate();A.$('#widget-weekday').textContent=['日','月','火','水','木','金','土'][d.getDay()]+'曜日';A.clockTick?.();A.music?.tick();A.updateWidgets?.();};
   document.addEventListener('click',e=>{const button=e.target.closest('[data-app], [data-action]');if(!button || button.disabled)return;if(button.dataset.app)A.open(button.dataset.app);else{const fn=A.actions[button.dataset.action];if(fn)fn(button,e);}});
   A.$('#status-controls').onclick=A.controls;A.$('#status-time').onclick=A.notifications;A.$('#dynamic-island').onclick=()=>A.open('music','player');A.$('#home-search').onclick=A.spotlight;A.$('#desktop-lock').onclick=A.lock;A.$('#desktop-reset').onclick=A.home;A.$('#power-button').onclick=()=>A.locked?A.home():A.lock();A.$('#unlock-button').onclick=A.home;A.$('#lock-flashlight').onclick=A.actions.flashlight;A.$('#about-button').onclick=A.actions.about;
   let touchStartY=0;A.$('#lock-screen').addEventListener('touchstart',e=>touchStartY=e.touches[0].clientY,{passive:true});A.$('#lock-screen').addEventListener('touchend',e=>{if(touchStartY-e.changedTouches[0].clientY>50)A.home();},{passive:true});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!A.$('#overlay').hidden)A.closeOverlay();else A.home();}if(e.key==='h'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.isComposing&&A.$('#overlay').hidden&&!e.target.closest('input,textarea,select,[contenteditable]'))A.home();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!A.$('#overlay').hidden)A.closeOverlay();else A.home();}if(A.settings.keyboardShortcuts!==false&&e.key==='h'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.isComposing&&A.$('#overlay').hidden&&!e.target.closest('input,textarea,select,[contenteditable]'))A.home();});
   // Some mobile browsers force a 980px layout in "desktop site" mode.
   // Compensate only when a touch device's layout is much wider than its screen;
   // ordinary desktop windows and user pinch-zoom remain unchanged.
@@ -787,7 +839,7 @@
       const app=A.apps[id];
       return `<article class="recent-card"><button class="recent-open" data-action="recentOpen" data-id="${id}" aria-label="${app.name}に切り替える"><span class="app-icon ${id}-icon" style="background:${app.color}">${A.appIcon(id)}</span><strong>${app.name}</strong><small>${A.current===id?'使用中':'アプリを開く'}</small></button><button class="recent-remove" data-action="recentRemove" data-id="${id}" aria-label="${app.name}を履歴から除く">×</button></article>`;
     }).join('');
-    A.overlay(`${A.overlayTitle('最近使ったアプリ')}<p class="switcher-copy">別アプリは開始画面へ。録音は切替で終了</p>${cards?`<div class="recent-list">${cards}</div><button class="switcher-clear" data-action="recentClear">履歴をクリア</button>`:`<div class="switcher-empty">${A.icon('grid')}履歴なし</div>`}`,'app-switcher');
+    A.overlay(`${A.overlayTitle('最近使ったアプリ')}<p class="switcher-copy">別アプリは開始画面へ。録音は切替で停止・保存</p>${cards?`<div class="recent-list">${cards}</div><button class="switcher-clear" data-action="recentClear">履歴をクリア</button>`:`<div class="switcher-empty">${A.icon('grid')}履歴なし</div>`}`,'app-switcher');
   };
   A.actions.recents=A.recents;
   A.actions.homeCalendar=()=>{A.open('calendar');A.actions.calendarToday();};
@@ -840,7 +892,7 @@
   });
   bar.addEventListener('pointercancel',()=>{clearTimeout(holdTimer);gesture=null;});
   bar.onclick=e=>{if(suppressClick&&e.detail!==0){suppressClick=false;return;}A.home();};
-  document.addEventListener('keydown',e=>{if(e.key==='Tab'&&e.altKey){e.preventDefault();A.recents();}});
+  document.addEventListener('keydown',e=>{if(A.settings.keyboardShortcuts!==false&&e.key==='Tab'&&e.altKey&&!e.isComposing&&A.$('#overlay').hidden&&!e.target.closest('input,textarea,select,[contenteditable]')){e.preventDefault();A.recents();}});
   // Springboard preferences are local, version-independent, and restricted to known apps.
   const defaultOrder=appData.map(([id])=>id);
   let homeOrder=A.load('homeOrder',defaultOrder);

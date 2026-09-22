@@ -20,7 +20,14 @@
 .scene-settings { --motion-name:fhd-turn; --motion-duration:36s; --motion-ease:linear; }
 .scene-games { --motion-name:fhd-rock; --motion-duration:6s; }
 .scene-health { --motion-name:fhd-heart; --motion-duration:3.6s; }
-.scene-wallet { --motion-name:fhd-paper; --motion-duration:10s; }
+.scene-wallet { --motion-name:fhd-wallet; --motion-duration:12s; }
+.motion-wallet-card { --motion-name:fhd-wallet-card; --motion-duration:12s; }
+.motion-wallet-transit { --motion-name:fhd-wallet-transit; --motion-duration:12s; }
+.motion-wallet-glint { --motion-name:fhd-wallet-glint; --motion-duration:6s; }
+@keyframes fhd-wallet { 0%,100%{transform:translateY(.3px) rotate(-.6deg)}50%{transform:translateY(-.7px) rotate(.6deg)} }
+@keyframes fhd-wallet-card { 0%,18%,100%{transform:translateY(0) rotate(0)}48%,62%{transform:translateY(-2px) rotate(-2deg)} }
+@keyframes fhd-wallet-transit { 0%,22%,100%{transform:translateY(0)}48%,65%{transform:translateY(-1.2px)} }
+@keyframes fhd-wallet-glint { 0%,20%,100%{opacity:.38}45%,55%{opacity:1} }
 .scene-habits { --motion-name:fhd-plant; --motion-duration:7s; transform-origin:40px 68px; }
 .scene-expenses { --motion-name:fhd-paper; --motion-duration:8s; }
 .scene-shopping { --motion-name:fhd-bag; --motion-duration:7s; transform-origin:40px 22px; }
