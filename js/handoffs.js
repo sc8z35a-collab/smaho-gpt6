@@ -287,7 +287,7 @@
   A.actions.shareNotes = () => { const title = $('#note-title'), body = $('#note-body'); if (title && body) N.share(title.value || 'メモ',body.value); else N.share('auraのメモ',A.searchableNotes().map(n => `${n.title}\n${n.body}`).join('\n\n---\n\n')); };
   A.actions.shareReminders = () => N.share('リマインダー',A.searchableReminders().map(r => `[${r.done ? 'x' : ' '}] ${r.text}`).join('\n'));
 
-  const icsEscape = value => String(value ?? '').replace(/\\/g,'\\\\').replace(/\r?\n/g,'\\n').replace(/;/g,'\\;').replace(/,/g,'\\,');
+  const icsEscape = value => String(value ?? '').replace(/\\/g,'\\\\').replace(/\r\n|\r|\n/g,'\\n').replace(/;/g,'\\;').replace(/,/g,'\\,');
   // RFC 5545 folding counts UTF-8 bytes to preserve Japanese exports.
   function icsFold(line) { let out = '', bytes = 0; for (const c of line) { const n = new TextEncoder().encode(c).length; if (bytes + n > 75) { out += '\r\n '; bytes = 1; } out += c; bytes += n; } return out; }
   const dateICS = d => d.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z');
