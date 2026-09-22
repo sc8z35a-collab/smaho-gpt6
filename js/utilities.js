@@ -571,17 +571,36 @@ function walletCommit(title,amount,kind){
   A.toast(kind==='charge'?'デモ残高を追加済み':'デモ完了・実決済なし');
 }
 A.apps.wallet.render=walletApp;
-A.actions.walletCharge=()=>A.form('デモ残高を追加',`<div class="mori-form-art">${walletArt('charge')}<span>架空の残高を追加します。<br>実際のお金は移動しません。</span></div><label class="form-label">金額（デモ）</label><select class="text-input" name="amount"><option value="1000">¥1,000</option><option value="3000">¥3,000</option><option value="5000">¥5,000</option></select>`,v=>{
-  const amount=Number(v.amount);if(![1000,3000,5000].includes(amount))return false;
-  return walletCommit('デモチャージ',amount,'charge');
-},'デモチャージ');
-A.actions.walletPay=()=>A.form('デモのお買いもの',`<div class="mori-form-art">${walletArt('pay')}<span>架空の商品でお買いもの。<br>実決済・乗車はできません。</span></div><label class="form-label">購入するもの（架空）</label><select class="text-input" name="item"><option value="coffee">喫茶 余白 · コーヒー ¥580</option><option value="train">青葉線 · 乗車 ¥220</option><option value="book">栞の書店 · 文庫本 ¥820</option></select>`,v=>{
-  const items={coffee:['喫茶 余白',580],train:['青葉線 デモ乗車',220],book:['栞の書店',820]};
-  if(!Object.hasOwn(items,v.item))return false;
-  const [title,amount]=items[v.item];
-  if(wallet.balance<amount){A.toast('デモ残高が足りません。チャージしてください。');return false;}
-  return walletCommit(title,-amount,'pay');
-},'デモ支払い');
+const walletDemoItems={coffee:['喫茶 余白',580],train:['青葉線 デモ乗車',220],book:['栞の書店',820]};
+function walletCheckout(kind,title,amount,charge=false){
+  return `<div class="mori-checkout" data-checkout-kind="${kind}"><div class="mori-checkout-stage" aria-hidden="true"><div class="mori-checkout-arch"></div><svg class="mori-checkout-floor" viewBox="0 0 240 66" fill="none" focusable="false"><ellipse cx="120" cy="40" rx="96" ry="22" fill="#233f2c0d"/><path d="M42 29v7c0 25 156 25 156 0v-7" fill="#a7b79a"/><ellipse cx="120" cy="29" rx="78" ry="20" fill="#edf0db" stroke="#aab99a"/><ellipse cx="120" cy="28" rx="69" ry="15" stroke="#fffdf1"/><path d="M53 42q68 22 134 0" stroke="#d9e4bd"/></svg><div class="mori-checkout-object" id="mori-checkout-object">${walletArt(kind)}</div><span class="mori-checkout-orbit"></span></div><div class="mori-checkout-summary" aria-live="polite" aria-atomic="true"><span id="mori-checkout-title">${esc(title)}</span><strong id="mori-checkout-total">${charge?'+ ':''}¥${amount.toLocaleString()}</strong><small>${charge?'追加する架空の残高':'架空の商品・実決済なし'}</small></div></div>`;
+}
+A.actions.walletCharge=()=>{
+  A.form('デモ残高を追加',`${walletCheckout('charge','デモチャージ',1000,true)}<p class="mori-checkout-note">実際のお金は移動しません。</p><label class="form-label" for="mori-charge-amount">金額（デモ）</label><select class="text-input" name="amount" id="mori-charge-amount"><option value="1000">¥1,000</option><option value="3000">¥3,000</option><option value="5000">¥5,000</option></select>`,v=>{
+    const amount=Number(v.amount);if(![1000,3000,5000].includes(amount))return false;
+    return walletCommit('デモチャージ',amount,'charge');
+  },'デモチャージ');
+  $('#mori-charge-amount').onchange=e=>{
+    const amount=Number(e.target.value);if(![1000,3000,5000].includes(amount))return;
+    $('#mori-checkout-total').textContent=`+ ¥${amount.toLocaleString()}`;
+    $('#mori-checkout-object').innerHTML=walletArt('charge');
+  };
+};
+A.actions.walletPay=()=>{
+  A.form('デモのお買いもの',`${walletCheckout('coffee','喫茶 余白',580)}<p class="mori-checkout-note">実決済・乗車はできません。</p><label class="form-label" for="mori-purchase-item">購入するもの（架空）</label><select class="text-input" name="item" id="mori-purchase-item"><option value="coffee">喫茶 余白 · コーヒー ¥580</option><option value="train">青葉線 · 乗車 ¥220</option><option value="book">栞の書店 · 文庫本 ¥820</option></select>`,v=>{
+    if(!Object.hasOwn(walletDemoItems,v.item))return false;
+    const [title,amount]=walletDemoItems[v.item];
+    if(wallet.balance<amount){A.toast('デモ残高が足りません。チャージしてください。');return false;}
+    return walletCommit(title,-amount,'pay');
+  },'デモ支払い');
+  $('#mori-purchase-item').onchange=e=>{
+    const kind=e.target.value;if(!Object.hasOwn(walletDemoItems,kind))return;
+    const [title,amount]=walletDemoItems[kind];
+    $('.mori-checkout').dataset.checkoutKind=kind;
+    $('#mori-checkout-title').textContent=title;$('#mori-checkout-total').textContent=`¥${amount.toLocaleString()}`;
+    $('#mori-checkout-object').innerHTML=walletArt(kind);
+  };
+};
 // Local text file CRUD and client-side downloads.
 let files=A.load('files',[{id:'file-welcome',name:'はじめに.txt',content:'auraへようこそ。\n\nこのファイルアプリでは、テキストファイルを作成・保存・読み込むことができます。\n\n端末にあるすべてのファイルにはアクセスしません。\n選択して読み込んだテキストだけを、このブラウザに保存します。\n\nダウンロードボタンから、実際の端末に保存できます。',date:Date.now()},{id:'file-journey',name:'小さな旅の計画.md',content:'# 次の週末\n\n## 持っていくもの\n- 読みかけの本\n- カメラ\n- 小さなノート\n\n## やってみたいこと\n1. 知らない道を歩く\n2. 喫茶店でひと休み\n3. 空の写真を一枚撮る\n\n急がなくても、大丈夫。',date:Date.now()-86400000}]);let selectedFile=null;
 function filesApp(){const bytes=new Blob([JSON.stringify(files)]).size;A.view(A.nav('ファイル',`<button data-action="fileNew" aria-label="ファイル作成">${icon('plus')}</button>`)+`<div class="app-content"><div class="storage-card"><header><span>このaura内のテキスト</span><small>${(bytes/1024).toFixed(1)} KB · ${files.length}ファイル</small></header><div class="storage-bar"><span></span><span></span><span></span></div><p>ブラウザ内保存 · 端末本体の容量表示ではありません</p></div>${A.search('file-search','ファイルを検索')}<div class="files-grid" id="files-grid"></div><button class="primary-button" data-action="fileImport" style="margin-top:22px">${icon('download')}テキストを読み込む</button><button class="secondary-button" data-action="fileExportNotes" style="width:100%;margin-top:10px">保存済みメモをJSONで書き出す</button><p class="setting-description" style="margin-top:17px">TXT・MD・JSON・CSV（100KB以下）</p></div>`);const render=q=>{$('#files-grid').innerHTML=files.filter(f=>f.name.includes(q)).map(f=>`<button class="file-tile" data-action="fileOpen" data-id="${f.id}">${icon('document')}<h3>${esc(f.name)}</h3><small>${new Blob([f.content]).size.toLocaleString()} bytes</small></button>`).join('')||'<p class="empty-state" style="grid-column:span 2">ファイルがありません。</p>';};render('');$('#file-search').oninput=e=>render(e.target.value);}
