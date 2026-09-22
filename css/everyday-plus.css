@@ -450,3 +450,181 @@
 #app-screen .ev-sketch .sk-layer small{display:block;font-size:9px;font-weight:400;line-height:1.6;color:var(--ev-muted);margin-top:4px}
 #app-screen .ev-sketch .sk-layer canvas{width:34px;height:34px;flex-shrink:0;border:1px solid var(--ev-border);border-radius:4px;background:repeating-conic-gradient(#9fafa31a 0 25%,transparent 0 50%) 0/8px 8px}
 @media(max-width:360px){#app-screen .ev-sketch .sk-layer canvas{width:28px;height:28px}#app-screen .ev-sketch .sk-layer>button:first-child{padding-left:4px;gap:5px}}
+
+/* Journal Atelier — woven covers, pressed botanicals and layered writing paper. */
+#app-screen .jr-atelier{--jr-ink:#51453f;--jr-muted:#80726a;--jr-accent:#84616d;--jr-paper:#fffcf5;--jr-base:#f3eee5;--jr-soft:#e9ded2;--jr-line:#aa917329;--ev-muted:var(--jr-muted);--ev-surface:var(--jr-paper);--ev-border:var(--jr-line);color:var(--jr-ink);background:radial-gradient(ellipse at 100% 0,#c5b29916,transparent 50%),var(--jr-base);padding:18px 20px 65px;min-height:100%;font-variant-numeric:tabular-nums}
+#app-screen .jr-atelier[data-journal-theme=rose]{--jr-paper:#fff8f7;--jr-base:#f4e9e8;--jr-soft:#ecdadc;--jr-accent:#895d70;--jr-line:#ac738b29}
+#app-screen .jr-atelier[data-journal-theme=sage]{--jr-paper:#fafcf5;--jr-base:#eaf0e7;--jr-soft:#dbe5d7;--jr-accent:#567365;--jr-line:#728b6929}
+#app-screen .jr-atelier button{font-family:inherit;color:inherit;transition:background .2s,box-shadow .2s,transform .22s;touch-action:manipulation}
+#app-screen .jr-atelier button:focus-visible,#app-screen .jr-atelier summary:focus-visible,.jr-tool-sheet button:focus-visible{outline:2px solid var(--jr-accent,#84616d);outline-offset:3px}
+#app-screen .jr-atelier [hidden]{display:none!important}
+#app-screen .jr-atelier input,#app-screen .jr-atelier select,#app-screen .jr-atelier textarea{color:var(--jr-ink);font-family:inherit;min-width:0;max-width:100%}
+#app-screen .jr-atelier input::placeholder,#app-screen .jr-atelier textarea::placeholder{color:var(--jr-muted);opacity:.8}
+#app-screen .jr-atelier .jr-eyebrow{font-size:9px;font-weight:600;letter-spacing:2.3px;line-height:1.6;color:var(--jr-accent)}
+#app-screen .jr-hero{position:relative;isolation:isolate;min-height:262px;border:1px solid var(--jr-line);border-radius:6px 25px 25px 6px;padding:25px 21px 47px;margin:2px 0 28px;background:linear-gradient(115deg,var(--jr-paper),var(--jr-soft));box-shadow:0 4px 0 -1px var(--jr-paper),0 5px 0 -1px var(--jr-line),0 8px 0 -2px var(--jr-paper),0 9px 0 -2px var(--jr-line),0 18px 28px -18px #48352f50;overflow:hidden}
+#app-screen .jr-hero:before{content:'';position:absolute;inset:0 auto 0 6px;width:3px;border-inline:1px solid var(--jr-line);background:#fff3;pointer-events:none}
+#app-screen .jr-hero:after{content:'';position:absolute;inset:0;z-index:-1;opacity:.2;background-image:repeating-linear-gradient(0deg,transparent 0 3px,#b4977214 3px 4px),repeating-linear-gradient(90deg,transparent 0 3px,#b4977210 3px 4px);pointer-events:none}
+#app-screen .jr-hero-copy{position:relative;z-index:1;pointer-events:none}.jr-hero-copy button{pointer-events:auto}
+#app-screen .jr-hero h1{font-family:'Noto Serif JP','Yu Mincho',serif;font-size:23px;font-weight:500;line-height:1.85;letter-spacing:.015em;margin:12px 0 5px}
+#app-screen .jr-hero p{font-size:10px;color:var(--jr-muted);margin:0 0 24px}
+#app-screen .jr-hero .jr-primary{display:inline-flex;align-items:center;gap:7px;min-height:43px;padding:10px 12px;border-radius:9px;color:#fffaf1;background:#755761;border:1px solid #62434e;box-shadow:inset 0 1px 0 #ffffff2b,0 3px 0 #523f47,0 6px 11px #67475323;font-size:11px}
+#app-screen .jr-primary svg{width:16px;height:16px}
+#app-screen .jr-primary:active{transform:translateY(2px);box-shadow:inset 0 1px 0 #ffffff2b,0 1px 0 #523f47}
+#app-screen .jr-hero .jr-book-art{position:absolute;width:205px;height:auto;right:-39px;top:52px;z-index:0;overflow:visible;filter:drop-shadow(2px 9px 6px #51393b13);pointer-events:none}
+#app-screen .jr-book-object{transform-origin:180px 170px;animation:jr-book-arrive 1.1s cubic-bezier(.2,.7,.25,1) both}
+#app-screen .jr-book-glint{animation:jr-foil 2.2s ease-in-out 2}
+#app-screen .jr-hero-foot{position:absolute;bottom:13px;left:23px;right:20px;display:flex;justify-content:space-between;gap:8px;align-items:center;border-top:1px solid var(--jr-line);padding-top:12px;color:var(--jr-muted);font-size:8px}
+#app-screen .jr-hero-foot span:first-child{letter-spacing:1.7px;color:var(--jr-accent)}
+#app-screen .jr-mood-art{display:block;width:36px;height:36px;overflow:visible;filter:drop-shadow(0 3px 2px #55463d15)}
+#app-screen .jr-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;padding:0 0 19px;margin-bottom:12px;border-bottom:1px solid var(--jr-line)}
+#app-screen .jr-week button{display:flex;flex-direction:column;align-items:center;gap:9px;padding:9px 0;border-radius:16px;font-size:10px;min-width:0}
+#app-screen .jr-week small{font-size:9px;color:var(--jr-muted)}
+#app-screen .jr-week b{font-size:10px;font-weight:500}
+#app-screen .jr-week .jr-mood-art{width:29px;height:29px}
+#app-screen .jr-empty-day{display:grid;place-items:center;width:29px;height:29px;border:1px dashed var(--jr-line);border-radius:50%;color:var(--jr-muted);font-size:15px;background:var(--jr-paper)}
+#app-screen .jr-week [aria-current=date]{background:var(--jr-paper);box-shadow:0 3px 8px #60473508,inset 0 0 0 1px var(--jr-line)}
+#app-screen .jr-week [aria-current=date] b{color:var(--jr-accent);font-weight:700}
+#app-screen .jr-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:5px;border-radius:12px;background:var(--jr-soft);margin:0 0 20px;border:1px solid var(--jr-line)}
+#app-screen .jr-tabs button{min-height:40px;border-radius:8px;font-size:11px;color:var(--jr-muted);padding:5px}
+#app-screen .jr-tabs button[aria-pressed=true]{background:var(--jr-paper);color:var(--jr-accent);box-shadow:0 2px 5px #5d463216,inset 0 1px 0 #fff7;font-weight:600}
+#app-screen .jr-atelier .search-field{background:var(--jr-paper);border:1px solid var(--jr-line);border-radius:12px}
+#app-screen .jr-details{margin:14px 0;border-block:1px solid var(--jr-line);font-size:11px}
+#app-screen .jr-details summary{padding:14px 2px;min-height:44px;color:var(--jr-accent);cursor:pointer;line-height:1.6}
+#app-screen .jr-details[open]{padding-bottom:12px}
+#app-screen .jr-details button:not(.jr-entry){padding:8px 10px;min-height:40px;border-radius:8px;background:var(--jr-paper);border:1px solid var(--jr-line);font-size:11px;margin:4px 0}
+#app-screen .jr-filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:7px;align-items:end}
+#app-screen .jr-filter-grid label{display:flex;flex-direction:column;gap:6px;min-width:0;color:var(--jr-muted);font-size:10px}
+#app-screen .jr-filter-grid select{width:100%;padding:9px 6px;background:var(--jr-paper);border:1px solid var(--jr-line);border-radius:8px;font-size:12px;min-height:40px}
+#app-screen .jr-filter-grid button[aria-pressed=true]{color:var(--jr-accent);background:var(--jr-soft);box-shadow:inset 0 0 0 1px var(--jr-accent)}
+#app-screen .jr-result-count{font-size:10px;color:var(--jr-muted);letter-spacing:.08em;margin:18px 2px 12px}
+#app-screen .jr-atelier .jr-entry{position:relative;border:1px solid var(--jr-line);border-left:3px solid var(--jr-accent);border-radius:4px 17px 17px 4px;padding:19px 20px 15px;margin:0 0 19px;background:linear-gradient(90deg,#9b856608,transparent 12%),var(--jr-paper);box-shadow:0 3px 0 -1px var(--jr-paper),0 4px 0 -1px var(--jr-line),0 8px 18px -10px #60402b35;overflow:hidden;animation:jr-page-arrive .45s both;animation-delay:calc(var(--jr-order,0)*35ms);transform-origin:left center}
+#app-screen .jr-entry header{justify-content:flex-start;gap:12px}
+#app-screen .jr-entry time{display:flex;align-items:center;gap:10px;color:var(--jr-muted)}
+#app-screen .jr-entry time b{font-family:Georgia,serif;font-size:31px;line-height:1;color:var(--jr-ink);font-weight:400}
+#app-screen .jr-entry time span{font-size:9px;letter-spacing:1px}
+#app-screen .jr-entry .jr-entry-mood{margin-left:auto}
+#app-screen .jr-entry .jr-ribbon{position:absolute;top:0;right:59px;width:17px;height:28px;text-align:center;padding-top:4px;font-size:10px;background:#c7a56c;color:#fff8e7;clip-path:polygon(0 0,100% 0,100% 100%,50% 81%,0 100%);filter:drop-shadow(0 2px 2px #53432722)}
+#app-screen .jr-entry h3{font-family:'Noto Serif JP','Yu Mincho',serif;font-size:17px;line-height:1.7;font-weight:600;color:var(--jr-ink);margin:16px 0 8px}
+#app-screen .jr-entry p{font-size:12px;color:var(--jr-muted);line-height:1.95;-webkit-line-clamp:3}
+#app-screen .jr-entry footer{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;padding-top:12px;margin-top:13px;border-top:1px solid var(--jr-line)}
+#app-screen .jr-entry .ev-tags{margin:0;flex:1;min-width:0;gap:5px}
+#app-screen .jr-entry .ev-tags span{color:var(--jr-accent);background:var(--jr-soft);font-size:9px;overflow-wrap:anywhere;max-width:100%;padding:4px 6px}
+#app-screen .jr-entry footer>small{font-size:9px;color:var(--jr-muted);white-space:nowrap}
+#app-screen .jr-entry footer>small span{font-size:15px;color:var(--jr-accent);padding-left:8px}
+#app-screen .jr-load-more{display:block;min-height:44px;width:100%;border:1px dashed var(--jr-line);border-radius:12px;font-size:12px}
+#app-screen .jr-empty{text-align:center;padding:27px 10px;background:var(--jr-paper);border:1px dashed var(--jr-line);border-radius:18px}
+#app-screen .jr-empty .jr-mood-art{width:50px;height:50px;margin:auto}
+#app-screen .jr-empty h2{font-size:17px;font-weight:500;margin:15px 0 7px}
+#app-screen .jr-empty p{font-size:11px;color:var(--jr-muted);line-height:1.8}
+#app-screen .jr-empty button{font-size:12px;color:var(--jr-accent);min-height:44px;padding:9px 16px;border-bottom:1px solid var(--jr-line)}
+#app-screen .jr-panel{border:1px solid var(--jr-line);border-radius:18px;background:var(--jr-paper);padding:18px 14px;box-shadow:0 6px 20px #64473707;animation:jr-page-arrive .4s both}
+#app-screen .jr-section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:17px}
+#app-screen .jr-section-head h2{font-size:14px;font-weight:500;margin:6px 0 0}
+#app-screen .jr-section-head button{font-size:11px;border-radius:9px;min-height:42px;min-width:38px;background:var(--jr-base);padding:6px}
+#app-screen .jr-calendar .jr-section-head button{font-size:25px}
+#app-screen .jr-calendar label{text-align:center;min-width:0}
+#app-screen .jr-calendar label .jr-eyebrow{display:block}
+#app-screen #jr-month{display:block;font-size:17px;text-align:center;font-weight:500;border:0;background:transparent;padding:8px 0;max-width:170px}
+#app-screen .jr-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px 3px}
+#app-screen .jr-calendar-grid .jr-weekday{text-align:center;font-size:9px;color:var(--jr-muted);padding:8px 0}
+#app-screen .jr-calendar-grid button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:57px;border-radius:9px;border:1px solid transparent;font-size:10px;padding:3px 0}
+#app-screen .jr-calendar-grid .jr-mood-art{width:24px;height:24px}
+#app-screen .jr-calendar-grid i{width:4px;height:4px;background:var(--jr-line);border-radius:50%;margin:10px}
+#app-screen .jr-calendar-grid .has-entry{background:var(--jr-base);box-shadow:inset 0 1px 0 #fff7,0 2px 2px #7b65400b}
+#app-screen .jr-calendar-grid [aria-current=date]{border-color:var(--jr-accent)}
+#app-screen .jr-calendar footer{display:flex;align-items:center;justify-content:space-between;padding-top:14px;margin-top:16px;border-top:1px solid var(--jr-line);font-size:10px;color:var(--jr-muted)}
+#app-screen .jr-calendar footer button{color:var(--jr-accent);padding:8px;min-height:40px}
+#app-screen .jr-mini-stats{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:5px;border-block:1px solid var(--jr-line);padding:17px 0;margin-bottom:14px}
+#app-screen .jr-mini-stats>div{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;min-width:0}
+#app-screen .jr-mini-stats>div+div{border-left:1px solid var(--jr-line)}
+#app-screen .jr-mini-stats strong{font-size:21px;font-weight:500;line-height:1.2;overflow-wrap:anywhere;max-width:100%}
+#app-screen .jr-mini-stats small{font-size:10px;padding-left:3px}
+#app-screen .jr-mini-stats span{font-size:8px;color:var(--jr-muted)}
+#app-screen .jr-mood-chart{display:block;width:100%;height:auto;color:var(--jr-accent);margin:17px 0 22px}
+#app-screen .jr-chart-line{stroke-dasharray:600;stroke-dashoffset:0;animation:jr-chart-draw 1.4s ease-out both}
+#app-screen .jr-distribution>div{display:grid;grid-template-columns:26px 42px 1fr 20px;gap:10px;align-items:center;margin:11px 0;font-size:10px}
+#app-screen .jr-distribution .jr-mood-art{width:25px;height:25px}
+#app-screen .jr-distribution b{text-align:right;font-weight:500}
+#app-screen .jr-atelier meter{appearance:none;-webkit-appearance:none;width:100%;height:7px;background:var(--jr-soft);border:0;border-radius:10px;overflow:hidden}
+#app-screen .jr-atelier meter::-webkit-meter-bar{background:var(--jr-soft);border:0;border-radius:10px;height:7px}
+#app-screen .jr-atelier meter::-webkit-meter-optimum-value{background:var(--jr-accent);border-radius:10px}
+#app-screen .jr-atelier meter::-moz-meter-bar{background:var(--jr-accent);border-radius:10px}
+#app-screen .jr-insights .jr-details button{display:block;width:100%;text-align:left}
+#app-screen .jr-muted{font-size:10px;color:var(--jr-muted);line-height:1.9;margin-bottom:0}
+#app-screen .jr-bottom-actions{display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;border-top:1px solid var(--jr-line);margin-top:25px;padding-top:12px}
+#app-screen .jr-bottom-actions button{font-size:10px;min-height:44px;color:var(--jr-accent)}
+#app-screen .jr-privacy{font-size:9px;color:var(--jr-muted);text-align:center;line-height:1.8;margin:24px 0 0}
+#app-screen .jr-recovery{padding:15px;border-radius:12px;background:var(--jr-paper);border:1px solid #b8996255;font-size:11px;line-height:1.8;margin:0 0 20px}
+#app-screen .jr-recovery p{font-size:10px;color:var(--jr-muted);margin:5px 0}
+#app-screen .jr-recovery button{display:block;text-align:left;font-size:11px;color:var(--jr-accent);min-height:40px;padding:7px 0;overflow-wrap:anywhere}
+/* The editor is a real input surface; decorative layers never intercept typing. */
+#app-screen .jr-editor-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 16px}
+#app-screen .jr-editor-top .jr-eyebrow{font-size:8px;letter-spacing:1.5px}
+#app-screen .jr-editor-top button{font-size:10px;min-height:40px;padding:8px 10px;border-radius:9px;background:var(--jr-paper);border:1px solid var(--jr-line)}
+#app-screen .jr-editor-top button[aria-pressed=true]{color:var(--jr-accent);border-color:var(--jr-accent)}
+#app-screen .jr-editor .ev-editor-meta{border-block:1px solid var(--jr-line);padding:8px 0;margin-bottom:20px;gap:8px}
+#app-screen .jr-editor .ev-editor-meta label{display:flex;align-items:center;gap:6px;font-size:9px;color:var(--jr-muted);min-width:0}
+#app-screen .jr-editor .ev-editor-meta input{font-size:12px;padding:8px 0;min-height:40px}
+#app-screen .jr-local-label{font-size:8px;color:var(--jr-muted);text-align:right}
+#app-screen .jr-mood-picker>span{display:block;font-size:11px;color:var(--jr-muted);margin:0 0 12px}
+#app-screen .jr-mood-picker>div{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+#app-screen .jr-mood-picker button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:11px 2px 9px;border-radius:13px;border:1px solid transparent;font-size:9px;min-width:0}
+#app-screen .jr-mood-picker button[aria-pressed=true]{background:var(--jr-paper);border-color:var(--jr-accent);box-shadow:0 3px 0 var(--jr-soft),0 6px 12px #6f574515}
+#app-screen .jr-mood-picker button[aria-pressed=true] .jr-mood-art{animation:jr-token-select .45s ease-out}
+#app-screen .jr-prompt{padding:0 0 12px;color:var(--jr-ink)}
+#app-screen .jr-prompt p{font-family:'Noto Serif JP','Yu Mincho',serif;line-height:1.9;font-size:14px;margin:2px 0 10px}
+#app-screen .jr-prompt button+button{margin-left:6px}
+#app-screen .jr-template-buttons{display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid var(--jr-line);padding-top:10px}
+#app-screen .jr-paper{position:relative;border:1px solid var(--jr-line);border-radius:4px 15px 15px 4px;padding:13px 18px 18px;margin:24px 0 30px;background:linear-gradient(90deg,#8b725508,transparent 16px),var(--jr-paper);box-shadow:0 4px 0 -1px var(--jr-paper),0 5px 0 -1px var(--jr-line),0 8px 0 -2px var(--jr-paper),0 9px 0 -2px var(--jr-line),0 14px 26px -16px #48362b40;animation:jr-page-arrive .45s both}
+#app-screen .jr-paper:before{content:'';position:absolute;left:9px;top:17px;bottom:20px;width:1px;background:var(--jr-line);pointer-events:none}
+#app-screen .jr-paper-heading{display:flex;align-items:center;justify-content:space-between;font-size:8px;letter-spacing:2.7px;color:var(--jr-muted)}
+#app-screen .jr-paper-heading button{font-size:21px;min-width:40px;min-height:40px;color:var(--jr-muted);border-radius:8px;letter-spacing:0}
+#app-screen .jr-paper-heading button[aria-pressed=true]{color:#ac7d38;background:#c7a56c18;text-shadow:0 1px 1px #76572820}
+#app-screen .jr-editor .ev-editor-title{font-family:'Noto Serif JP','Yu Mincho',serif;font-size:23px;font-weight:500;padding:12px 0 18px}
+#app-screen .jr-editor .ev-editor-toolbar{gap:5px;border-bottom:1px solid var(--jr-line);margin:0;padding-bottom:7px}
+#app-screen .jr-editor .ev-editor-toolbar button{font-size:10px;padding:6px 8px;min-height:38px;color:var(--jr-accent);background:var(--jr-base);border-radius:7px}
+#app-screen .jr-editor .ev-editor-toolbar>span{font-size:9px;white-space:nowrap;color:var(--jr-muted)}
+#app-screen .jr-editor .ev-journal-body{font-size:15px;line-height:32px;padding:8px 0 0;min-height:320px;background:repeating-linear-gradient(transparent 0 31px,var(--jr-line) 31px 32px);background-origin:content-box;caret-color:var(--jr-accent);resize:vertical;border:0;border-radius:0;margin:0 0 15px}
+#app-screen .jr-writing-goal{display:flex;align-items:center;justify-content:space-between;gap:15px;border-top:1px solid var(--jr-line);padding-top:14px;font-size:8px;color:var(--jr-muted)}
+#app-screen .jr-writing-goal meter{max-width:95px;height:5px}
+#app-screen .jr-tags-label{display:block;font-size:10px;color:var(--jr-muted);margin:0 0 8px}
+#app-screen .jr-editor #ev-journal-tags{background:var(--jr-paper);border:1px solid var(--jr-line);border-radius:10px;font-size:12px;min-height:44px;margin:0}
+#app-screen .jr-save-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:15px 0;min-height:30px;font-size:10px;line-height:1.9;color:var(--jr-muted)}
+#app-screen .jr-save-line>span{flex:1;min-width:130px}
+#app-screen .jr-save-line button{font-size:10px;border:1px solid var(--jr-line);padding:8px 10px;min-height:40px;border-radius:8px;background:var(--jr-paper)}
+#app-screen .jr-save-error{color:#a34e42}
+#app-screen .jr-editor-actions{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px;border-top:1px solid var(--jr-line);padding-top:7px}
+#app-screen .jr-editor-actions button{font-size:10px;min-height:42px;padding:8px 2px;color:var(--jr-muted)}
+#app-screen .jr-editor-actions .jr-danger{color:#a34e42}
+#app-screen .jr-focused .ev-editor-meta,#app-screen .jr-focused .jr-mood-picker,#app-screen .jr-focused .jr-inspiration,#app-screen .jr-focused .jr-tags-label,#app-screen .jr-focused #ev-journal-tags,#app-screen .jr-focused .jr-writing-goal{display:none}
+#app-screen .jr-focused .jr-paper{margin-top:5px}
+#app-screen .jr-focused .ev-journal-body{min-height:55vh}
+.jr-tool-sheet{--jr-accent:#84616d;font-size:12px;color:var(--ink,#51453f)}
+.jr-tool-sheet h3{font-size:13px;margin:22px 0 13px}.jr-tool-sheet p{font-size:11px;line-height:1.9;color:var(--muted,#80726a)}
+.jr-theme-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.jr-theme-options button{display:flex;flex-direction:column;align-items:center;gap:10px;font:inherit;color:inherit;border:1px solid #aa917329;padding:12px 6px;border-radius:12px;min-height:82px}
+.jr-theme-options button[aria-pressed=true]{outline:2px solid var(--jr-accent);outline-offset:1px}
+.jr-theme-options i{width:30px;height:34px;border-radius:2px 6px 6px 2px;box-shadow:2px 2px 0 #d3c3ad,3px 3px 0 #8d715960;border-left:3px solid #94766f66}
+.jr-theme-linen{background:#f3eee5}.jr-theme-rose{background:#f4e2e3}.jr-theme-sage{background:#dee9d9}
+.jr-tool-actions{display:flex;flex-direction:column;gap:8px;margin:16px 0}.jr-tool-actions button{font:inherit;min-height:44px;padding:10px;border:1px solid #aa917329;background:#9877510c;color:inherit;border-radius:10px;text-align:left}
+.jr-file-label{display:block;font-size:12px;margin:20px 0 10px}.jr-file-label input{display:block;max-width:100%;font:inherit;margin:12px 0;min-height:40px}#jr-import-status{color:#a34e42}
+/* Light and dark palettes are scoped to the journal, never other everyday apps. */
+.screen-dark-mode #app-screen .jr-atelier{--jr-ink:#e9dfd0;--jr-muted:#baac9e;--jr-accent:#d1a8b6;--jr-paper:#302a2c;--jr-base:#241f22;--jr-soft:#40343a;--jr-line:#d4b19e24}
+.screen-dark-mode #app-screen .jr-atelier[data-journal-theme=rose]{--jr-paper:#35282f;--jr-base:#291f27;--jr-soft:#49323f;--jr-accent:#e2b6c9;--jr-line:#d7acc224}
+.screen-dark-mode #app-screen .jr-atelier[data-journal-theme=sage]{--jr-paper:#27312d;--jr-base:#202823;--jr-soft:#35443b;--jr-accent:#b3cfb6;--jr-line:#b8cbae24}
+.screen-dark-mode #app-screen .jr-hero .jr-book-art{filter:brightness(.86) saturate(.8) drop-shadow(3px 10px 5px #0003)}
+.screen-dark-mode #app-screen .jr-save-error,.screen-dark-mode #app-screen .jr-editor-actions .jr-danger{color:#edae9d}
+.screen-dark-mode .jr-tool-sheet{--jr-accent:#dbafc2;color:#e8dedb}.screen-dark-mode .jr-tool-sheet p{color:#baacb6}.screen-dark-mode #jr-import-status{color:#edae9d}
+@keyframes jr-book-arrive{from{opacity:0;transform:translate(12px,10px) rotate(5deg)}to{opacity:1;transform:translate(0,0) rotate(0)}}
+@keyframes jr-foil{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes jr-page-arrive{from{opacity:0;transform:perspective(700px) translateY(10px) rotateX(3deg)}to{opacity:1;transform:none}}
+@keyframes jr-token-select{0%{transform:translateY(0) scale(1)}45%{transform:translateY(-4px) scale(1.08)}100%{transform:translateY(0) scale(1)}}
+@keyframes jr-chart-draw{from{stroke-dashoffset:600}to{stroke-dashoffset:0}}
+@media(hover:hover) and (pointer:fine){#app-screen .jr-entry:hover{transform:perspective(700px) translateY(-3px) rotateY(-1deg);box-shadow:0 4px 0 -1px var(--jr-paper),0 5px 0 -1px var(--jr-line),0 16px 22px -12px #67453138}#app-screen .jr-week button:hover,#app-screen .jr-calendar-grid button:hover{background:var(--jr-soft)}#app-screen .jr-hero:hover .jr-book-art{transform:translateY(-3px);transition:transform .5s}}
+@media(max-width:360px){#app-screen .jr-atelier{padding-inline:14px}#app-screen .jr-hero{padding-left:18px;min-height:259px}#app-screen .jr-hero h1{font-size:21px}#app-screen .jr-hero .jr-book-art{width:175px;right:-33px;top:68px}#app-screen .jr-hero .jr-primary{font-size:10px;padding-inline:10px}#app-screen .jr-hero-foot{left:18px;right:14px;font-size:7px}#app-screen .jr-atelier .jr-entry{padding:16px 15px}#app-screen .jr-paper{padding-inline:14px}#app-screen .jr-mood-picker .jr-mood-art{width:31px;height:31px}#app-screen .jr-mood-picker button{font-size:8px}#app-screen .jr-panel{padding-inline:10px}#app-screen .jr-mini-stats strong{font-size:18px}}
+@media(min-width:650px){#app-screen .jr-hero .jr-book-art{width:240px;right:0;top:25px}#app-screen .jr-hero h1{font-size:26px}#app-screen .jr-hero-copy{max-width:65%}}
+@media(max-height:550px){#app-screen .jr-hero{min-height:220px;padding-top:18px}#app-screen .jr-hero h1{line-height:1.6;font-size:20px}#app-screen .jr-hero p{margin-bottom:15px}#app-screen .jr-hero .jr-book-art{top:32px;width:185px}#app-screen .jr-editor .ev-journal-body{min-height:220px}}
+[data-reduce-motion=true] #app-screen .jr-atelier *,[data-reduce-motion=true] #app-screen .jr-atelier *:before,[data-reduce-motion=true] #app-screen .jr-atelier *:after{animation:none!important;transition:none!important}
+[data-reduce-motion=true] #app-screen .jr-atelier .jr-entry,[data-reduce-motion=true] #app-screen .jr-atelier .jr-book-art,[data-reduce-motion=true] #app-screen .jr-atelier button:active{transform:none!important}
+@media(prefers-reduced-motion:reduce){#app-screen .jr-atelier *,#app-screen .jr-atelier *:before,#app-screen .jr-atelier *:after{animation:none!important;transition:none!important}#app-screen .jr-atelier .jr-entry,#app-screen .jr-atelier .jr-book-art,#app-screen .jr-atelier button:active{transform:none!important}}
+@media(forced-colors:active){#app-screen .jr-hero .jr-book-art{display:none}#app-screen .jr-atelier button,#app-screen .jr-paper,#app-screen .jr-panel{border:1px solid CanvasText}#app-screen .jr-atelier button[aria-pressed=true],#app-screen .jr-atelier [aria-current=date]{outline:2px solid Highlight}#app-screen .jr-atelier .jr-entry{animation:none}#app-screen .jr-empty-day{border-color:CanvasText}}
