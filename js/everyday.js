@@ -486,7 +486,7 @@
   const readingStatusName=x=>({finished:'読了',reading:'読書中',planned:'未読'}[readingStatus(x)]);
   const readingPercent=x=>Math.max(0,Math.min(100,Math.round(x.page/x.total*100)||0));
   const readingButton=(action,label,id='',extra='')=>`<button type="button" class="rd-button" data-action="${action}" data-id="${esc(id)}" ${extra}>${label}</button>`;
-  const readingView=(html,actions='',back=false)=>A.view(A.nav('読書',actions,back?'evReadingHome':'',back?'本棚':'')+`<div class="app-content everyday ev-reading rd-atelier">${html}</div>`);
+  const readingView=(html,actions='',back=false)=>{readingPauseClock();A.view(A.nav('読書',actions,back?'evReadingHome':'',back?'本棚':'')+`<div class="app-content everyday ev-reading rd-atelier">${html}</div>`);};
   function readingTheme(x){return readingThemes.some(t=>t[0]===x.coverTheme)?x.coverTheme:readingThemes[Array.from(String(x.id||x.title)).reduce((n,c)=>n+c.charCodeAt(0),0)%readingThemes.length][0];}
   function readingCover(x){
     const id='rd-art-'+(++readingSvgId),motif=readingMotifs.some(t=>t[0]===x.coverMotif)?x.coverMotif:'botanical';
@@ -536,7 +536,7 @@
       ${chips([['all','すべて'],['planned','未読'],['reading','読書中'],['finished','読了'],['favorite','お気に入り']],readingFilter,'evReadingFilter')}
       <div class="rd-filters"><label>分類<select id="rd-category"><option value="">すべて</option>${categories.map(c=>`<option value="${esc(c)}" ${c===readingCategory?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label>並び順<select id="rd-sort">${[['recent','更新順'],['title','書名順'],['progress','進捗順'],['rating','評価順'],['deadline','目標日順']].map(([v,t])=>`<option value="${v}" ${v===readingSort?'selected':''}>${t}</option>`).join('')}</select></label></div>
       <p id="rd-result-count" class="rd-count" role="status"></p><div id="rd-results"></div>${readingButton('rdMore','さらに36冊を表示','','id="rd-more" hidden')}
-      ${readingWeek()}<div class="rd-footer-actions">${readingButton('frReading','月の集計・引用検索')}${readingButton('rdShelfExport','本棚を書き出す')}</div><p class="rd-local-note">このブラウザに保存 · 本文の配信・クラウド同期はありません</p>`,btn('evBookEdit','本を追加','plus'));
+      ${readingTimer&&read('reading').some(b=>b.id===readingTimer.bookId)?`<div class="rd-footer-actions">${readingButton('rdClockPrevious','保存した計時を開く')}</div>`:''}${readingWeek()}<div class="rd-footer-actions">${readingButton('frReading','月の集計・引用検索')}${readingButton('rdShelfExport','本棚を書き出す')}${readingButton('rdImport','バックアップを復元')}</div><p class="rd-local-note">このブラウザに保存 · 本文の配信・クラウド同期はありません</p>`,btn('evBookEdit','本を追加','plus'));
     $('#rd-search').oninput=e=>{readingQuery=e.target.value;readingLimit=36;readingResults();};
     $('#rd-category').onchange=e=>{readingCategory=e.target.value;readingLimit=36;readingResults();};
     $('#rd-sort').onchange=e=>{readingSort=e.target.value;readingResults();};readingResults();
@@ -563,12 +563,12 @@
     const x=read('reading').find(x=>x.id===activeBook);if(!x)return readingApp();
     const sessions=bookSessions(x.id).sort((a,b)=>String(b.date).localeCompare(String(a.date))),quotes=bookQuotes(x.id),marks=Array.isArray(x.bookmarks)?x.bookmarks:[];
     const minutes=readingSum(sessions,s=>s.minutes),pages=readingSum(sessions,s=>Math.max(0,s.to-s.from)),estimate=pages>0&&minutes>0?Math.ceil(Math.max(0,x.total-x.page)*minutes/pages):null;
-    readingView(`<section class="rd-detail-hero"><div class="rd-detail-stage">${readingCover(x)}<span class="rd-stage-pedestal"></span></div><span class="rd-eyebrow">${readingStatusName(x)}${x.category?' / '+esc(x.category):''}</span><h1>${esc(x.title)}</h1><p>${esc(x.author||'著者未設定')}</p><div class="ev-rating">${[1,2,3,4,5].map(n=>`<button data-action="evBookRate" data-id="${n}" aria-label="${n}つ星${Number(x.rating)===n?'を解除':''}" aria-pressed="${n===Number(x.rating||0)}">${n<=Number(x.rating||0)?'★':'☆'}</button>`).join('')}</div><div class="rd-detail-actions">${readingButton('rdFavorite',x.favorite?'お気に入り済み':'お気に入り',x.id,`aria-pressed="${!!x.favorite}"`)}${readingButton('evBookEdit','編集',x.id)}</div></section>
+    readingView(`<section class="rd-detail-hero"><div class="rd-detail-stage">${readingCover(x)}<span class="rd-stage-pedestal"></span></div><span class="rd-eyebrow">${readingStatusName(x)}${x.category?' / '+esc(x.category):''}</span><h1>${esc(x.title)}</h1><p>${esc(x.author||'著者未設定')}</p><div class="ev-rating">${[1,2,3,4,5].map(n=>`<button data-action="evBookRate" data-id="${n}" aria-label="${n}つ星${Number(x.rating)===n?'を解除':''}" aria-pressed="${n===Number(x.rating||0)}">${n<=Number(x.rating||0)?'★':'☆'}</button>`).join('')}</div><div class="rd-detail-actions">${readingButton('rdFavorite',x.favorite?'お気に入り済み':'お気に入り',x.id,`aria-pressed="${!!x.favorite}"`)}${readingButton('evBookEdit','編集',x.id)}${readingButton('rdRoom','集中読書',x.id)}</div></section>
       <section class="rd-progress-panel"><header><span>読書の進捗</span><strong>${readingPercent(x)}<small>%</small></strong></header>${progress(readingPercent(x),x.title)}<div class="rd-progress-caption"><span>${x.page} / ${x.total} ページ</span>${readingButton('evBookProgress','修正',x.id)}</div><div class="rd-detail-metrics"><span><strong>${Math.max(0,x.total-x.page)}</strong>残りページ</span><span><strong>${minutes}</strong>記録した分数</span><span><strong>${estimate===null?'—':estimate}</strong>残り分数の目安</span></div>${readingButton('evReadingSession',x.page>=x.total?'読書時間を記録':'読書を記録')}<p class="rd-small">残り時間は保存した読書ペースからの推定です。</p></section>
       <button class="rd-plan" data-action="rdDeadline" data-id="${esc(x.id)}">${A.icon('calendar')}<span><small>読了のプラン</small><strong>${esc(readingPlan(x))}</strong></span>${A.icon('arrow')}</button>
-      ${section('しおり',btn('rdBookmarkAdd','しおりを追加','plus'))}<div class="rd-bookmarks">${marks.length?marks.map(m=>`<div class="rd-bookmark"><span><b>p. ${m.page}</b><span>${esc(m.text||'しおり')}</span></span>${btn('rdBookmarkDelete','しおりを削除','trash',m.id)}</div>`).join(''):'<p class="rd-small">気になるページを、ひとことと一緒に。</p>'}</div>
+      ${section('しおり',btn('rdBookmarkAdd','しおりを追加','plus'))}<div class="rd-bookmarks">${marks.length?marks.map(m=>`<div class="rd-bookmark"><button class="rd-bookmark-edit" data-action="rdBookmarkEdit" data-id="${esc(m.id)}"><b>p. ${m.page}</b><span>${esc(m.text||'しおり')}</span></button>${btn('rdBookmarkDelete','しおりを削除','trash',m.id)}</div>`).join(''):'<p class="rd-small">気になるページを、ひとことと一緒に。</p>'}</div>
       ${section('読書メモ',btn('evBookEdit','メモを編集','edit',x.id))}<div class="rd-paper-note">${esc(x.note||'読んで感じたことを残しましょう。')}</div>
-      ${section('心に残った一節',btn('evQuoteAdd','引用を追加','plus'))}${quotes.slice(0,readingQuoteLimit).map(q=>`<blockquote class="rd-quote"><span class="rd-quote-glyph" aria-hidden="true">“</span><p>${esc(q.text)}</p><footer><span>${q.page?'p. '+q.page:'ページ未指定'}</span><span>${btn('rdQuoteEdit','引用を編集','edit',q.id)}${btn('evQuoteDelete','引用を削除','trash',q.id)}</span></footer></blockquote>`).join('')||'<p class="rd-small">残しておきたい言葉を引用に。</p>'}${quotes.length>readingQuoteLimit?readingButton('rdMoreQuotes','引用をさらに30件表示'):''}
+      ${section('心に残った一節',btn('evQuoteAdd','引用を追加','plus'))}${quotes.slice(0,readingQuoteLimit).map(q=>`<blockquote class="rd-quote"><span class="rd-quote-glyph" aria-hidden="true">“</span><p>${esc(q.text)}</p><footer><span>${q.page?'p. '+q.page:'ページ未指定'}</span><span>${btn('rdQuoteCard','引用カードを作る','download',q.id)}${btn('rdQuoteEdit','引用を編集','edit',q.id)}${btn('evQuoteDelete','引用を削除','trash',q.id)}</span></footer></blockquote>`).join('')||'<p class="rd-small">残しておきたい言葉を引用に。</p>'}${quotes.length>readingQuoteLimit?readingButton('rdMoreQuotes','引用をさらに30件表示'):''}
       <details class="rd-history" open><summary>読書の履歴 <span>${sessions.length}回</span></summary>${sessions.slice(0,readingSessionLimit).map(s=>`<article><span class="rd-history-dot"></span><div><strong>${esc(s.date)} <small>${s.minutes}分</small></strong><p>${s.from} → ${s.to}ページ · ${Math.max(0,s.to-s.from)}ページ</p>${s.note?`<p>${esc(s.note)}</p>`:''}</div>${btn('rdSessionEdit','記録の日付・時間・メモを編集','edit',s.id)}${btn('rdSessionDelete','記録を削除','trash',s.id)}</article>`).join('')||'<p class="rd-small">記録はまだありません。</p>'}${sessions.length>readingSessionLimit?readingButton('rdMoreSessions','履歴をさらに30件表示'):''}</details>
       <div class="rd-footer-actions">${readingButton('evBookExport','この本の記録を保存')}${readingButton('evReadingHome','本棚に戻る')}</div>`,btn('evBookExport','読書記録を書き出す','download'),true);
   }
@@ -598,17 +598,20 @@
       return upsert('reading',{...latest,deadline:v.deadline},bookDetail);
     });
   };
-  A.actions.evReadingSession=()=>{
+  A.actions.evReadingSession=el=>{
     const x=read('reading').find(b=>b.id===activeBook);if(!x)return;
-    A.form('読書を記録',field('読んだ日','date',dateKey(),'date',`required max="${dateKey()}"`)+field('読み終えたページ','page',x.page,'number',`required min="${x.page}" max="${x.total}" step="1"`)+`<div class="rd-page-presets">${[10,25,50].map(n=>readingButton('rdSessionPages','＋'+n+'ページ',String(n))).join('')}${readingButton('rdSessionPages','最後まで','end')}</div>`+field('読書時間（分）','minutes',15,'number','required min="1" max="1440" step="1"')+field('ひとこと','note','','text','maxlength="300"'),v=>{
+    const measured=el?.dataset?.timerId&&readingTimer?.id===el.dataset.timerId?{...readingTimer}:null;
+    A.form('読書を記録',field('読んだ日','date',dateKey(),'date',`required max="${dateKey()}"`)+field('読み終えたページ','page',x.page,'number',`required min="${x.page}" max="${x.total}" step="1"`)+`<div class="rd-page-presets">${[10,25,50].map(n=>readingButton('rdSessionPages','＋'+n+'ページ',String(n))).join('')}${readingButton('rdSessionPages','最後まで','end')}</div>`+field('読書時間（分）','minutes',measured?Math.max(1,Math.min(1440,Math.ceil(measured.elapsed/60000))):15,'number','required min="1" max="1440" step="1"')+field('ひとこと','note','','text','maxlength="300"'),v=>{
       const books=read('reading'),at=books.findIndex(b=>b.id===x.id),latest=books[at];
       if(!latest)return false;
       if(latest.page!==x.page){A.toast('進捗が変更されました。閉じて記録し直してください');return false;}
       if(!readingNumber(v.page,latest.page,latest.total)||!readingNumber(v.minutes,1,1440)||!readingDate(v.date)||v.date>dateKey())return false;
       const to=Number(v.page),finished=to>=latest.total&&latest.page<latest.total;
-      const session={id:A.id(),bookId:x.id,date:v.date,from:latest.page,to,minutes:Number(v.minutes),note:v.note.trim()};
+      const session={id:A.id(),bookId:x.id,date:v.date,from:latest.page,to,minutes:Number(v.minutes),note:v.note.trim(),...(measured?{timerId:measured.id}:{})};
+      if(measured&&read('readingSessions').some(row=>row.timerId===measured.id)){A.toast('この計時はすでに記録済みです');return false;}
       books[at]={...latest,page:to,updatedAt:new Date().toISOString(),finishedAt:to>=latest.total?(latest.finishedAt||v.date):null};
-      if(!A.saveBatch({readingSessions:[session,...read('readingSessions')],reading:books}))return false;
+      if(!A.saveBatch({readingSessions:[session,...read('readingSessions')],reading:books,...(measured?{readingTimer:null}:{})}))return false;
+      if(measured){readingTimer=null;readingClockDirty=false;}
       bookDetail();if(finished){$('.rd-detail-hero')?.classList.add('rd-completed');A.toast('読了おめでとうございます');}else A.toast('読書を記録しました');
     });
   };
@@ -653,6 +656,146 @@
     exportText('読書記録.txt',[x.title,x.author,x.category||'',x.page+'/'+x.total+'ページ','★'.repeat(Math.min(5,Math.max(0,x.rating||0))),x.deadline?'読了目標 '+x.deadline:'',x.finishedAt?'読了日 '+x.finishedAt:'','',x.note||'','','しおり',...(x.bookmarks||[]).map(m=>'p. '+m.page+' '+m.text),'','引用',...bookQuotes(x.id).map(q=>q.text+'\n'+(q.page?'p. '+q.page:'')),'','読書の履歴',...sessions.map(s=>s.date+' · '+s.from+' → '+s.to+'ページ · '+s.minutes+'分'+(s.note?'\n'+s.note:'')),'合計 '+readingSum(sessions,s=>s.minutes)+'分'].join('\n'));
   };
   A.actions.rdShelfExport=()=>exportText('reading_atelier_'+dateKey()+'.json',JSON.stringify({app:'aura-reading',version:1,exportedAt:new Date().toISOString(),reading:read('reading'),readingSessions:read('readingSessions'),readingQuotes:read('readingQuotes'),readingGoal:A.load('readingGoal',12)},null,2),'application/json');
+
+  // Visible-only stopwatch. Restores paused checkpoints; never claims background measurement.
+  const readingStoredClock=A.load('readingTimer',null);
+  let readingTimer=readingStoredClock&&typeof readingStoredClock.id==='string'&&typeof readingStoredClock.bookId==='string'&&Number.isFinite(readingStoredClock.elapsed)?{id:readingStoredClock.id,bookId:readingStoredClock.bookId,elapsed:Math.max(0,Math.min(86400000,readingStoredClock.elapsed)),target:[15,25,45,60].includes(readingStoredClock.target)?readingStoredClock.target:25}:null;
+  let readingClockStart=null,readingClockInterval=null,readingClockCleanup=false,readingClockDirty=false,readingClockCheckpoint=0,readingClockNotified=false;
+  let readingRoomTheme=['paper','night'].includes(A.load('readingRoomTheme','paper'))?A.load('readingRoomTheme','paper'):'paper';
+  const readingClockElapsed=()=>Math.min(86400000,(readingTimer?.elapsed||0)+(readingClockStart===null?0:Math.max(0,performance.now()-readingClockStart)));
+  function readingClockSave(){
+    if(!readingTimer)return true;
+    readingClockDirty=!A.save('readingTimer',{...readingTimer,elapsed:Math.floor(readingClockElapsed())});
+    return !readingClockDirty;
+  }
+  function readingPauseClock(){
+    if(readingClockStart!==null&&readingTimer){readingTimer.elapsed=readingClockElapsed();readingClockStart=null;readingClockSave();}
+    if(readingClockInterval!==null)clearInterval(readingClockInterval);readingClockInterval=null;
+  }
+  function readingClockTick(){
+    const root=$('#rd-room');if(!root||!readingTimer)return;
+    if(document.hidden||A.current!=='reading'||A.locked){readingPauseClock();}
+    const elapsed=readingClockElapsed(),seconds=Math.floor(elapsed/1000),clock=$('#rd-clock');
+    clock.textContent=`${String(Math.floor(seconds/3600)).padStart(2,'0')}:${String(Math.floor(seconds/60)%60).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
+    const percent=Math.min(100,elapsed/(readingTimer.target*600));
+    root.style.setProperty('--rd-session-progress',percent+'%');root.dataset.running=String(readingClockStart!==null);
+    $('#rd-clock-toggle').textContent=readingClockStart===null?'計測を開始':'一時停止';
+    const status=readingClockDirty?'未保存 · 再読み込み前に保存を再試行':readingClockStart!==null?'計測中 · 画面を離れると一時停止':elapsed?'一時停止 · 続きから計測できます':'本を手元に用意して、はじめましょう';
+    if($('#rd-clock-state').textContent!==status)$('#rd-clock-state').textContent=status;
+    $('#rd-clock-retry').hidden=!readingClockDirty;
+    A.$$('[data-action=rdClockTarget]').forEach(b=>b.disabled=readingClockStart!==null);
+    if(elapsed>=readingTimer.target*60000&&!readingClockNotified){readingClockNotified=true;A.toast('目標時間に到達しました。計測は続きます');}
+    if(elapsed>=86400000){readingPauseClock();$('#rd-clock-state').textContent='24時間の上限です。記録またはリセットしてください。';}
+    if(readingClockStart!==null&&!readingClockDirty&&performance.now()-readingClockCheckpoint>15000){readingClockCheckpoint=performance.now();readingClockSave();}
+  }
+  function readingRoom(){
+    const x=read('reading').find(b=>b.id===activeBook);if(!x)return readingApp();
+    readingPauseClock();
+    const show=()=>{
+      readingView(`<section id="rd-room" class="rd-room" data-theme="${readingRoomTheme}" data-running="false"><header><span class="rd-eyebrow">A MOMENT WITH YOUR BOOK</span>${readingButton('rdRoomTheme',readingRoomTheme==='paper'?'夜の書斎':'昼の書斎')}</header><div class="rd-room-arch"><span class="rd-lamp" aria-hidden="true"></span>${readingCover(x)}<span class="rd-room-table" aria-hidden="true"></span></div><h1>${esc(x.title)}</h1><p class="rd-room-page">${x.page}ページの続きから · ${esc(x.author||'あなたの読書時間')}</p><div class="rd-clock-face"><span class="rd-clock-ticks" aria-hidden="true"></span><small>ELAPSED TIME</small><output id="rd-clock" aria-label="経過時間" aria-live="off">00:00:00</output><span class="rd-clock-track" aria-hidden="true"><i></i></span></div><div class="rd-time-presets" aria-label="目標時間">${[15,25,45,60].map(n=>readingButton('rdClockTarget',n+'分',String(n),`aria-pressed="${readingTimer.target===n}"`)).join('')}</div><p id="rd-clock-state" class="rd-small" role="status"></p><div class="rd-clock-actions">${readingButton('rdClockToggle','計測を開始','','id="rd-clock-toggle"')}${readingButton('rdClockFinish','記録して終了')}${readingButton('rdClockReset','リセット')}${readingButton('rdClockRetry','保存を再試行','','id="rd-clock-retry" hidden')}</div><p class="rd-small">画面移動・ロック・タブ非表示で停止。保存済みの計時は再読み込み後も一時停止で復帰します。15秒ごとに保存し、強制終了では直近の未保存分を失う場合があります。同じ本棚を複数タブで同時編集しないでください。履歴への追加は「記録して終了」から。端数は1分に切り上げ、保存前に修正できます。</p><div class="rd-room-links">${readingButton('rdRoomBook','本の詳細へ')}${readingButton('evReadingHome','本棚へ')}</div></section>`,'',true);
+      readingClockTick();
+      if(!readingClockCleanup){
+        readingClockCleanup=true;
+        const hidden=()=>{if(document.hidden){readingPauseClock();readingClockTick();}},unload=()=>readingPauseClock();
+        document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',unload);
+        A.cleanups.push(()=>{readingPauseClock();document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',unload);readingClockCleanup=false;});
+      }
+    };
+    if(readingTimer&&readingTimer.bookId!==x.id){
+      const old=read('reading').find(b=>b.id===readingTimer.bookId);
+      A.overlay(`<div class="modal-sheet"><h3>別の本の計時が残っています</h3><p>${esc(old?.title||'削除された本')} · ${Math.ceil(readingTimer.elapsed/60000)}分</p><p>同時に計測できるのは1冊です。前の計時を記録するか、破棄して切り替えてください。</p>${old?readingButton('rdClockPrevious','前の本へ戻る'):''}${readingButton('rdClockReplace','前の計時を破棄して切替',x.id)}${readingButton('closeOverlay','キャンセル')}</div>`,'sheet-overlay');return;
+    }
+    if(!readingTimer){const next={id:A.id(),bookId:x.id,elapsed:0,target:25};if(!A.save('readingTimer',next))return;readingTimer=next;readingClockDirty=false;}
+    show();
+  }
+  A.actions.rdRoom=el=>{activeBook=el.dataset.id||activeBook;readingRoom();};
+  A.actions.rdRoomBook=()=>bookDetail();
+  A.actions.rdRoomTheme=()=>{const theme=readingRoomTheme==='paper'?'night':'paper';if(!A.save('readingRoomTheme',theme))return;readingRoomTheme=theme;$('#rd-room').dataset.theme=theme;const button=$('[data-action=rdRoomTheme]');button.textContent=theme==='paper'?'夜の書斎':'昼の書斎';};
+  A.actions.rdClockToggle=()=>{
+    if(!readingTimer||!$('#rd-room')||document.hidden)return;
+    if(readingClockStart!==null)readingPauseClock();else{
+      if(readingClockElapsed()>=86400000)return A.toast('24時間の上限です。記録またはリセットしてください');
+      if(!readingClockSave())return;
+      readingClockStart=performance.now();readingClockCheckpoint=performance.now();readingClockNotified=readingTimer.elapsed>=readingTimer.target*60000;
+      readingClockInterval=setInterval(readingClockTick,500);
+    }readingClockTick();
+  };
+  A.actions.rdClockTarget=el=>{if(!readingTimer||readingClockStart!==null)return;const target=Number(el.dataset.id);if(![15,25,45,60].includes(target))return;const next={...readingTimer,target};if(!A.save('readingTimer',next))return;readingTimer=next;readingClockDirty=false;readingClockNotified=false;readingRoom();};
+  A.actions.rdClockRetry=()=>{readingClockSave();readingClockTick();};
+  A.actions.rdClockFinish=()=>{readingPauseClock();readingClockTick();if(!readingTimer?.elapsed)return A.toast('先に読書時間を計測してください');activeBook=readingTimer.bookId;A.actions.evReadingSession({dataset:{timerId:readingTimer.id}});};
+  A.actions.rdClockReset=()=>{readingPauseClock();readingClockTick();A.confirm('計時をリセット？','未記録の計時だけを破棄します。保存済みの読書履歴は残ります。',()=>{if(!readingTimer)return;const next={...readingTimer,id:A.id(),elapsed:0};if(!A.save('readingTimer',next))return;readingTimer=next;readingClockDirty=false;readingClockNotified=false;readingRoom();});};
+  A.actions.rdClockPrevious=()=>{if(readingTimer){activeBook=readingTimer.bookId;A.closeOverlay();readingRoom();}};
+  A.actions.rdClockReplace=el=>{const id=el.dataset.id;A.confirm('前の計時を破棄？','まだ記録していない時間は失われます。',()=>{if(!A.save('readingTimer',null))return;readingTimer=null;readingClockDirty=false;activeBook=id;readingRoom();});};
+  A.actions.rdBookmarkEdit=el=>{
+    const x=read('reading').find(b=>b.id===activeBook),mark=x?.bookmarks?.find(m=>m.id===el.dataset.id);if(!mark)return;
+    A.form('しおりを編集',field('ページ','page',mark.page,'number','required min="1" max="100000" step="1"')+field('ひとこと','text',mark.text||'','text','maxlength="120"'),v=>{
+      if(!readingNumber(v.page,1,100000))return false;
+      const latest=read('reading').find(b=>b.id===x.id);if(!latest?.bookmarks?.some(m=>m.id===mark.id))return false;
+      return upsert('reading',{...latest,bookmarks:latest.bookmarks.map(m=>m.id===mark.id?{...m,page:Number(v.page),text:v.text.trim()}:m).sort((a,b)=>a.page-b.page)},readingDetailRefresh);
+    });
+  };
+
+  // Quote cards are original SVG, not raster screenshots or remotely generated images.
+  let readingCardId=null,readingCardTheme='paper';
+  function readingQuoteSVG(){
+    const q=read('readingQuotes').find(q=>q.id===readingCardId),x=q&&read('reading').find(b=>b.id===q.bookId);if(!x)return '';
+    const palette={paper:['#f8f2e2','#344d3e','#a6894c'],night:['#23392f','#f4ead2','#c5a96f'],rose:['#f4e5df','#714b4f','#ab795d']}[readingCardTheme]||['#f8f2e2','#344d3e','#a6894c'];
+    const ctx=document.createElement('canvas').getContext('2d');if(ctx)ctx.font='24px serif';
+    const wrap=(text,width,size)=>{const lines=[];if(ctx)ctx.font=`${size}px serif`;String(text||'').split(/\r?\n/).forEach(paragraph=>{let line='';for(const c of Array.from(paragraph)){if(line&&(ctx?ctx.measureText(line+c).width:Array.from(line+c).length*size)>width){lines.push(line);line=c;}else line+=c;}lines.push(line);});return lines;};
+    const lines=wrap(q.text,456,24),title=wrap(x.title,456,17),author=wrap(x.author||'',456,15),footer=150+lines.length*42,height=Math.max(420,footer+100+title.length*28+author.length*24);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 ${height}" width="600" height="${height}" role="img" aria-label="引用カード"><rect width="600" height="${height}" rx="12" fill="${palette[0]}"/><rect x="24" y="24" width="552" height="${height-48}" rx="5" fill="none" stroke="${palette[2]}" opacity=".6"/><path d="M40 58V40h18m484 0h18v18M40 ${height-58}v18h18m484 0h18v-18" fill="none" stroke="${palette[2]}"/><text x="72" y="66" font-family="sans-serif" font-size="10" letter-spacing="4" fill="${palette[2]}">WORDS TO KEEP</text><text x="66" y="138" font-family="serif" font-size="80" fill="${palette[2]}" opacity=".5">“</text><g font-family="serif" fill="${palette[1]}">${lines.map((line,i)=>`<text x="72" y="${150+i*42}" font-size="24">${esc(line)}</text>`).join('')}<path d="M72 ${footer+3}h48" stroke="${palette[2]}"/>${title.map((line,i)=>`<text x="72" y="${footer+38+i*28}" font-size="17">${esc(line)}</text>`).join('')}${author.map((line,i)=>`<text x="72" y="${footer+38+title.length*28+i*24}" font-size="15">${esc(line)}</text>`).join('')}</g><text x="528" y="${height-42}" text-anchor="end" font-family="sans-serif" font-size="11" fill="${palette[2]}">${q.page?'p. '+q.page:'READING ATELIER'}</text></svg>`;
+  }
+  A.actions.rdQuoteCard=el=>{
+    readingCardId=el.dataset.id;if(!readingQuoteSVG())return;
+    A.overlay(`<div class="modal-sheet rd-quote-studio"><h3>言葉を、一枚に。</h3><div class="rd-card-themes">${[['paper','生成り'],['night','夜の森'],['rose','薄紅']].map(([id,label])=>readingButton('rdCardTheme',label,id,`aria-pressed="${id===readingCardTheme}"`)).join('')}</div><div id="rd-card-preview">${readingQuoteSVG()}</div><p class="rd-small">引用全文をSVGで保存します。長い引用は縦に伸びます。公開・共有の際は引用元と権利をご確認ください。</p><div class="rd-footer-actions">${readingButton('rdCardSave','SVGを保存')}${readingButton('closeOverlay','閉じる')}</div></div>`,'sheet-overlay');
+  };
+  A.actions.rdCardTheme=el=>{if(!['paper','night','rose'].includes(el.dataset.id))return;readingCardTheme=el.dataset.id;$('#rd-card-preview').innerHTML=readingQuoteSVG();A.$$('[data-action=rdCardTheme]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===readingCardTheme)));};
+  A.actions.rdCardSave=()=>{const svg=readingQuoteSVG();if(svg)A.download(new Blob([svg],{type:'image/svg+xml;charset=utf-8'}),'reading_quote.svg');};
+
+  // Restore only missing books, never overwrite live records. Imported fields are allowlisted.
+  function readingImportData(raw){
+    const fail=message=>{throw Error(message);},obj=x=>x&&typeof x==='object'&&!Array.isArray(x);
+    const str=(x,max,required=false)=>{if(x==null&&!required)return '';if(typeof x!=='string'||x.length>max||(required&&!x.trim()))fail('文字列の形式または長さが不正です');return x;};
+    const num=(x,min,max)=>{if(typeof x!=='number'||!Number.isInteger(x)||x<min||x>max)fail('数値の範囲が不正です');return x;};
+    const date=x=>{if(!readingDate(x))fail('日付の形式が不正です');return x;};
+    const list=(x,max)=>{if(!Array.isArray(x)||x.length>max)fail('件数が上限を超えているか、形式が不正です');return x;};
+    const id=x=>str(x,128,true),seenBooks=new Set(),seenSessions=new Set(),seenQuotes=new Set();
+    const unique=(x,set)=>{const value=id(x);if(set.has(value))fail('同じIDが重複しています');set.add(value);return value;};
+    if(!obj(raw)||raw.app!=='aura-reading'||raw.version!==1)fail('Reading Atelier のバージョン1バックアップを選んでください');
+    const books=list(raw.reading,2000).map(x=>{
+      if(!obj(x))fail('本の形式が不正です');
+      const total=num(x.total,1,100000),marks=new Set();
+      return {id:unique(x.id,seenBooks),title:str(x.title,160,true),author:str(x.author,80),note:str(x.note,12000),category:str(x.category,30),total,page:num(x.page,0,total),rating:x.rating==null?0:num(x.rating,0,5),favorite:x.favorite===true,coverTheme:readingThemes.some(t=>t[0]===x.coverTheme)?x.coverTheme:readingTheme(x),coverMotif:readingMotifs.some(t=>t[0]===x.coverMotif)?x.coverMotif:'botanical',deadline:x.deadline?date(x.deadline):'',finishedAt:x.finishedAt?date(x.finishedAt):null,createdAt:str(x.createdAt,40),updatedAt:str(x.updatedAt,40),bookmarks:list(x.bookmarks||[],100).map(m=>{if(!obj(m))fail('しおりの形式が不正です');return {id:unique(m.id,marks),page:num(m.page,1,100000),text:str(m.text,120)};})};
+    });
+    const sessions=list(raw.readingSessions,30000).map(x=>{
+      if(!obj(x)||!seenBooks.has(x.bookId))fail('履歴に対応する本がありません');
+      const from=num(x.from,0,100000);return {id:unique(x.id,seenSessions),bookId:id(x.bookId),date:date(x.date),from,to:num(x.to,from,100000),minutes:num(x.minutes,1,1440),note:str(x.note,300),...(x.timerId?{timerId:id(x.timerId)}:{})};
+    });
+    const quotes=list(raw.readingQuotes,10000).map(x=>{if(!obj(x)||!seenBooks.has(x.bookId))fail('引用に対応する本がありません');return {id:unique(x.id,seenQuotes),bookId:id(x.bookId),text:str(x.text,12000,true),page:x.page==null?null:num(x.page,1,100000)};});
+    const goal=raw.readingGoal==null?12:num(raw.readingGoal,1,1000);
+    return {books,sessions,quotes,goal};
+  }
+  A.actions.rdImport=()=>{
+    A.overlay(`<div class="modal-sheet rd-import"><h3>本棚を復元</h3><p>このアプリから書き出したJSONを選択してください（5MB以下）。既にある本はIDで判定し、その本の履歴・引用を含めてスキップします。既存データを上書きしません。</p><label class="form-label" for="rd-import-file">バックアップファイル</label><input id="rd-import-file" type="file" accept=".json,application/json"><p id="rd-import-status" role="status"></p>${readingButton('closeOverlay','閉じる')}</div>`,'sheet-overlay');
+    const input=$('#rd-import-file'),status=$('#rd-import-status');
+    input.onchange=async()=>{
+      const file=input.files?.[0];if(!file)return;
+      input.disabled=true;status.textContent='バックアップを読み込み中…';
+      try{
+        if(file.size>5*1024*1024)throw Error('5MB以下のファイルを選んでください');
+        const data=readingImportData(JSON.parse(await file.text()));if(!input.isConnected||A.current!=='reading')return;
+        const existing=new Set(read('reading').map(x=>x.id)),missing=data.books.filter(x=>!existing.has(x.id));
+        A.form('復元内容の確認',`<div class="rd-restore-count"><strong>${missing.length}</strong><span>冊を追加</span></div><p>全${data.books.length}冊のうち、既存の${data.books.length-missing.length}冊はスキップします。追加する本の履歴・引用・しおりも復元します。</p><p class="rd-small">保存時に重複を再確認します。年間目標は未設定の場合のみ復元。未記録の計時はバックアップに含みません。念のため、先に現在の本棚も書き出しておくことをおすすめします。</p>`,()=>{
+          const current=read('reading'),ids=new Set(current.map(x=>x.id)),fresh=data.books.filter(x=>!ids.has(x.id)),newIds=new Set(fresh.map(x=>x.id));
+          if(!fresh.length){A.toast('新しく復元する本はありません');return;}
+          const sessionIds=new Set(read('readingSessions').map(x=>x.id)),quoteIds=new Set(read('readingQuotes').map(x=>x.id));
+          const sessions=data.sessions.filter(x=>newIds.has(x.bookId)).map(x=>({...x,id:sessionIds.has(x.id)?A.id():x.id})),quotes=data.quotes.filter(x=>newIds.has(x.bookId)).map(x=>({...x,id:quoteIds.has(x.id)?A.id():x.id}));
+          if(!A.saveBatch({reading:[...fresh,...current],readingSessions:[...sessions,...read('readingSessions')],readingQuotes:[...quotes,...read('readingQuotes')],...(A.load('readingGoal',null)===null?{readingGoal:data.goal}:{})}))return false;
+          readingApp();A.toast(fresh.length+'冊を復元しました');
+        },'追加して復元');
+      }catch(error){if(input.isConnected){status.textContent=error instanceof SyntaxError?'JSONを読み取れませんでした。ファイルをご確認ください。':error.message;input.disabled=false;}}
+    };
+  };
 
   // Personal focus durations, a daily goal, and named session history.
   const focusPreferences = () => ({work:25,rest:5,goal:120,...A.load('focusPreferences',{})});
