@@ -185,7 +185,7 @@
  }
  const calOn=(events,key)=>{const from=new Date(key+'T00:00:00'),to=new Date(calShift(key,1)+'T00:00:00');return events.filter(e=>{const r=calRange(e);return r&&r.start<to&&r.end>from;});};
  function calWeek(){const d=new Date(calendarDay+'T12:00:00');return calShift(calendarDay,-((d.getDay()-calWeekStart+7)%7));}
- function calChoose(key){if(!calValid(key))return false;calendarDay=key;calendarMonth=new Date(key+'T12:00:00');calendarMonth.setDate(1);return true;}
+ function calChoose(key){if(!calValid(key))return false;calendarDay=key;if(calExactDay)calExactDay=key;calendarMonth=new Date(key+'T12:00:00');calendarMonth.setDate(1);return true;}
  function calArt(key){
   const id='cal-art-'+(++calArtId),d=new Date(key+'T12:00:00');
   return `<svg class="cal-art" viewBox="0 0 180 160" fill="none" aria-hidden="true" focusable="false"><defs>
