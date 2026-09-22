@@ -81,13 +81,13 @@ function musicScore(track){
     const phraseLift=[.9,.98,1.04,.88][bar%4],turnaround=bar%8===7;
     const departing=bar>=52&&!outro;
     const space=bridge||intro||outro;
-    if(bar%2===0){
-      chord.slice(1).forEach((n,i)=>add('pad',bar,i*.018,n,7.6,.055*energy,(i-1.5)*.38));
-      if(tide||intro||bridge||outro)add('air',bar,0,0,7.9,tide?.035:.012,Math.sin(bar)*.4);
+    if(bar%2===0||outro){
+      chord.slice(1).forEach((n,i)=>add('pad',bar,i*.018,n,outro?2.2:7.2,.05*energy,(i-1.5)*.38));
+      if((tide||intro||bridge||outro)&&bar%2===0)add('air',bar,0,0,7.9,tide?.03:.01,Math.sin(bar)*.4);
     }
     // Root / fifth / approach notes give the bass a phrase, not a static drone.
     if(tide){
-      if(bar%2===0)add('bass',bar,0,chord[0],6.6,.13*energy);
+      if(bar%2===0||outro)add('bass',bar,0,chord[0],outro?2.6:6.6,.13*energy);
     }else{
       const pattern=intro||bridge||outro?[[0,0,2.8]]:dusk?[[0,0,1.2],[1.75,0,.5],[2.5,7,.65],[3.5,0,.35]]:[[0,0,1.3],[1.5,12,.45],[2.75,0,.65]];
       pattern.forEach(([s,n,d])=>add('bass',bar,s,chord[0]+n,d,.23*energy));
@@ -95,8 +95,8 @@ function musicScore(track){
     }
     const keyKind=tide?'piano':dusk?'keys':'lead';
     const comp=tide?[0]:space?[.1]:dusk?(bar%4===3?[.25,2.25]:bar%2?[.5,1.75,3.25]:[0,1.5,3.25]):(bar%2?[.75,2.5]:[.5,2.5]);
-    if(!tide||bar%2===0)comp.forEach((step,j)=>chord.slice(1).forEach((n,i)=>{
-      add(keyKind,bar,step+i*(tide?.07:.018),n,tide?3.2:j===0?1.1:.65,(tide?.075:dusk?.078:.045)*energy,((i-1.5)*.16)-.12);
+    if(!tide||bar%2===0||outro)comp.forEach((step,j)=>chord.slice(1).forEach((n,i)=>{
+      add(keyKind,bar,step+i*(tide?.07:.018),n,outro?1.6:tide?3.2:j===0?1.1:.65,(tide?.075:dusk?.078:.045)*energy,((i-1.5)*.16)-.12);
     }));
     // Eight authored call/response motifs, reharmonised in the bridge. Leave breaths.
     if(!intro&&!outro&&(!bridge||bar%2===0)){
@@ -275,7 +275,7 @@ class OriginalMusicEngine{
     };
     const noise=(filterType,freq,q=.7,weight=1,transient=0)=>{
       const source=keep(c.createBufferSource()),filter=keep(c.createBiquadFilter()),gain=keep(c.createGain());source.buffer=this.noise;source.loop=true;filter.type=filterType;filter.frequency.value=freq;filter.Q.value=q;
-      gain.gain.setValueAtTime(offset&&transient?0:weight,time);if(transient)gain.gain.exponentialRampToValueAtTime(.00001,time+Math.min(duration,transient));
+      gain.gain.setValueAtTime(offset&&transient?.00001:weight,time);if(transient)gain.gain.exponentialRampToValueAtTime(.00001,time+Math.min(duration,transient));
       source.connect(filter);filter.connect(gain);gain.connect(amp);sources.push(source);return filter;
     };
     const vibrato=(osc,rate,cents,delay=.15)=>{
@@ -337,8 +337,11 @@ class OriginalMusicEngine{
       oscillator('sine',f,.65);oscillator('sine',f*2.756,.13);oscillator('sine',f*4.07,.055);
       attack=.004;sustain=.1;release=Math.min(2,duration*.65);tone.frequency.setValueAtTime(7000,time);
     }else if(kind==='bass'){
-      oscillator('sine',f,.82);oscillator('triangle',f,.23);oscillator('sine',f*2,.08);
-      tone.frequency.setValueAtTime(650,time);attack=.018;sustain=.65;release=Math.min(.17,duration*.3);
+      const dusk=this.track.id==='dusk',tide=this.track.id==='tide';
+      const body=oscillator('sine',f,.76);oscillator('triangle',f,dusk?.29:.17);oscillator('sine',f*2,dusk?.13:.07,0,dusk?.24:0);
+      if(dusk){noise('bandpass',850,.65,.035,.02);oscillator('sine',f*3,.035,0,.12);}
+      if(tide)vibrato(body,3.6,2,.6);
+      tone.frequency.setValueAtTime(dusk?850:tide?480:620,time);attack=dusk?.01:tide?.06:.018;sustain=dusk?.44:.66;release=Math.min(tide?.35:.17,duration*.3);
     }else if(kind==='kick'){
       const o=oscillator('sine',125,.9);o.frequency.exponentialRampToValueAtTime(this.track.id==='tide'?42:48,time+.13);
       tone.frequency.setValueAtTime(1200,time);attack=.005;sustain=.07;release=duration*.65;
@@ -362,15 +365,23 @@ class OriginalMusicEngine{
       noise(kind==='brush'?'highpass':'bandpass',kind==='hat'?7400:kind==='brush'?2200:6200,.7);attack=kind==='brush'?.05:.003;sustain=.12;release=duration*.65;
       tone.frequency.setValueAtTime(kind==='brush'?6200:10000,time);
     }else{
-      const filter=noise('bandpass',550,.6);attack=duration*(kind==='swell'?.65:.4);release=duration*.3;sustain=.85;
+      const filter=noise('bandpass',550,.6);attack=duration*(kind==='swell'?.65:.4);release=duration*(kind==='swell'?.15:.3);sustain=.85;
       filter.frequency.setValueAtTime(350,time);filter.frequency.exponentialRampToValueAtTime(kind==='swell'?4200:1100,time+duration*.6);filter.frequency.exponentialRampToValueAtTime(400,time+duration);
+      if(kind==='air'&&this.track.id==='tide'){
+        // A second, very quiet foam band follows a different swell envelope.
+        const foam=noise('highpass',3200,.6,.11);foam.frequency.setValueAtTime(4600,time);foam.frequency.linearRampToValueAtTime(2800,time+duration*.65);foam.frequency.linearRampToValueAtTime(5000,time+duration);
+      }
     }
     // A carried note starts softly at its decayed level instead of re-attacking.
     if(['pad','bow','air','velvet'].includes(kind)){
       const drift=keep(c.createOscillator()),depth=keep(c.createGain());drift.frequency.value=.08+musicRandom(event.seed,3)*.1;depth.gain.value=.075;drift.connect(depth);depth.connect(pan.pan);sources.push(drift);
     }
-    if(offset>0){attack=.025;level*=Math.exp(-offset/(['pad','bow','air'].includes(kind)?15:kind==='bass'?4:1.8));}
-    attack=Math.min(attack,duration*.25);release=Math.min(release,duration*.65);
+    if(offset>0){
+      attack=.025;
+      level*=kind==='reverse'?Math.max(.2,Math.min(1,offset/event.duration)):Math.exp(-offset/(['pad','bow','air'].includes(kind)?15:kind==='bass'?4:1.8));
+    }
+    const swelling=['reverse','swell','air'].includes(kind);
+    attack=Math.min(attack,duration*(swelling?.8:.25));release=Math.min(release,duration*.65);
     const hold=Math.max(time+attack+.001,time+duration-release);
     amp.gain.setValueAtTime(.0001,time);amp.gain.linearRampToValueAtTime(Math.max(.0002,level),time+attack);
     amp.gain.exponentialRampToValueAtTime(Math.max(.00015,level*sustain),hold);amp.gain.exponentialRampToValueAtTime(.0001,time+duration);
