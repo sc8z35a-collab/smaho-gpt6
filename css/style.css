@@ -779,6 +779,25 @@ a.primary-button{text-decoration:none;text-align:center;display:inline-flex;just
 [data-reduce-motion=true] .mori-card-stack,[data-reduce-motion=true] .mori-card-tools button,[data-reduce-motion=true] .mori-finish-swatch>span,[data-reduce-motion=true] .mori-transaction .mori-object{transform:none!important}
 @media(prefers-reduced-motion:reduce){.mori-celebration,.mori-complete:after{display:none}.mori-card-stack,.mori-card-tools button,.mori-finish-swatch>span,.mori-transaction .mori-object{transform:none!important}}
 
+/* A small object gallery in the demo sheet; changing the native select restages its SVG. */
+.mori-checkout{border-radius:23px;border:1px solid #77895d2b;background:radial-gradient(ellipse at 50% 0,#ffffe8,#eef0e2 75%);overflow:hidden;margin:15px 0 8px;box-shadow:inset 0 1px 0 #fff,0 10px 20px -17px #364b3470;color:#345440}
+.mori-checkout-stage{height:155px;position:relative;display:grid;place-items:center;isolation:isolate;overflow:hidden}
+.mori-checkout-arch{position:absolute;left:50%;top:13px;width:143px;height:165px;border-radius:90px 90px 12px 12px;transform:translateX(-50%);border:1px solid #c7d4b3;background:linear-gradient(150deg,#dde5cb,#f8f5e5);box-shadow:inset 4px 3px 12px #70885716,0 0 0 8px #ffffff35;z-index:-1}
+.mori-checkout-floor{position:absolute;bottom:1px;width:240px;height:66px;max-width:95%;z-index:1}
+.mori-checkout-object{position:relative;z-index:2;margin-top:-8px;transform:rotate(-7deg);filter:drop-shadow(0 10px 6px #2f493126)}
+.mori-checkout-object .mori-object{display:block;width:105px;height:105px;animation:moriObjectPresent .7s cubic-bezier(.16,.75,.25,1) both}
+.mori-checkout-orbit{position:absolute;width:197px;height:90px;border-radius:50%;border:1px solid #bccaa344;transform:rotate(-25deg);top:29px;pointer-events:none}
+.mori-checkout-orbit:before,.mori-checkout-orbit:after{content:'';position:absolute;width:4px;height:4px;border-radius:50%;background:#ceb98a;box-shadow:0 0 0 3px #d4c39420;left:12px;top:15px}.mori-checkout-orbit:after{left:auto;top:auto;right:18px;bottom:12px;width:3px;height:3px}
+.mori-checkout-summary{text-align:center;position:relative;z-index:2;padding:7px 14px 18px;background:linear-gradient(transparent,#f3f2e2)}
+.mori-checkout-summary>span{display:block;font-size:11px;letter-spacing:.08em}.mori-checkout-summary strong{display:block;font-family:'DM Sans',sans-serif;font-size:32px;font-weight:500;letter-spacing:-1px;line-height:1.3;font-variant-numeric:tabular-nums;margin:4px 0}.mori-checkout-summary small{font-size:9px;color:#6a7e60}
+.mori-checkout-note{text-align:center;font-size:10px;color:#68795e;margin:10px 0 18px;line-height:1.8}
+.mori-checkout[data-checkout-kind=coffee] .mori-checkout-arch{background:linear-gradient(150deg,#e8d4bd,#f9efdc);border-color:#d4c3aa}.mori-checkout[data-checkout-kind=train] .mori-checkout-arch{background:linear-gradient(150deg,#c1d7c4,#ecf0dc)}.mori-checkout[data-checkout-kind=book] .mori-checkout-arch{background:linear-gradient(150deg,#d6d4bc,#f4eddb)}
+@keyframes moriObjectPresent{from{opacity:0;transform:translateY(15px) rotate(12deg) scale(.8)}to{opacity:1;transform:none}}
+.screen-dark-mode .mori-checkout{color:#e8eddb;background:radial-gradient(ellipse at 50% 0,#415740,#243a30 75%);border-color:#b0c69626;box-shadow:inset 0 1px 0 #cbdab522,0 10px 20px -17px #0008}.screen-dark-mode .mori-checkout-summary{background:linear-gradient(transparent,#283e32)}.screen-dark-mode .mori-checkout-summary small,.screen-dark-mode .mori-checkout-note{color:#b8c7a6}.screen-dark-mode .mori-checkout-arch{box-shadow:inset 4px 3px 12px #14220d33,0 0 0 8px #dae5c20a}
+@media(max-height:620px){.mori-checkout{display:grid;grid-template-columns:1fr 1fr;align-items:center}.mori-checkout-stage{height:125px}.mori-checkout-object .mori-object{width:83px;height:83px}.mori-checkout-summary{padding:15px 8px;background:none}.mori-checkout-summary strong{font-size:27px}.mori-checkout-note{margin-bottom:9px}}
+[data-reduce-motion=true] .mori-checkout-object{transform:none}
+@media(prefers-reduced-motion:reduce){.mori-checkout-object{transform:none}}
+
 /* Weather Atmosphere: all artwork is local SVG, all numeric graphics use forecast values. */
 .app-screen.weather-app{background:radial-gradient(ellipse at 95% 0,#91c7d322,transparent 55%),linear-gradient(155deg,#203e56,#142a40 68%,#112436);color:#f0f6fb}
 .app-screen.weather-app[data-weather-scene=rain],.app-screen.weather-app[data-weather-scene=thunder],.app-screen.weather-app[data-weather-scene=overcast]{background:radial-gradient(ellipse at 90% 0,#8596b52b,transparent 60%),linear-gradient(155deg,#2a394f,#182a3e 70%)}
