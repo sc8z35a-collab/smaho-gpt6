@@ -444,3 +444,9 @@
 .sk-timeline>button small{font-size:10px;opacity:.7;overflow-wrap:anywhere}
 .sk-timeline>button[aria-current=step]{border-left:3px solid #7b957d;background:#7b957d22;opacity:1}
 .sk-timeline>button:focus-visible{outline:2px solid #7b957d;outline-offset:2px}
+
+#app-screen .ev-sketch .sk-layer>button:first-child{display:flex;align-items:center;gap:8px;min-width:0}
+#app-screen .ev-sketch .sk-layer>button:first-child>span{min-width:0;flex:1;overflow-wrap:anywhere}
+#app-screen .ev-sketch .sk-layer small{display:block;font-size:9px;font-weight:400;line-height:1.6;color:var(--ev-muted);margin-top:4px}
+#app-screen .ev-sketch .sk-layer canvas{width:34px;height:34px;flex-shrink:0;border:1px solid var(--ev-border);border-radius:4px;background:repeating-conic-gradient(#9fafa31a 0 25%,transparent 0 50%) 0/8px 8px}
+@media(max-width:360px){#app-screen .ev-sketch .sk-layer canvas{width:28px;height:28px}#app-screen .ev-sketch .sk-layer>button:first-child{padding-left:4px;gap:5px}}
