@@ -7,7 +7,7 @@ const photoArray=key=>{const v=A.load(key,[]);return Array.isArray(v)?v:[];};
 let userPhotos=photoArray('photos'),favorites=photoArray('photoFavorites');
 let photoFilter='all',currentPhoto=null,photoQuery='',photoSort='new',photoAlbum='',photoLayout='gallery';
 let photoSelecting=false,photoSelected=new Set(),photoPlaying=false,photoZoom=1,photoEditor=null,photoImporting=false;
-let photoDisposers=[],photoArtSerial=0;
+let photoDisposers=[],photoArtSerial=0,photoWorkbench=null,photoPlayDelay=4500;
 const photoValid=p=>p&&typeof p.id==='string'&&typeof p.url==='string'&&/^data:image\/(jpeg|jpg|png|webp|gif|avif);base64,/i.test(p.url);
 const refreshPhotos=()=>{userPhotos=photoArray('photos');favorites=photoArray('photoFavorites').filter(id=>typeof id==='string');};
 const localPhotos=()=>userPhotos.filter(photoValid);
@@ -31,7 +31,7 @@ function photoArt(){
   return `<svg class="pa-art" viewBox="0 0 240 200" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="${id}-paper" x2="1" y2="1"><stop stop-color="#fffdf5"/><stop offset="1" stop-color="#cbc4b6"/></linearGradient><linearGradient id="${id}-sky" x2="0" y2="1"><stop stop-color="#88aab1"/><stop offset="1" stop-color="#e2c5a1"/></linearGradient><linearGradient id="${id}-lake" x2="1" y2="1"><stop stop-color="#688e84"/><stop offset="1" stop-color="#183f43"/></linearGradient><radialGradient id="${id}-lens"><stop stop-color="#acc6c6"/><stop offset=".4" stop-color="#375265"/><stop offset=".65" stop-color="#192b36"/><stop offset=".85" stop-color="#697e81"/><stop offset="1" stop-color="#20343e"/></radialGradient></defs><ellipse cx="126" cy="178" rx="89" ry="12" fill="#173730" opacity=".15"/><g class="pa-art-back" transform="rotate(-15 119 98)"><rect x="51" y="28" width="136" height="146" rx="7" fill="#c8a98e" stroke="#fff4d9"/><rect x="59" y="36" width="120" height="104" rx="2" fill="#8eaaa1"/><path d="m59 110 39-53 35 53 21-26 25 31v25H59Z" fill="#526e66"/></g><g class="pa-art-front" transform="rotate(8 130 107)"><rect x="69" y="37" width="133" height="144" rx="6" fill="url(#${id}-paper)" stroke="#fffdf0"/><path d="M78 46h115v102H78Z" fill="url(#${id}-sky)"/><circle cx="165" cy="69" r="14" fill="#fce4b6"/><path d="m78 112 34-44 38 40 20-20 23 34v26H78Z" fill="#647e7d"/><path d="m112 68 15 37-16-9-14 10Z" fill="#d7ded4"/><path d="M78 121c40-26 63 20 115-8v35H78Z" fill="url(#${id}-lake)"/><path d="M91 131h33m19 7h32m-56 5h19" stroke="#e1e4c5" opacity=".6"/><path d="M81 160h42m7 0h12" stroke="#a49b89" stroke-width="2" stroke-linecap="round"/><circle cx="182" cy="163" r="5" stroke="#bdab85"/></g><g class="pa-art-lens"><circle cx="64" cy="141" r="30" fill="#b8c2b9" stroke="#e8e8d4" stroke-width="3"/><circle cx="64" cy="141" r="24" fill="url(#${id}-lens)"/><path d="m64 121 17 10v20l-17 10-17-10v-20Z" stroke="#b7d3cf" opacity=".6"/><path d="m64 121-6 19 23-9m0 20-20-6 3 16m-17-10 14-6-14-14" stroke="#b7d3cf" opacity=".4"/><circle cx="70" cy="132" r="5" fill="#fff" opacity=".32"/></g><g stroke="#c6ad78" stroke-linecap="round"><path d="M34 55v12m-6-6h12M210 114v10m-5-5h10"/><circle cx="204" cy="34" r="3"/></g></svg>`;
 }
 function photoDispose(){photoDisposers.splice(0).forEach(fn=>fn());}
-function photoExit(){photoDispose();photoPlaying=false;photoEditor=null;photoSelected.clear();photoSelecting=false;}
+function photoExit(){photoDispose();photoPlaying=false;photoEditor=null;photoWorkbench=null;photoSelected.clear();photoSelecting=false;}
 function photoMount(html,mode){
   photoDispose();A.view(html);$('#app-screen').dataset.photoMode=mode;
   if(!A.cleanups.includes(photoExit))A.cleanups.push(photoExit);
@@ -41,26 +41,33 @@ function photoMount(html,mode){
   };
   document.addEventListener('keydown',key);photoDisposers.push(()=>document.removeEventListener('keydown',key));
   photoImageFallback($('#app-screen'));
+  if(mode==='editor'||mode==='collage'){
+    const warn=e=>{if(photoEditor?.undo.length||photoWorkbench?.dirty){e.preventDefault();e.returnValue='';}};
+    window.addEventListener('beforeunload',warn);photoDisposers.push(()=>window.removeEventListener('beforeunload',warn));
+  }
 }
 function photoImageFallback(root){
   root.querySelectorAll('img').forEach(img=>{img.addEventListener('error',()=>{img.hidden=true;img.parentElement.classList.add('pa-image-failed');img.parentElement.title='画像を読み込めません。通信状態を確認してください';});});
 }
 const photoTabs=()=>A.tabs([{id:'all',icon:'photos',name:'ライブラリ',action:'photoFilter',value:'all'},{id:'mine',icon:'camera',name:'自分の写真',action:'photoFilter',value:'mine'},{id:'favorites',icon:'heart',name:'お気に入り',action:'photoFilter',value:'favorites'},{id:'trash',icon:'trash',name:'ゴミ箱',action:'photoFilter',value:'trash'}],photoFilter);
 function photos(){
-  refreshPhotos();photoPlaying=false;photoEditor=null;currentPhoto=null;A.statusTheme(false);
+  refreshPhotos();photoPlaying=false;photoEditor=null;photoWorkbench=null;currentPhoto=null;A.statusTheme(false);
   const albums=photoAlbums();if(photoAlbum&&!albums.includes(photoAlbum))photoAlbum='';
   const own=localPhotos().filter(p=>!p.deletedAt),hero=own[0]||samplePhotos[0];
   photoMount(A.nav('Photo Atelier',`<button data-action="photoImport" aria-label="写真を追加">${icon('plus')}</button>`)+`<div class="app-content pa-library"><header class="pa-heading"><div><span class="pa-eyebrow">AURA / PHOTO ATELIER</span><h1>光を、集める。</h1><p>何気ない一瞬を、あなたの一枚に。</p></div>${photoArt()}</header><div class="pa-collection"><button class="pa-cover" data-action="photoOpen" data-id="${esc(hero.id)}"><img src="${esc(hero.url)}" alt="${esc(photoTitle(hero))}"><span class="pa-cover-copy"><small>${hero.sample?'SAMPLE COLLECTION':'YOUR COLLECTION'}</small><strong>${hero.sample?'光と余白':esc(photoTitle(hero))}</strong><span>${hero.sample?'Unsplash のサンプル':'自分の写真 '+own.length+'枚'} ${icon('arrow')}</span></span><span class="pa-cover-stamp">a / 01</span></button></div><div class="pa-stats"><span><b>${own.length}</b> 自分の写真</span><span><b>${allPhotos().filter(p=>favorites.includes(p.id)).length}</b> お気に入り</span><span><b>${albums.length}</b> アルバム</span></div>${A.search('pa-search','写真名・メモ・アルバムで検索')}<div class="pa-controls"><label><span class="pa-sr">並べ替え</span><select id="pa-sort"><option value="new" ${photoSort==='new'?'selected':''}>新しい順</option><option value="old" ${photoSort==='old'?'selected':''}>古い順</option><option value="name" ${photoSort==='name'?'selected':''}>名前順</option></select></label><button data-action="photoLayout" aria-label="グリッド表示を切り替え" aria-pressed="${photoLayout==='compact'}">${icon('grid')}</button><button data-action="photoSelectMode" aria-pressed="${photoSelecting}">${photoSelecting?'完了':'選択'}</button><button data-action="photoSlideshow" aria-label="表示中の写真でスライドショー">${icon('play')}</button></div><label class="pa-album-filter">${photoGlyph('folder')}<select id="pa-album" aria-label="アルバムで絞り込む"><option value="">すべてのアルバム</option>${albums.map(name=>`<option value="${esc(name)}" ${photoAlbum===name?'selected':''}>${esc(name)}</option>`).join('')}</select></label><div class="pa-section-head"><h2>${{all:'ライブラリ',mine:'自分の写真',favorites:'お気に入り',trash:'ゴミ箱'}[photoFilter]}</h2><span id="pa-count" role="status"></span></div>${photoFilter==='trash'?'<p class="pa-note">自動消去はしません。完全削除するまで保存容量に含まれます。</p>':''}<div id="pa-selection"></div><div id="pa-grid" class="pa-grid"></div><p class="pa-note pa-footer">端末内に保存 · クラウド同期なし<br>サンプルは通信が必要です。撮影日・位置の推測はしません。</p><div id="pa-import-status" class="pa-note" role="status">${photoImporting?'写真を読み込み中…':''}</div></div>`+photoTabs(),'library');
   const input=$('#pa-search');input.value=photoQuery;input.oninput=()=>{photoQuery=input.value;photoSelected.clear();renderPhotoGrid();};
   $('#pa-sort').onchange=e=>{photoSort=e.target.value;renderPhotoGrid();};
-  $('#pa-album').onchange=e=>{photoAlbum=e.target.value;photoSelected.clear();renderPhotoGrid();};renderPhotoGrid();
+  $('#pa-album').onchange=e=>{photoAlbum=e.target.value;photoSelected.clear();renderPhotoGrid();};
+  $('.pa-stats').insertAdjacentHTML('afterend',`<nav class="pa-workspace-links" aria-label="写真の道具">${photoButton('photoAlbumsOpen','アルバムを整理','folder')}${photoButton('photoCreateStart','作品をつくる','grid')}${photoButton('photoPlaybackSettings','スライド設定','play')}</nav>`);renderPhotoGrid();
 }
 function renderPhotoGrid(){
-  const grid=$('#pa-grid');if(!grid)return;const list=albumPhotos(),ids=new Set(list.map(p=>p.id));photoSelected=new Set([...photoSelected].filter(id=>ids.has(id)));
+  const grid=$('#pa-grid');if(!grid)return;const focused=document.activeElement,focusId=focused?.dataset?.id,focusAction=focused?.dataset?.action,restoreFocus=grid.contains(focused)||$('#pa-selection')?.contains(focused);const list=albumPhotos(),ids=new Set(list.map(p=>p.id));photoSelected=new Set([...photoSelected].filter(id=>ids.has(id)));
   grid.className='pa-grid '+(photoLayout==='compact'?'pa-compact':'');$('#pa-count').textContent=list.length+'枚';
   grid.innerHTML=list.length?list.map((p,i)=>`<button class="pa-tile ${photoSelected.has(p.id)?'is-selected':''}" data-action="${photoSelecting?'photoToggleSelect':'photoOpen'}" data-id="${esc(p.id)}" aria-label="${esc(photoTitle(p))}${photoSelecting?'を選択':''}" ${photoSelecting?`aria-pressed="${photoSelected.has(p.id)}"`:''} style="--pa-delay:${Math.min(i,10)*25}ms"><span class="pa-tile-image"><img src="${esc(p.url)}" alt="" loading="lazy" decoding="async">${p.sample?'<small class="pa-sample">SAMPLE</small>':''}${favorites.includes(p.id)?`<span class="pa-heart">${icon('heart')}</span>`:''}${photoSelecting?`<span class="pa-check">${photoSelected.has(p.id)?icon('check'):''}</span>`:''}</span><span class="pa-tile-copy"><strong>${esc(photoTitle(p))}</strong><small>${esc(p.album||photoDate(p))}</small></span></button>`).join(''):`<div class="pa-empty">${photoArt()}<h3>${photoQuery||photoAlbum?'見つかりませんでした':photoFilter==='trash'?'ゴミ箱は空です':'ここから、あなたのアルバム。'}</h3><p>${photoQuery||photoAlbum?'検索語やアルバムを変えてみてください。':'＋から写真を追加できます。'}</p>${photoButton('photoImport','写真を追加','plus')}</div>`;
   const selection=$('#pa-selection');selection.innerHTML=photoSelecting?`<div class="pa-selection"><strong>${photoSelected.size}枚選択</strong><button data-action="photoSelectAll">${photoSelected.size===list.length&&list.length?'選択解除':'すべて選択'}</button><div>${photoFilter==='trash'?photoButton('photoBatchRestore','復元','refresh')+photoButton('photoBatchPurge','完全削除','trash'):photoButton('photoBatchFavorite','お気に入りに追加','heart')+photoButton('photoBatchAlbum','アルバムに分類','folder')+photoButton('photoBatchTrash','ゴミ箱へ','trash')}</div></div>`:'';
+  if(photoSelecting&&photoFilter!=='trash')selection.querySelector('.pa-selection').insertAdjacentHTML('beforeend',`<div class="pa-selection-create">${photoButton('photoCompareStart','2枚を比較','switch',photoSelected.size===2?'':'disabled')}${photoButton('photoCollageStart','コラージュ','grid',photoSelected.size>=2&&photoSelected.size<=6?'':'disabled')}${photoButton('photoBatchUnfavorite','お気に入り解除','heart',photoSelected.size?'':'disabled')}</div><p class="pa-note">比較は2枚、コラージュは2〜6枚。分類・ゴミ箱移動は自分の写真のみ。</p>`);
   photoImageFallback(grid);
+  if(restoreFocus){const target=[...$('#app-screen').querySelectorAll('#pa-grid button,#pa-selection button')].find(b=>b.dataset.action===focusAction&&b.dataset.id===focusId);target?.focus({preventScroll:true});}
 }
 A.apps.photos.render=photos;
 A.actions.photosHome=()=>{photoSelected.clear();photoSelecting=false;photos();};
@@ -88,12 +95,12 @@ A.actions.photoBatchPurge=()=>changePhotoTrash(selectedLocal(),'purge');
 A.actions.photoBatchFavorite=()=>{refreshPhotos();if(!photoSelected.size)return A.toast('写真を選択してください');const next=[...new Set([...favorites,...photoSelected])];if(A.save('photoFavorites',next)){favorites=next;renderPhotoGrid();A.toast('お気に入りに追加しました');}};
 A.actions.photoBatchAlbum=()=>{
   const ids=selectedLocal();if(!ids.length)return;
-  A.form('アルバムに分類',`<label>アルバム名<input name="album" maxlength="60" placeholder="旅、日常、作品…" list="pa-album-names"></label>${photoAlbumOptions()}<p class="pa-note">空欄で分類を解除。写真は複製しません。</p>`,v=>{refreshPhotos();if(!savePhotoList(userPhotos.map(p=>ids.includes(p?.id)?{...p,album:v.album.trim()}:p)))return false;photos();});
+  A.form('アルバムに分類',`<label>アルバム名<input name="album" maxlength="60" placeholder="旅、日常、作品…" list="pa-album-names"></label>${photoAlbumOptions()}<p class="pa-note">空欄で分類を解除。写真は複製しません。</p>`,v=>{refreshPhotos();if(!savePhotoList(userPhotos.map(p=>ids.includes(p?.id)?{...p,album:v.album.trim(),albumCover:p.album===v.album.trim()?!!p.albumCover:false}:p)))return false;photos();});
 };
 function photoAlbumOptions(){return `<datalist id="pa-album-names">${photoAlbums().map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`;}
 function viewPhoto(id){
-  const p=findPhoto(id);if(!p)return photos();currentPhoto=id;photoZoom=1;A.statusTheme(true);
-  const list=albumPhotos(),index=list.findIndex(x=>x.id===id),liked=favorites.includes(id);
+  const p=findPhoto(id);if(!p)return photos();photoWorkbench=null;currentPhoto=id;photoZoom=1;A.statusTheme(true);
+  const list=albumPhotos();if(!list.some(x=>x.id===id))list.unshift(p);const index=list.findIndex(x=>x.id===id),liked=favorites.includes(id);
   photoMount(A.nav(esc(photoTitle(p)),`<button data-action="photoInfo" aria-label="写真の情報">${icon('info')}</button>`,'photosHome','写真')+`<div class="pa-viewer-shell"><div class="pa-viewer-meta"><span>${p.sample?'UNSPLASH / SAMPLE':p.deletedAt?'ゴミ箱':'LOCAL / ORIGINAL'}</span><span>${index>=0?index+1:1} / ${Math.max(1,list.length)}</span></div><div class="photo-viewer pa-viewer" id="pa-viewport" tabindex="0" aria-label="写真。左右スワイプで移動、ダブルクリックで拡大"><div class="pa-image-stage"><img id="pa-main-image" src="${esc(p.url)}" alt="${esc(photoTitle(p))}" draggable="false"></div></div><div class="pa-view-tools">${photoButton('photoPrevious','前へ','previous')}${photoButton('photoZoom','拡大','search','id="pa-zoom"')}${photoButton('photoPlay',photoPlaying?'停止':'再生',photoPlaying?'pause':'play',`aria-pressed="${photoPlaying}"`)}${photoButton('photoNext','次へ','next')}</div><div class="pa-filmstrip" aria-label="写真一覧">${list.map(item=>`<button data-action="photoOpen" data-id="${esc(item.id)}" aria-label="${esc(photoTitle(item))}" aria-current="${item.id===id?'true':'false'}"><img src="${esc(item.url)}" alt="" loading="lazy"></button>`).join('')}</div><p class="pa-view-caption">${esc(p.caption||photoDate(p))}</p></div><div class="photo-toolbar pa-toolbar">${p.deletedAt?photoButton('photoRestore','復元','refresh')+photoButton('photoPurge','完全削除','trash'):photoButton('photoShare','共有','share')+photoButton('photoDownload','保存','download')+photoButton('photoFavorite','お気に入り','heart',`class="${liked?'liked':''}" aria-pressed="${liked}"`)+photoButton('photoEdit','編集','edit')+(!p.sample?photoButton('photoDelete','ゴミ箱','trash'):'')}</div>`,'viewer');
   const port=$('#pa-viewport'),strip=$('.pa-filmstrip'),thumb=strip.querySelector('[aria-current="true"]');if(thumb)strip.scrollLeft=thumb.offsetLeft-strip.offsetLeft-strip.clientWidth/2+thumb.clientWidth/2;
   let start=null,multiTouch=false;
@@ -101,7 +108,7 @@ function viewPhoto(id){
   port.onpointerdown=e=>{if(e.pointerType==='mouse'&&e.button!==0)return;if(start){multiTouch=true;return;}multiTouch=false;start={id:e.pointerId,x:e.clientX,y:e.clientY,l:port.scrollLeft,t:port.scrollTop};if(photoZoom>1)port.setPointerCapture(e.pointerId);};
   port.onpointermove=e=>{if(start&&start.id===e.pointerId&&photoZoom>1&&!multiTouch){port.scrollLeft=start.l+start.x-e.clientX;port.scrollTop=start.t+start.y-e.clientY;}};
   port.onpointerup=e=>{if(!start||start.id!==e.pointerId)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(!multiTouch&&photoZoom===1&&Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*1.5)movePhoto(dx<0?1:-1);start=null;};port.onpointercancel=()=>{start=null;};
-  if(photoPlaying){const timer=setInterval(()=>{if(document.hidden||!$('#overlay').hidden||photoZoom!==1)return;movePhoto(1);},4500);photoDisposers.push(()=>clearInterval(timer));}
+  if(photoPlaying){const timer=setInterval(()=>{if(document.hidden||!$('#overlay').hidden||photoZoom!==1)return;movePhoto(1);},photoPlayDelay);photoDisposers.push(()=>clearInterval(timer));}
 }
 A.actions.photoOpen=el=>{photoPlaying=false;if(!albumPhotos().some(p=>p.id===el.dataset.id)){photoFilter='all';photoQuery='';photoAlbum='';}viewPhoto(el.dataset.id);};
 const movePhoto=step=>{const list=albumPhotos();if(!list.length)return photos();const i=list.findIndex(p=>p.id===currentPhoto),next=i<0?(step>0?0:list.length-1):(i+step+list.length)%list.length;viewPhoto(list[next].id);};
@@ -121,7 +128,7 @@ A.actions.photoInfo=()=>{
   const img=$('#pa-main-image'),dimensions=img?.naturalWidth?`${img.naturalWidth} × ${img.naturalHeight} px`:'読み込み待ち';
   if(p.sample)return A.overlay(`<div class="modal-sheet pa-info">${A.overlayTitle('写真の情報')}<h3>${esc(photoTitle(p))}</h3><p>${dimensions}</p><p>Unsplash のサンプル写真。撮影日・撮影場所の情報はありません。編集結果は自分の写真としてコピー保存できます。</p></div>`,'sheet-overlay');
   A.form('写真の情報',`<p class="pa-note">${dimensions} · 追加日 ${esc(photoDate(p))}<br>撮影日時・位置情報（EXIF）は保持しません。</p><label>写真名<input name="title" maxlength="100" required value="${esc(photoTitle(p))}"></label><label>メモ<textarea name="caption" maxlength="1000" rows="3">${esc(p.caption||'')}</textarea></label><label>アルバム<input name="album" maxlength="60" value="${esc(p.album||'')}" list="pa-album-names"></label>${photoAlbumOptions()}`,v=>{
-    if(!v.title.trim()){A.toast('写真名を入力してください');return false;}refreshPhotos();if(!savePhotoList(userPhotos.map(item=>item?.id===p.id?{...item,title:v.title.trim(),caption:v.caption.trim(),album:v.album.trim()}:item)))return false;viewPhoto(p.id);
+    if(!v.title.trim()){A.toast('写真名を入力してください');return false;}refreshPhotos();if(!savePhotoList(userPhotos.map(item=>item?.id===p.id?{...item,title:v.title.trim(),caption:v.caption.trim(),album:v.album.trim(),albumCover:item.album===v.album.trim()?!!item.albumCover:false}:item)))return false;viewPhoto(p.id);
   });
 };
 async function exportPhoto(share){
@@ -160,6 +167,105 @@ A.actions.photoImport=()=>{
     finally{photoImporting=false;if(A.current==='photos'&&$('#app-screen').dataset.photoMode==='library')photos();A.toast(`${added}枚追加${skipped?' / '+skipped+'枚は形式・サイズ等で読込不可':''}${full?' / 容量不足で中断':''}`);}
   };input.click();
 };
+// Photo workspaces share the library's storage and clean up every image request.
+A.actions.photoCreateStart=()=>{photoFilter='all';photoAlbum='';photoQuery='';photoSelecting=true;photoSelected.clear();photos();$('#pa-selection')?.scrollIntoView({block:'start'});A.toast('2枚を比較、2〜6枚でコラージュを作成できます');};
+A.actions.photoBatchUnfavorite=()=>{if(!photoSelected.size)return;refreshPhotos();const next=favorites.filter(id=>!photoSelected.has(id));if(A.save('photoFavorites',next)){favorites=next;renderPhotoGrid();A.toast('お気に入りを解除しました');}};
+A.actions.photoPlaybackSettings=()=>A.form('スライドショー',`<label>切り替え間隔<select name="delay">${[[3000,'3秒'],[4500,'4.5秒'],[7000,'7秒'],[10000,'10秒']].map(([n,label])=>`<option value="${n}" ${photoPlayDelay===n?'selected':''}>${label}</option>`).join('')}</select></label><p class="pa-note">設定はこのタブ内のみ。非表示のタブ・拡大中・メニュー表示中は写真を進めません。</p>`,v=>{photoPlayDelay=[3000,4500,7000,10000].includes(Number(v.delay))?Number(v.delay):4500;});
+A.actions.photoAlbumsOpen=showPhotoAlbums;
+function showPhotoAlbums(){
+  refreshPhotos();photoPlaying=false;photoWorkbench=null;A.statusTheme(false);
+  const names=photoAlbums(),own=localPhotos().filter(p=>!p.deletedAt);
+  photoMount(A.nav('アルバムの棚','','photosHome','写真')+`<div class="app-content pa-albums"><header class="pa-album-heading"><span class="pa-eyebrow">YOUR PERSONAL COLLECTIONS</span><h1>一枚から、物語へ。</h1><p>表紙を選び、名前をつけて。あなたの小さな写真集。</p></header><div class="pa-album-shelf">${names.map((name,i)=>{
+    const items=own.filter(p=>String(p.album)===name),cover=items.find(p=>p.albumCover)||items[0];
+    return `<article class="pa-album-book"><button class="pa-book-cover" data-action="photoAlbumOpen" data-name="${esc(name)}" aria-label="アルバム ${esc(name)}を開く"><span class="pa-book-spine"></span><img src="${esc(cover.url)}" alt=""><span class="pa-book-number">${String(i+1).padStart(2,'0')}</span><span class="pa-book-title"><strong>${esc(name)}</strong><small>${items.length} PHOTOGRAPHS</small></span></button><div class="pa-book-actions"><button data-action="photoAlbumEdit" data-name="${esc(name)}">表紙・名前</button><button data-action="photoAlbumDissolve" data-name="${esc(name)}" aria-label="${esc(name)}の分類を解除">分類を解除</button></div></article>`;
+  }).join('')}</div>${names.length?'':`<div class="pa-empty">${photoArt()}<h3>写真を選んで、最初のアルバムを。</h3><p>「選択」→「アルバムに分類」から作れます。</p></div>`}<div class="pa-album-footer"><p>${own.filter(p=>!p.album).length}枚が未分類</p>${photoButton('photoAlbumOrganize','写真を選んで分類','folder')}</div><p class="pa-note">1枚につき1つのアルバム。分類を解除しても写真は残ります。空のアルバムは表示しません。</p></div>`,'albums');
+}
+A.actions.photoAlbumOpen=el=>{photoFilter='mine';photoAlbum=el.dataset.name;photoQuery='';photoSelecting=false;photos();$('#pa-grid')?.scrollIntoView({block:'start'});};
+A.actions.photoAlbumOrganize=()=>{photoFilter='mine';photoQuery='';photoAlbum='';photoSelecting=true;photoSelected.clear();photos();$('#pa-selection')?.scrollIntoView({block:'start'});};
+A.actions.photoAlbumEdit=el=>{
+  const name=el.dataset.name,items=localPhotos().filter(p=>!p.deletedAt&&p.album===name),cover=items.find(p=>p.albumCover)||items[0];if(!cover)return;
+  A.form('アルバムを整える',`<label>アルバム名<input name="name" required maxlength="60" value="${esc(name)}"></label><label>表紙の写真<select name="cover">${items.map(p=>`<option value="${esc(p.id)}" ${p.id===cover.id?'selected':''}>${esc(photoTitle(p))}</option>`).join('')}</select></label><p class="pa-note">同じ名前のアルバムには統合しません。</p>`,v=>{
+    const nextName=v.name.trim().slice(0,60);if(!nextName){A.toast('アルバム名を入力してください');return false;}refreshPhotos();
+    if(nextName!==name&&localPhotos().some(p=>p.album===nextName)){A.toast('その名前は使用されています');return false;}
+    if(!savePhotoList(userPhotos.map(p=>p?.album===name?{...p,album:nextName,albumCover:p.id===v.cover}:p)))return false;
+    if(photoAlbum===name)photoAlbum=nextName;showPhotoAlbums();
+  });
+};
+A.actions.photoAlbumDissolve=el=>{const name=el.dataset.name;A.confirm('アルバムの分類を解除',`「${esc(name)}」の分類を解除します。写真は削除しません。ゴミ箱内の同じ分類も解除します。`,()=>{refreshPhotos();if(savePhotoList(userPhotos.map(p=>p?.album===name?{...p,album:'',albumCover:false}:p))){if(photoAlbum===name)photoAlbum='';showPhotoAlbums();}});};
+function photoChosen(min,max){refreshPhotos();const items=[...photoSelected].map(findPhoto).filter(p=>p&&!p.deletedAt);if(items.length<min||items.length>max){A.toast(min===max?`${min}枚の写真を選択してください`:`${min}〜${max}枚の写真を選択してください`);return null;}return items;}
+A.actions.photoCompareStart=()=>{const items=photoChosen(2,2);if(!items)return;photoWorkbench={kind:'compare',items,mode:'split',position:50};showPhotoCompare();};
+function showPhotoCompare(){
+  const ws=photoWorkbench;if(ws?.kind!=='compare')return;photoPlaying=false;A.statusTheme(true);
+  photoMount(A.nav('2枚を比較','','photoWorkbenchClose','写真')+`<div class="app-content pa-compare"><header><span class="pa-eyebrow">TWO FRAMES / ONE MOMENT</span><p>違いが見える。好きが見つかる。</p></header><div class="pa-comparison-tabs"><button data-action="photoCompareMode" data-mode="split" aria-pressed="${ws.mode==='split'}">重ねて比較</button><button data-action="photoCompareMode" data-mode="side" aria-pressed="${ws.mode==='side'}">並べて比較</button>${photoButton('photoCompareSwap','左右を入れ替え','switch')}</div><div class="pa-compare-scene ${ws.mode==='side'?'is-side':''}" style="--pa-split:${ws.position}%">${ws.items.map((p,i)=>`<figure class="pa-compare-frame ${i?'pa-compare-b':'pa-compare-a'}"><img src="${esc(p.url)}" alt="${esc(photoTitle(p))}"><figcaption>${i?'B':'A'}</figcaption></figure>`).join('')}<div class="pa-compare-divider" aria-hidden="true"><span>‹ ›</span></div></div><label class="pa-compare-slider" ${ws.mode==='side'?'hidden':''}><span>A</span><input id="pa-compare-slider" type="range" min="0" max="100" value="${ws.position}" aria-label="比較の境界位置"><span>B</span></label><div class="pa-compare-details">${ws.items.map((p,i)=>`<div><span>${i?'B':'A'} / ${p.sample?'SAMPLE':'LOCAL'}</span><strong>${esc(photoTitle(p))}</strong><button data-action="photoCompareFavorite" data-id="${esc(p.id)}" aria-pressed="${favorites.includes(p.id)}">${icon('heart')}<span>${favorites.includes(p.id)?'お気に入り済み':'お気に入りに追加'}</span></button></div>`).join('')}</div><p class="pa-note">写真は縦横比を保ち、同じ枠内に表示します。撮影位置の自動補正・画素差分解析は行いません。</p></div>`,'compare');
+  $('#pa-compare-slider').oninput=e=>{ws.position=Number(e.target.value);$('.pa-compare-scene').style.setProperty('--pa-split',ws.position+'%');};
+}
+A.actions.photoCompareMode=el=>{if(photoWorkbench?.kind!=='compare')return;photoWorkbench.mode=el.dataset.mode==='side'?'side':'split';showPhotoCompare();};
+A.actions.photoCompareSwap=()=>{if(photoWorkbench?.kind!=='compare')return;photoWorkbench.items.reverse();showPhotoCompare();};
+A.actions.photoCompareFavorite=el=>{refreshPhotos();const id=el.dataset.id,next=favorites.includes(id)?favorites.filter(v=>v!==id):[...favorites,id];if(A.save('photoFavorites',next)){favorites=next;el.setAttribute('aria-pressed',String(next.includes(id)));el.querySelector('span').textContent=next.includes(id)?'お気に入り済み':'お気に入りに追加';}};
+A.actions.photoWorkbenchClose=()=>{if(photoWorkbench?.kind==='collage'&&photoWorkbench.dirty)A.confirm('制作画面を閉じる','未保存のレイアウト設定は失われます。元写真は変更しません。',photos);else photos();};
+function photoLoadForCanvas(p,signal){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();let settled=false,timer;
+    const finish=err=>{if(settled)return;settled=true;clearTimeout(timer);signal.removeEventListener('abort',abort);img.onload=img.onerror=null;if(err){img.src='';reject(err);}else resolve(img);};
+    const abort=()=>finish(new DOMException('Cancelled','AbortError'));
+    if(signal.aborted)return abort();signal.addEventListener('abort',abort,{once:true});timer=setTimeout(()=>finish(Error('写真の読み込みがタイムアウトしました')),15000);
+    img.onload=()=>{if(!img.naturalWidth||img.naturalWidth*img.naturalHeight>24000000)return finish(Error('写真のサイズが大きすぎます'));try{const c=document.createElement('canvas');c.width=c.height=1;c.getContext('2d').drawImage(img,0,0,1,1);c.getContext('2d').getImageData(0,0,1,1);finish();}catch{finish(Error('この写真は合成できません。保存してから写真に追加してください'));}};
+    img.onerror=()=>finish(Error('写真を読み込めません。通信・画像形式を確認してください'));if(p.sample)img.crossOrigin='anonymous';img.src=p.url;
+  });
+}
+const collageThemes={ivory:{paper:'#f4eee0',ink:'#3c4d43',line:'#c7bba4',label:'生成り'},sage:{paper:'#ceddcb',ink:'#2e4b3d',line:'#92ad95',label:'セージ'},night:{paper:'#1c2929',ink:'#e8dfc8',line:'#4d6660',label:'深緑'}};
+const collageLayouts=[['grid','グリッド','M3 3h8v8H3ZM14 3h7v8h-7ZM3 14h8v7H3ZM14 14h7v7h-7Z'],['hero','主役の一枚','M3 3h18v11H3ZM3 17h5v4H3ZM11 17h5v4h-5ZM19 17h2v4h-2Z'],['strip','フィルム','M3 3h4v18H3ZM10 3h4v18h-4ZM17 3h4v18h-4Z']];
+A.actions.photoCollageStart=()=>{const items=photoChosen(2,6);if(!items)return;photoWorkbench={kind:'collage',items,images:[],offsets:items.map(()=>({x:50,y:50})),active:0,layout:'grid',ratio:'square',theme:'ivory',gap:18,fit:'cover',title:'日々のかけら',labels:false,dirty:false,ready:false};showPhotoCollage();};
+function showPhotoCollage(){
+  const ws=photoWorkbench;if(ws?.kind!=='collage')return;photoPlaying=false;A.statusTheme(false);
+  photoMount(A.nav('コラージュ工房',`<button id="pa-collage-save" data-action="photoCollageSave" disabled>コピー保存</button>`,'photoWorkbenchClose','写真')+`<div class="app-content pa-collage"><header><span class="pa-eyebrow">MAKE A LITTLE STORY</span><h1>好きな瞬間を、一枚に。</h1><p>2〜6枚の写真でつくる、小さな作品。</p></header><div class="pa-collage-table"><span class="pa-tape pa-tape-left" aria-hidden="true"></span><canvas id="pa-collage-canvas" aria-label="コラージュのプレビュー"></canvas><span class="pa-tape pa-tape-right" aria-hidden="true"></span><div id="pa-collage-status" role="status">写真を準備中…</div></div><div class="pa-layout-choices" aria-label="レイアウト">${collageLayouts.map(([id,label,path])=>`<button data-action="photoCollageLayout" data-value="${id}" aria-pressed="${ws.layout===id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="${path}"/></svg>${label}</button>`).join('')}</div><div class="pa-collage-settings"><label>作品名<input id="pa-collage-title" maxlength="60" value="${esc(ws.title)}" placeholder="タイトルなしも選べます"></label><div class="pa-collage-row"><label>用紙<select id="pa-collage-ratio"><option value="square">正方形</option><option value="portrait">縦 4:5</option><option value="wide">横 3:2</option></select></label><label>写真の収め方<select id="pa-collage-fit"><option value="cover">枠いっぱい</option><option value="contain">写真全体</option></select></label></div><div class="pa-paper-choices" aria-label="用紙の色">${Object.entries(collageThemes).map(([key,t])=>`<button data-action="photoCollageTheme" data-value="${key}" aria-pressed="${ws.theme===key}"><i style="background:${t.paper}"></i>${t.label}</button>`).join('')}</div><label class="pa-slider"><span>余白</span><input id="pa-collage-gap" type="range" min="6" max="40" value="${ws.gap}" aria-label="写真の余白"><output id="pa-collage-gap-value">${ws.gap}</output></label><label class="pa-collage-check"><input type="checkbox" id="pa-collage-labels">写真名を添える</label></div><section class="pa-collage-framing"><h2>並び順と、切り抜き位置</h2><div id="pa-collage-order" class="pa-collage-order"></div><div class="pa-order-controls">${photoButton('photoCollageEarlier','前に移動','previous')}${photoButton('photoCollageLater','後ろに移動','next')}</div><div id="pa-collage-crop-controls">${['x','y'].map((key,i)=>`<label class="pa-slider"><span>${i?'上下':'左右'}位置</span><input id="pa-collage-${key}" type="range" min="0" max="100" value="50" aria-label="選択写真の切り抜き${i?'上下':'左右'}位置"><output id="pa-collage-${key}-value">50</output></label>`).join('')}</div><p class="pa-note">写真を選択して調整。余白がない方向の位置は変化しません。</p></section><button class="pa-collage-export" data-action="photoCollageExport" id="pa-collage-export" disabled>${icon('download')}1800pxのJPEGを書き出す</button><p class="pa-note">コピー保存は最大辺1200px、書き出しは1800px。元写真は変更しません。レイアウトはこの制作画面内のみ保持し、ホーム移動・ページ終了で失われます。</p></div>`,'collage');
+  const controller=new AbortController();let frame=0;photoDisposers.push(()=>{controller.abort();cancelAnimationFrame(frame);});
+  const change=(key,value)=>{ws[key]=value;ws.dirty=true;cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{if(photoWorkbench===ws)updatePhotoCollage();});};
+  $('#pa-collage-title').oninput=e=>change('title',e.target.value.slice(0,60));$('#pa-collage-ratio').value=ws.ratio;$('#pa-collage-ratio').onchange=e=>change('ratio',e.target.value);$('#pa-collage-fit').value=ws.fit;$('#pa-collage-fit').onchange=e=>change('fit',e.target.value);$('#pa-collage-gap').oninput=e=>change('gap',Number(e.target.value));$('#pa-collage-labels').checked=ws.labels;$('#pa-collage-labels').onchange=e=>change('labels',e.target.checked);
+  ['x','y'].forEach(key=>{$('#pa-collage-'+key).oninput=e=>{ws.offsets[ws.active][key]=Number(e.target.value);change('offsets',ws.offsets);};});updatePhotoCollage();
+  if(ws.ready)return;
+  (async()=>{try{for(let i=0;i<ws.items.length;i++){if(controller.signal.aborted)return;$('#pa-collage-status').textContent=`写真を準備中 ${i+1} / ${ws.items.length}`;ws.images[i]=await photoLoadForCanvas(ws.items[i],controller.signal);}if(controller.signal.aborted||photoWorkbench!==ws)return;ws.ready=true;updatePhotoCollage();}catch(e){if(controller.signal.aborted||photoWorkbench!==ws)return;$('#pa-collage-status').textContent=e.message;$('#pa-collage-status').insertAdjacentHTML('beforeend','<button data-action="photoCollageRetry">読み込みを再試行</button>');ws.ready=false;}})();
+}
+A.actions.photoCollageRetry=()=>{if(photoWorkbench?.kind==='collage'){photoWorkbench.images=[];photoWorkbench.ready=false;showPhotoCollage();}};
+function photoCollageFrames(ws,x,y,w,h,gap){
+  const n=ws.items.length;
+  if(ws.layout==='strip')return ws.items.map((_,i)=>[x+i*(w+gap)/n,y,(w-gap*(n-1))/n,h]);
+  if(ws.layout==='hero'){const top=(h-gap)*.6,bottom=h-top-gap,cell=(w-gap*(n-2))/(n-1);return [[x,y,w,top],...ws.items.slice(1).map((_,i)=>[x+i*(cell+gap),y+top+gap,cell,bottom])];}
+  const columns=n>4?3:2,rows=Math.ceil(n/columns),height=(h-gap*(rows-1))/rows;
+  return ws.items.map((_,i)=>{const row=Math.floor(i/columns),count=Math.min(columns,n-row*columns),width=(w-gap*(count-1))/count;return [x+(i%columns)*(width+gap),y+row*(height+gap),width,height];});
+}
+function photoFitText(ctx,text,width){const chars=Array.from(text);if(ctx.measureText(text).width<=width)return text;while(chars.length&&ctx.measureText(chars.join('')+'…').width>width)chars.pop();return chars.join('')+'…';}
+function photoCollageRender(ws,maxEdge){
+  const ratio=ws.ratio==='portrait'?.8:ws.ratio==='wide'?1.5:1,c=document.createElement('canvas');c.width=Math.round(maxEdge*(ratio<1?ratio:1));c.height=Math.round(maxEdge*(ratio>1?1/ratio:1));
+  const ctx=c.getContext('2d'),t=collageThemes[ws.theme],u=c.width/1000,gap=ws.gap*u,margin=36*u,footer=ws.title.trim()?100*u:20*u;
+  ctx.fillStyle=t.paper;ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle=t.line;ctx.lineWidth=u;ctx.strokeRect(14*u,14*u,c.width-28*u,c.height-28*u);
+  photoCollageFrames(ws,margin,margin,c.width-margin*2,c.height-margin-footer,gap).forEach(([x,y,w,h],i)=>{
+    const img=ws.images[i],label=ws.labels?Math.min(28*u,h*.2):0,ih=h-label,position=ws.offsets[i];ctx.save();ctx.fillStyle=t.line;ctx.fillRect(x,y,w,h);ctx.beginPath();ctx.rect(x,y,w,ih);ctx.clip();
+    const scale=ws.fit==='contain'?Math.min(w/img.naturalWidth,ih/img.naturalHeight):Math.max(w/img.naturalWidth,ih/img.naturalHeight),dw=img.naturalWidth*scale,dh=img.naturalHeight*scale;
+    ctx.drawImage(img,x+(w-dw)*(ws.fit==='contain'?.5:position.x/100),y+(ih-dh)*(ws.fit==='contain'?.5:position.y/100),dw,dh);ctx.restore();
+    if(label){ctx.fillStyle=t.paper;ctx.fillRect(x,y+ih,w,label);ctx.fillStyle=t.ink;ctx.font=`${16*u}px sans-serif`;ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(photoFitText(ctx,photoTitle(ws.items[i]),w-8*u),x+4*u,y+ih+label/2);}
+  });
+  if(ws.title.trim()){ctx.fillStyle=t.ink;ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`500 ${32*u}px sans-serif`;ctx.fillText(photoFitText(ctx,ws.title.trim(),c.width-2*margin),c.width/2,c.height-footer/2);ctx.fillStyle=t.line;ctx.fillRect(c.width/2-22*u,c.height-27*u,44*u,u);}
+  return c;
+}
+function updatePhotoCollage(){
+  const ws=photoWorkbench,canvas=$('#pa-collage-canvas');if(ws?.kind!=='collage'||!canvas)return;
+  if(ws.ready){try{const result=photoCollageRender(ws,720);canvas.width=result.width;canvas.height=result.height;canvas.getContext('2d').drawImage(result,0,0);$('#pa-collage-status').hidden=true;$('#pa-collage-save').disabled=false;$('#pa-collage-export').disabled=false;}catch{ws.ready=false;$('#pa-collage-status').hidden=false;$('#pa-collage-status').textContent='画像を合成できませんでした。元写真は変更していません。';$('#pa-collage-save').disabled=true;$('#pa-collage-export').disabled=true;}}
+  $('#pa-collage-gap-value').textContent=ws.gap;$('#pa-collage-crop-controls').hidden=ws.fit==='contain';
+  ['x','y'].forEach(key=>{$('#pa-collage-'+key).value=ws.offsets[ws.active][key];$('#pa-collage-'+key+'-value').textContent=ws.offsets[ws.active][key];});
+  document.querySelectorAll('[data-action="photoCollageLayout"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.value===ws.layout)));document.querySelectorAll('[data-action="photoCollageTheme"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.value===ws.theme)));
+  const order=$('#pa-collage-order'),signature=JSON.stringify(ws.items.map(p=>p.id));
+  if(order.dataset.order!==signature){order.dataset.order=signature;order.innerHTML=ws.items.map((p,i)=>`<button data-action="photoCollageSlot" data-index="${i}" aria-label="${i+1}枚目 ${esc(photoTitle(p))}を調整"><img src="${esc(p.url)}" alt=""><span>${i+1}</span></button>`).join('');photoImageFallback(order);}
+  order.querySelectorAll('button').forEach((b,i)=>b.setAttribute('aria-pressed',String(i===ws.active)));$('[data-action="photoCollageEarlier"]').disabled=!ws.ready||!ws.active;$('[data-action="photoCollageLater"]').disabled=!ws.ready||ws.active===ws.items.length-1;
+}
+A.actions.photoCollageLayout=el=>{const ws=photoWorkbench;if(ws?.kind!=='collage'||!collageLayouts.some(([key])=>key===el.dataset.value))return;ws.layout=el.dataset.value;ws.dirty=true;updatePhotoCollage();};
+A.actions.photoCollageTheme=el=>{const ws=photoWorkbench;if(ws?.kind!=='collage'||!Object.hasOwn(collageThemes,el.dataset.value))return;ws.theme=el.dataset.value;ws.dirty=true;updatePhotoCollage();};
+A.actions.photoCollageSlot=el=>{const ws=photoWorkbench,index=Number(el.dataset.index);if(ws?.kind==='collage'&&Number.isInteger(index)&&ws.items[index]){ws.active=index;updatePhotoCollage();}};
+function photoCollageMove(step){const ws=photoWorkbench;if(ws?.kind!=='collage'||!ws.ready)return;const i=ws.active,j=i+step;if(j<0||j>=ws.items.length)return;['items','images','offsets'].forEach(key=>{[ws[key][i],ws[key][j]]=[ws[key][j],ws[key][i]];});ws.active=j;ws.dirty=true;updatePhotoCollage();}
+A.actions.photoCollageEarlier=()=>photoCollageMove(-1);A.actions.photoCollageLater=()=>photoCollageMove(1);
+A.actions.photoCollageSave=()=>{const ws=photoWorkbench;if(ws?.kind!=='collage'||!ws.ready)return;try{const canvas=photoCollageRender(ws,1200);if(!A.storePhoto(canvas.toDataURL('image/jpeg',.91),ws.title.trim()||'コラージュ',{album:'コラージュ',caption:ws.items.length+'枚の写真から制作'})){A.toast('容量不足。JPEGを書き出して保存できます');return;}const id=userPhotos[0].id;ws.dirty=false;photoWorkbench=null;photoFilter='mine';photoAlbum='';photoQuery='';viewPhoto(id);A.toast('元写真を残してコラージュを保存しました');}catch{A.toast('コラージュを保存できませんでした');}};
+A.actions.photoCollageExport=()=>{const ws=photoWorkbench;if(ws?.kind!=='collage'||!ws.ready)return;try{const canvas=photoCollageRender(ws,1800);canvas.toBlob(blob=>{if(!blob)return A.toast('画像を書き出せませんでした');A.download(blob,'aura-collage-'+Date.now()+'.jpg');A.toast('1800pxのコラージュを書き出しました');},'image/jpeg',.93);}catch{A.toast('コラージュを書き出せませんでした');}};
+
 // Canvas-based adjustments also work in browsers without CanvasRenderingContext2D.filter.
 const photoPresets=[{id:'original',name:'オリジナル',b:0,c:0,s:0,w:0},{id:'daylight',name:'光',b:8,c:5,s:8,w:3},{id:'film',name:'フィルム',b:3,c:-12,s:-20,w:16},{id:'forest',name:'森',b:-3,c:13,s:-12,w:-8},{id:'sunset',name:'夕映え',b:4,c:8,s:14,w:25},{id:'mono',name:'モノクロ',b:0,c:18,s:-100,w:0}];
 const defaultPhotoEdit=()=>({preset:'original',b:0,c:0,s:0,w:0,rotation:0,flip:false,ratio:'free',cropX:50,cropY:50});
