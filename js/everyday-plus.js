@@ -30,6 +30,9 @@
   let ctSelecting=false,ctSelected=new Set(),ctLimit=60,ctUndo=null,ctDetail='';
   const ctTones=[['blue','青磁'],['sage','若葉'],['rose','薄紅'],['amber','琥珀'],['violet','藤'],['slate','墨']];
   const ctFields={name:80,kana:100,phone:24,email:254,group:40,company:120,role:80,address:300,birthday:10,lastContact:10,note:12000};
+  const ctLabels={name:'名前',kana:'よみがな',phone:'電話番号',email:'メール',group:'グループ',company:'会社・組織',role:'役職',address:'住所',birthday:'誕生日',lastContact:'最後の連絡日',note:'メモ'};
+  let ctLayout=A.load('contactLayout','list')==='cards'?'cards':'list';
+  const ctIcon=kind=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">${kind==='copy'?'<rect x="8" y="8" width="12" height="13" rx="3"/><path d="M15 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/>':'<path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/>'}</svg>`;
   const phoneKey=value=>normalize(value).replace(/[\s()\-]/g,'');
   const ctText=value=>normalize(value).replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60));
   const ctFind=id=>rows('contacts').find(x=>x.id===id);
@@ -77,12 +80,12 @@
     return `<article class="ct-row" style="--ct-delay:${Math.min(i,9)*24}ms">${ctSelecting?`<input class="ct-check" type="checkbox" data-contact-select="${esc(x.id)}" aria-label="${esc(x.name)}を選択" ${ctSelected.has(x.id)?'checked':''}>`:''}<button class="ct-person" data-action="evContactOpen" data-id="${esc(x.id)}">${ctAvatar(x)}<span class="ct-person-text"><strong>${esc(x.name)}</strong><small>${esc([x.company,x.group].filter(Boolean).join(' · ')||x.phone||x.email||'連絡先未入力')}</small>${contactFilter==='birthdays'?`<em>${ctBirthday(x.birthday)===0?'今日がお誕生日':ctBirthday(x.birthday)+'日後のお誕生日'}</em>`:''}${duplicates.has(x.id)?'<em>同じ番号・メールの候補あり</em>':''}</span></button>${ctSelecting?'':`<button class="ct-star" data-action="ctQuickFavorite" data-id="${esc(x.id)}" aria-label="${esc(x.name)}のお気に入りを${x.favorite?'解除':'登録'}" aria-pressed="${!!x.favorite}">${A.icon('star')}</button>`}</article>`;
   }
   function ctResults() {
-    const host=$('#ep-contact-results');if(!host)return;
+    const host=$('#ep-contact-results');if(!host)return;host.className='ct-results ct-layout-'+ctLayout;
     const list=visibleContacts(),duplicates=duplicateIds(),shown=list.slice(0,ctLimit),liveIds=new Set(rows('contacts').map(x=>x.id));ctSelected=new Set([...ctSelected].filter(id=>liveIds.has(id)));
     $('#ep-contact-count').textContent=`${list.length}件`+(contactFilter==='duplicates'?' · 自動統合なし':'');
     host.innerHTML=shown.map((x,i)=>ctRow(x,i,duplicates)).join('')||`<div class="ct-empty">${A.icon('contacts')}<h3>${rows('contacts').length?'見つかりませんでした':'大切な人を、ここに。'}</h3><p>${rows('contacts').length?'検索や絞り込みを変えてみてください。':'最初の連絡先から、あなたのアドレス帳が始まります。'}</p>${button(rows('contacts').length?'ctReset':'evContactEdit',rows('contacts').length?'絞り込みを解除':'連絡先を追加')}</div>`;
     $('#ct-more').innerHTML=list.length>shown.length?button('ctMore',`続きを表示（残り${list.length-shown.length}件）`):'';
-    $('#ct-selection').innerHTML=ctSelecting?`<div class="ct-selection"><strong>${ctSelected.size}件を選択</strong>${button('ctSelectAll','条件内の全件')}${button('ctSelectNone','選択解除')}<div>${button('ctBulkGroup','分類')}${button('ctBulkFavorite','お気に入り')}${button('ctExportSelected','書き出す')}${button('ctBulkDelete','削除')}</div><small>絞り込みで隠れた選択も操作対象です。</small></div>`:'';
+    $('#ct-selection').innerHTML=ctSelecting?`<div class="ct-selection"><strong>${ctSelected.size}件を選択</strong>${button('ctSelectAll','条件内の全件')}${button('ctSelectNone','選択解除')}<div>${button('ctBulkGroup','分類')}${button('ctBulkFavorite','お気に入り')}${button('ctExportSelected','書き出す')}${button('ctBulkDelete','削除')}${button('ctMerge','2件を統合')}${button('ctSelectedJSON','JSON保存')}</div><small>絞り込みで隠れた選択も操作対象です。</small></div>`:'';
     host.querySelectorAll('[data-contact-select]').forEach(input=>input.onchange=()=>{if(input.checked)ctSelected.add(input.dataset.contactSelect);else ctSelected.delete(input.dataset.contactSelect);$('#ct-selection strong').textContent=`${ctSelected.size}件を選択`;});
   }
   function renderContacts() {
@@ -90,20 +93,22 @@
     const all=rows('contacts'),favorites=all.filter(x=>x.favorite),birthdays=all.filter(x=>ctBirthday(x.birthday)<=30).length;
     page('contacts',`<section class="ct-hero"><div class="ct-hero-copy"><span class="ct-eyebrow">PEOPLE ATELIER</span><h1>つながりを、<br>大切に。</h1><p><strong>${all.length}</strong> 人のアドレス帳</p></div>${ctArt()}<div class="ct-hero-foot">${A.icon('lock')}このブラウザに保存・自動送信なし</div></section>
       ${favorites.length?`<section class="ct-favorites" aria-label="お気に入り"><div class="ct-section-head"><h3>すぐに会いたい人</h3><span>${favorites.length}人</span></div><div class="ct-favorite-rail">${favorites.slice(0,12).map(x=>`<button data-action="evContactOpen" data-id="${esc(x.id)}">${ctAvatar(x)}<strong>${esc(x.name)}</strong><small>${esc(x.group||'お気に入り')}</small></button>`).join('')}${favorites.length>12?button('epContactFilter','すべて見る','favorites'):''}</div></section>`:''}
-      <div class="ct-search">${A.search('ep-contact-query','名前・よみ・会社・番号で検索')}</div>
+      ${ctBirthdayCard()}${ctGroupsPanel()}<div class="ct-search">${A.search('ep-contact-query','名前・よみ・会社・番号で検索')}</div>
       ${tabs([['all','すべて'],['favorites','お気に入り'],['birthdays',`誕生日${birthdays?' '+birthdays:''}`],['duplicates','重複候補']],contactFilter,'epContactFilter')}
       <div class="ct-filter-grid"><div>${select('グループ','contact-group',[['*','すべて'],['','未分類'],...contactGroups().map(x=>[x,x])],contactGroup)}</div><div>${select('並び順','contact-sort',[['favorite','お気に入り順'],['name','よみ・名前順'],['updated','更新が新しい順'],['recent','連絡日が新しい順'],['birthday','誕生日が近い順']],contactSort)}</div></div>
       ${contactFilter==='birthdays'?'<p class="ep-muted">今日から30日以内。2月29日は平年のみ2月28日として表示。</p>':''}
-      <div class="ct-section-head"><h3 id="ep-contact-count" role="status"></h3>${button('ctSelectMode',ctSelecting?'選択を終了':'複数選択','',`aria-pressed="${ctSelecting}"`)}</div><div id="ct-selection"></div><div class="ct-results" id="ep-contact-results"></div><div id="ct-more" class="ct-more"></div>
-      ${details('読み込み・書き出し',`<p class="ep-muted">vCardは端末の連絡先へ。JSONは追加項目も含むバックアップです。個人情報を含むため共有先にご注意ください。</p><div class="ct-tools">${button('epContactExport','表示中のvCard')}${button('evContactsExport','全件のvCard')}${button('ctJSONExport','全件のJSON')}${button('ctImport','JSONを読み込む')}</div><p class="ep-muted">クラウド同期・端末の連絡先の自動取得はありません。</p>`)}${ctUndoBar()}`,iconButton('evContactEdit','連絡先を追加','plus'));
+      <div class="ct-section-head"><h3 id="ep-contact-count" role="status"></h3><button class="ct-layout-button" data-action="ctLayout" aria-label="${ctLayout==='list'?'カード表示へ':'リスト表示へ'}" aria-pressed="${ctLayout==='cards'}">${ctLayout==='list'?A.icon('grid'):ctIcon('list')}</button>${button('ctSelectMode',ctSelecting?'選択を終了':'複数選択','',`aria-pressed="${ctSelecting}"`)}</div><div id="ct-selection"></div><div class="ct-results" id="ep-contact-results"></div><div id="ct-more" class="ct-more"></div>
+      ${details('読み込み・書き出し',`<p class="ep-muted">vCardは端末の連絡先へ。JSONは追加項目も含むバックアップです。個人情報を含むため共有先にご注意ください。</p><div class="ct-tools">${button('epContactExport','表示中のvCard')}${button('evContactsExport','全件のvCard')}${button('ctJSONExport','全件のJSON')}${button('ctImport','JSONを読み込む')}</div><p class="ep-muted">クラウド同期・端末の連絡先の自動取得はありません。複数タブからの同時編集は避けてください。</p>`)}${ctUndoBar()}`,iconButton('evContactEdit','連絡先を追加','plus'));
     $('#ep-contact-query').value=contactQuery;$('#ep-contact-query').oninput=e=>{contactQuery=e.target.value;ctLimit=60;ctResults();};
     $('#ep-contact-group').onchange=e=>{contactGroup=e.target.value;ctLimit=60;ctResults();};$('#ep-contact-sort').onchange=e=>{contactSort=e.target.value;ctResults();};ctResults();
   }
+  function ctRenderAtPosition(action){const scroll=$('.ev-contacts')?.scrollTop||0;renderContacts();$('.ev-contacts').scrollTop=scroll;$('.ev-contacts [data-action="'+action+'"]')?.focus({preventScroll:true});}
+  A.actions.ctLayout=()=>{const next=ctLayout==='list'?'cards':'list';if(!A.save('contactLayout',next))return;ctLayout=next;ctRenderAtPosition('ctLayout');};
   A.apps.contacts.render=renderContacts;A.actions.evContactsHome=renderContacts;
   A.actions.epContactFilter=el=>{contactFilter=el.dataset.id;ctLimit=60;renderContacts();};
   A.actions.ctReset=()=>{contactGroup='*';contactFilter='all';contactQuery='';ctLimit=60;renderContacts();};
   A.actions.ctMore=()=>{ctLimit+=60;ctResults();};
-  A.actions.ctSelectMode=()=>{ctSelecting=!ctSelecting;ctSelected.clear();renderContacts();};
+  A.actions.ctSelectMode=()=>{ctSelecting=!ctSelecting;ctSelected.clear();ctRenderAtPosition('ctSelectMode');};
   A.actions.ctSelectAll=()=>{visibleContacts().forEach(x=>ctSelected.add(x.id));ctResults();};A.actions.ctSelectNone=()=>{ctSelected.clear();ctResults();};
   function ctValid(v) {
     if(!v.name?.trim()){A.toast('名前を入力してください');return false;}
@@ -122,7 +127,7 @@
         if(x&&JSON.stringify(ctFind(x.id))!==JSON.stringify(x)){A.toast('別の操作で変更されています。開き直してください');return false;}
         if(!x&&rows('contacts').length>=5000){A.toast('連絡先の上限は5,000件です');return false;}
         const record={...x,...v,id:x?.id||A.id(),favorite:x?.favorite||false,updatedAt:Date.now()};
-        return ctUpdate(record,x?'プロフィールを更新しました':'連絡先を追加しました',back?()=>A.actions.evContactOpen({dataset:{id:record.id}}):renderContacts);
+        return ctUpdate(record,x?'プロフィールを更新しました':'連絡先を追加しました',()=>{if(!x){contactGroup='*';contactFilter='all';contactQuery='';}if(back||!x)A.actions.evContactOpen({dataset:{id:record.id}});else renderContacts();});
       });
     $('#modal-form').classList.add('ct-editor');
     const preview=()=>{$('#ct-editor-preview').innerHTML=ctAvatar({name:$('#ep-name').value||'A',tone:$('#ep-tone').value},true)+'<span>PERSONAL CONTACT<br><small>あなただけのアドレス帳</small></span>';};$('#ep-name').oninput=preview;$('#ep-tone').onchange=preview;
@@ -131,7 +136,7 @@
   A.actions.evContactOpen=el=>{
     const x=ctFind(el.dataset.id);if(!x){A.toast('連絡先が見つかりません');return renderContacts();}ctDetail=x.id;
     const phone=phoneKey(x.phone),validPhone=/^\+?[0-9]{3,15}$/.test(phone);
-    const info=(key,label)=>x[key]?`<div class="ct-info-row"><div><dt>${label}</dt><dd>${esc(x[key])}</dd></div><button class="ct-copy" data-action="ctCopyField" data-id="${esc(x.id)}" data-field="${key}" aria-label="${label}をコピー">${A.icon('copy')}</button></div>`:'';
+    const info=(key,label)=>x[key]?`<div class="ct-info-row"><dt>${label}</dt><dd><span>${esc(x[key])}</span><button class="ct-copy" data-action="ctCopyField" data-id="${esc(x.id)}" data-field="${key}" aria-label="${label}をコピー">${ctIcon('copy')}</button></dd></div>`:'';
     page('contacts',`<section class="ct-profile ct-tone-${ctTone(x)}"><div class="ct-profile-lines" aria-hidden="true"><svg viewBox="0 0 320 240" fill="none"><path d="M-20 145C100 10 150 290 350 40M-20 157C100 22 150 302 350 52M-20 169C100 34 150 314 350 64M-20 181C100 46 150 326 350 76" stroke="currentColor"/><circle cx="268" cy="39" r="66" stroke="currentColor"/><circle cx="268" cy="39" r="80" stroke="currentColor"/></svg></div><span class="ct-eyebrow">PERSONAL CONTACT</span>${ctAvatar(x,true)}${x.kana?`<p class="ct-kana">${esc(x.kana)}</p>`:''}<h1>${esc(x.name)}</h1><p class="ct-company">${esc([x.company,x.role].filter(Boolean).join(' / ')||'あなたの大切なつながり')}</p><div class="ct-profile-tags"><span>${esc(x.group||'未分類')}</span><button data-action="evContactFavorite" data-id="${esc(x.id)}" aria-pressed="${!!x.favorite}">${A.icon('star')}${x.favorite?'お気に入り':'登録する'}</button></div></section>
       <div class="ct-contact-actions">${validPhone?`<a href="tel:${esc(phone)}">${A.icon('phone')}電話</a><a href="sms:${esc(phone)}">${A.icon('messages')}SMS</a>`:''}${x.email?`<a href="mailto:${esc(encodeURIComponent(x.email))}">${A.icon('mail')}メール</a>`:''}${!validPhone&&!x.email?button('evContactEdit','電話・メールを登録',x.id):''}</div><p class="ct-handoff-note">発信・送信は移動先のアプリで確認します</p>
       <dl class="ct-info">${info('phone','電話番号')}${info('email','メール')}${info('company','会社・組織')}${info('role','役職')}${info('address','住所')}${info('birthday','誕生日')}</dl><section class="ct-touch"><div>${A.icon('calendar')}<span>最後に連絡した日<small>${esc(x.lastContact||'まだ記録がありません')} · 手動記録</small></span></div>${button('ctTouch','今日を記録',x.id)}<p>通話・送信の結果は自動取得しません。</p></section>
@@ -143,7 +148,17 @@
   A.actions.evContactDelete=el=>{const id=el.dataset.id;A.confirm('連絡先を削除しますか？','このブラウザから削除します。直後は取り消せます。',()=>ctWrite(rows('contacts').filter(x=>x.id!==id),'連絡先を削除しました'));};
   A.actions.epContactCopy=el=>{const x=ctFind(el.dataset.id);if(x)copy(ctSummary(x));};
   A.actions.ctCopyField=el=>{const x=ctFind(el.dataset.id);if(x&&Object.hasOwn(ctFields,el.dataset.field))copy(String(x[el.dataset.field]||''));};
-  A.actions.ctShare=async el=>{const x=ctFind(el.dataset.id);if(!x)return;try{if(navigator.share)await navigator.share({title:x.name,text:ctSummary(x)});else await copy(ctSummary(x));}catch(error){if(error.name!=='AbortError')A.toast('共有できません。「コピー」または「vCard保存」をお使いください');}};
+  A.actions.ctShare=el=>{
+    const x=ctFind(el.dataset.id);if(!x)return;
+    A.form('共有する項目',`<p class="ct-import-help">選んだ項目だけを共有します。住所・誕生日・メモは初期状態では含みません。</p><div class="ct-share-fields">${Object.keys(ctFields).filter(k=>x[k]).map(k=>`<label><input type="checkbox" name="${k}" value="yes" ${['name','phone','email','company','role'].includes(k)?'checked':''}><span>${ctLabels[k]}</span></label>`).join('')}</div><details class="ep-details"><summary>共有内容のプレビュー</summary><pre id="ct-share-preview"></pre></details>`,v=>{
+      const keys=Object.keys(ctFields).filter(k=>v[k]==='yes'&&x[k]);if(!keys.length){A.toast('共有する項目を選んでください');return false;}
+      const text=keys.map(k=>ctLabels[k]+': '+x[k]).join('\n');
+      if(navigator.share)navigator.share({title:'連絡先',text}).catch(error=>{if(error.name!=='AbortError')A.toast('共有できません。コピーをお使いください');});else copy(text);
+    },navigator.share?'選択項目を共有':'選択項目をコピー');
+    const form=$('#modal-form'),preview=$('#ct-share-preview');
+    const refresh=()=>{const values=Object.fromEntries(new FormData(form));preview.textContent=Object.keys(ctFields).filter(k=>values[k]==='yes'&&x[k]).map(k=>ctLabels[k]+': '+x[k]).join('\n')||'項目を選択してください';};
+    form.onchange=refresh;refresh();
+  };
   A.actions.ctTouch=el=>{const x=ctFind(el.dataset.id);if(x)ctUpdate({...x,lastContact:day(),updatedAt:Date.now()},'今日の連絡を記録しました',()=>A.actions.evContactOpen(el));};
   A.actions.ctUndo=()=>{if(!ctUndo)return;if(JSON.stringify(rows('contacts'))!==ctUndo.after){A.toast('他の操作で変更されたため取り消せません');return;}if(!A.save('contacts',ctUndo.before)){A.toast('復元できません。再試行してください');return;}ctUndo=null;ctSelected.clear();renderContacts();A.toast('元に戻しました');};
   function ctSelection(){const list=rows('contacts').filter(x=>ctSelected.has(x.id));if(!list.length)A.toast('連絡先を選択してください');return list;}
@@ -151,6 +166,38 @@
   A.actions.ctBulkGroup=()=>{if(!ctSelection().length)return;A.form('選択した連絡先を分類',field('グループ（空欄で未分類）','group','','text','maxlength="40"'),v=>{if(v.group.trim()==='*'){A.toast('別のグループ名を入力してください');return false;}return ctBulk({group:v.group.trim()},'選択した連絡先を分類しました');});};
   A.actions.ctBulkFavorite=()=>{if(!ctSelection().length)return;A.form('お気に入りをまとめて変更',select('操作','favorite',[['yes','登録する'],['no','解除する']],'yes'),v=>ctBulk({favorite:v.favorite==='yes'},'お気に入りをまとめて変更しました'));};
   A.actions.ctBulkDelete=()=>{const selected=ctSelection();if(!selected.length)return;const ids=new Set(selected.map(x=>x.id));A.confirm(`${ids.size}件を削除しますか？`,'絞り込みで隠れている選択も含みます。直後は取り消せます。',()=>ctWrite(rows('contacts').filter(x=>!ids.has(x.id)),`${ids.size}件を削除しました`));};
+  // All dates and birthday art reflect saved records, never generated demo people.
+  function ctBirthdayCard() {
+    const next=rows('contacts').map(x=>({x,days:ctBirthday(x.birthday)})).filter(item=>item.days<=30).sort((a,b)=>a.days-b.days)[0];
+    if(!next)return '';
+    return `<button class="ct-birthday-card" data-action="evContactOpen" data-id="${esc(next.x.id)}"><svg viewBox="0 0 90 80" fill="none" aria-hidden="true"><ellipse cx="45" cy="70" rx="32" ry="6" fill="#956740" opacity=".12"/><path d="M16 43h58v22c0 10-58 10-58 0z" fill="#c39483"/><ellipse cx="45" cy="44" rx="29" ry="9" fill="#f7e7d5"/><path d="M16 44v10q4 10 9 0q5-8 10 1q5 10 10 0q5-10 10-1q5 10 10 0q5-8 9-3v-7" fill="#edd6c2"/><path d="M28 66h34" stroke="#eedcc9" stroke-linecap="round"/><path d="M45 27v17" stroke="#77948b" stroke-width="5"/><path d="M45 10c-14 13 6 24 6 10c0-4-4-5-6-10" fill="#d4a157"/><path d="M16 19l3 6M73 19l-4 5M25 7l-2 5" stroke="#c4a779" stroke-width="2" stroke-linecap="round"/></svg><span><small>UPCOMING BIRTHDAY</small><strong>${esc(next.x.name)}</strong><em>${next.days===0?'今日がお誕生日です':`${next.days}日後 · ${esc(next.x.birthday.slice(5).replace('-',' / '))}`}</em></span>${A.icon('arrow')}</button>`;
+  }
+  function ctGroupsPanel() {
+    const counts=new Map();for(const x of rows('contacts')){const key=x.group||'';counts.set(key,(counts.get(key)||0)+1);}
+    if(!counts.size)return '';
+    return details('グループの一覧',`<div class="ct-group-list">${[...counts].sort((a,b)=>b[1]-a[1]).map(([name,count])=>`<div class="ct-group-item"><button data-action="ctGroupUse" data-id="${esc(name)}"><span class="ct-group-orb ct-tone-${ctTone({name})}">${A.icon('contacts')}</span><span><strong>${esc(name||'未分類')}</strong><small>${count}人</small></span></button>${name?`<button class="ct-group-edit" data-action="ctGroupEdit" data-id="${esc(name)}" aria-label="${esc(name)}グループを編集">${A.icon('edit')}</button>`:''}</div>`).join('')}</div><p class="ep-muted">分類を解除しても連絡先は削除されません。</p>`);
+  }
+  A.actions.ctGroupUse=el=>{contactGroup=el.dataset.id;contactFilter='all';contactQuery='';ctLimit=60;renderContacts();};
+  A.actions.ctGroupEdit=el=>{
+    const name=el.dataset.id,records=rows('contacts').filter(x=>x.group===name),snapshot=JSON.stringify(records);if(!records.length)return;
+    A.form('グループを編集',`<p class="ct-import-help">「${esc(name)}」の${records.length}人が対象。同名のグループがあればまとめます。</p>`+select('操作','operation',[['rename','名前を変更'],['clear','分類を解除して未分類へ']],'rename')+field('新しいグループ名','group',name,'text','maxlength="40"'),v=>{
+      const list=rows('contacts');if(JSON.stringify(list.filter(x=>x.group===name))!==snapshot){A.toast('対象が変更されています。開き直してください');return false;}
+      const next=v.operation==='clear'?'':v.group.trim();if(next==='*'||(v.operation==='rename'&&!next)){A.toast('グループ名を入力してください');return false;}
+      if(!ctWrite(list.map(x=>x.group===name?{...x,group:next,updatedAt:Date.now()}:x),'グループを更新しました',null))return false;contactGroup=next;renderContacts();return true;
+    });
+  };
+  A.actions.ctMerge=()=>{
+    const selected=ctSelection();if(selected.length!==2){A.toast('統合する連絡先を2件だけ選んでください');return;}
+    const [a,b]=selected,merged={...b,...a},choices=new Map();
+    for(const key of Object.keys(ctFields)){const values=[...new Set([a[key],b[key]].map(v=>String(v||'').trim()).filter(Boolean))];merged[key]=values[0]||'';if(values.length>1)choices.set(key,values);}
+    A.form('2件の連絡先を統合',`<div class="ct-merge-people"><div>${ctAvatar(a)}<strong>${esc(a.name)}</strong></div><span aria-hidden="true">→</span><div>${ctAvatar(b)}<strong>${esc(b.name)}</strong></div></div><p class="ct-import-help">2件を1件にまとめます。異なる内容は残す方を選択してください。選ばなかった値は削除されます。直後は取り消せます。</p>${[...choices].map(([key,values])=>`<fieldset class="ct-merge-field"><legend>${ctLabels[key]}</legend>${values.map((value,index)=>`<label><input type="radio" name="merge-${key}" value="${index}" ${index===0?'checked':''}><span>${esc(value)}</span></label>`).join('')}</fieldset>`).join('')||'<p class="ct-import-help">異なる項目はありません。空欄はもう一方の値で補います。</p>'}<label class="ct-merge-confirm"><input type="checkbox" required>残す内容を確認しました</label>`,v=>{
+      const list=rows('contacts');if(JSON.stringify(list.find(x=>x.id===a.id))!==JSON.stringify(a)||JSON.stringify(list.find(x=>x.id===b.id))!==JSON.stringify(b)){A.toast('対象が変更されています。開き直してください');return false;}
+      for(const [key,values] of choices){const index=Number(v['merge-'+key]);if(!Number.isInteger(index)||!values[index])return false;merged[key]=values[index];}
+      merged.id=a.id;merged.favorite=!!(a.favorite||b.favorite);merged.tone=ctTone(a);merged.updatedAt=Date.now();if(!ctValid(merged))return false;
+      if(!ctWrite(list.filter(x=>x.id!==b.id).map(x=>x.id===a.id?merged:x),'2件を統合しました',null))return false;ctSelected.clear();ctSelecting=false;A.actions.evContactOpen({dataset:{id:a.id}});return true;
+    },'選択した内容で統合');
+  };
+  A.actions.ctSelectedJSON=()=>{const list=ctSelection();if(list.length)download('aura-contacts-selected-'+day()+'.json',JSON.stringify({app:'aura-contacts',version:1,contacts:list},null,2),'application/json');};
   const vcf=value=>String(value||'').replace(/\\/g,'\\\\').replace(/\r\n|\r|\n/g,'\\n').replace(/[,;]/g,'\\$&');
   function ctFold(line){const encoder=new TextEncoder();let output='',bytes=0;for(const char of line){const size=encoder.encode(char).length;if(bytes+size>75){output+='\r\n ';bytes=1;}output+=char;bytes+=size;}return output;}
   function exportContacts(list) {
@@ -163,20 +210,20 @@
   function ctImportRecord(raw) {
     if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('連絡先の形式が正しくありません');const x={};
     for(const [key,max] of Object.entries(ctFields)){if(raw[key]!=null&&typeof raw[key]!=='string')throw new Error('文字列以外の項目があります');const value=(raw[key]||'').trim();if(value.length>max)throw new Error('長すぎる項目があります');x[key]=value;}
-    if(!ctValid(x))throw new Error('名前・電話・メール・日付・グループを確認してください');return {...x,id:A.id(),favorite:raw.favorite===true,tone:ctTone(raw),updatedAt:Date.now()};
+    if(!ctValid(x))throw new Error('名前・電話・メール・日付・グループを確認してください');return {...x,id:A.id(),favorite:raw.favorite===true,tone:ctTone(raw),updatedAt:Number.isSafeInteger(raw.updatedAt)&&raw.updatedAt>=0&&raw.updatedAt<=Date.now()?raw.updatedAt:Date.now()};
   }
   const ctFingerprint=x=>JSON.stringify(Object.keys(ctFields).map(k=>String(x[k]||'').trim()));
   function ctImportUnique(incoming,existing){const keys=new Set(existing.map(ctFingerprint)),added=[];for(const x of incoming){const key=ctFingerprint(x);if(!keys.has(key)){keys.add(key);added.push(x);}}return added;}
   A.actions.ctImport=()=>{
     let incoming=null,sequence=0;
-    A.form('JSONを読み込む','<p class="ct-import-help">このアプリのJSONバックアップのみ。3MB・1,000件まで。上書きせず追加し、同じ内容はスキップします。</p><label class="form-label" for="ct-import-file">バックアップファイル</label><input class="text-input" id="ct-import-file" type="file" accept=".json,application/json"><p id="ct-import-status" class="ct-import-help" role="status">ファイルを選択してください。</p><div id="ct-import-preview"></div>',()=>{
+    A.form('JSONを読み込む','<p class="ct-import-help">このアプリのJSONバックアップのみ。20MB・5,000件まで。上書きせず追加し、同じプロフィール内容はスキップします。スキップ時は既存の色・お気に入りを優先します。</p><label class="form-label" for="ct-import-file">バックアップファイル</label><input class="text-input" id="ct-import-file" type="file" accept=".json,application/json"><p id="ct-import-status" class="ct-import-help" role="status">ファイルを選択してください。</p><div id="ct-import-preview"></div>',()=>{
       if(!incoming)return false;const existing=rows('contacts'),added=ctImportUnique(incoming,existing);if(!added.length){A.toast('追加する連絡先はありません');return false;}if(existing.length+added.length>5000){A.toast('合計5,000件を超えます');return false;}
       if(!ctWrite([...existing,...added],`${added.length}件を読み込みました`,null))return false;contactGroup='*';contactFilter='all';contactQuery='';renderContacts();return true;
     },'確認して追加');
     const form=$('#modal-form'),input=$('#ct-import-file'),status=$('#ct-import-status'),preview=$('#ct-import-preview'),submit=form.querySelector('[type=submit]');submit.disabled=true;
     input.onchange=async()=>{
-      const ticket=++sequence;incoming=null;submit.disabled=true;preview.innerHTML='';const file=input.files[0];if(!file){status.textContent='ファイルを選択してください。';return;}if(file.size>3*1024*1024){status.textContent='3MB以下のJSONを選択してください。';return;}status.textContent='読み込み中…';
-      try{const data=JSON.parse(await file.text());if(ticket!==sequence||!form.isConnected)return;if(data?.app!=='aura-contacts'||data.version!==1||!Array.isArray(data.contacts)||data.contacts.length>1000)throw new Error('対応形式ではないか、1,000件を超えています');
+      const ticket=++sequence;incoming=null;submit.disabled=true;preview.innerHTML='';const file=input.files[0];if(!file){status.textContent='ファイルを選択してください。';return;}if(file.size>20*1024*1024){status.textContent='20MB以下のJSONを選択してください。';return;}status.textContent='読み込み中…';
+      try{const data=JSON.parse(await file.text());if(ticket!==sequence||!form.isConnected)return;if(data?.app!=='aura-contacts'||data.version!==1||!Array.isArray(data.contacts)||data.contacts.length>5000)throw new Error('対応形式ではないか、5,000件を超えています');
         incoming=data.contacts.map(ctImportRecord);const added=ctImportUnique(incoming,rows('contacts'));status.textContent=`${added.length}件を追加・${incoming.length-added.length}件は内容一致でスキップ。番号・メールのみの一致は重複候補として残します。`;
         preview.innerHTML=added.slice(0,5).map(x=>`<div class="ct-import-person">${ctAvatar(x)}<span>${esc(x.name)}<small>${esc(x.group||'未分類')}</small></span></div>`).join('')+(added.length>5?`<p class="ct-import-help">ほか${added.length-5}件</p>`:'');submit.disabled=!added.length;
       }catch(error){if(ticket!==sequence||!form.isConnected)return;incoming=null;status.textContent=error instanceof SyntaxError?'JSONを読み取れません。ファイルを確認してください。':error.message;}
