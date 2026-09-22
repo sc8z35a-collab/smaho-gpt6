@@ -238,6 +238,92 @@ test('SK17 pan zoom focus never change document contents',async p=>{
  await p.mouse.move(b.x+180,b.y+80);await p.mouse.down();await p.mouse.move(b.x+100,b.y+80,{steps:5});await p.mouse.up();assert.ok(await p.locator('#sk-viewport').evaluate(el=>el.scrollLeft)>left);assert.deepEqual((await skDoc(p)).strokes,before);await act(p,'evSketchFocus');assert.equal(await p.locator('.sk-settings').isVisible(),true);
 });
 
+// Original music: exercise the same score/synth implementation in an offline
+// context without adding a test-only export to the shipped application.
+async function musicHarness(p){
+ const source=await p.evaluate(async()=>{const r=await fetch('js/media.js');return r.text();});
+ const start=source.indexOf('// Original scores'),end=source.indexOf('const M=A.music');
+ assert.ok(start>=0&&end>start,'Music source boundary missing');
+ await p.addScriptTag({content:source.slice(start,end)+'\nwindow.musicTest={tracks,musicScore,OriginalMusicEngine};'});
+}
+test('MU01 all scores have deterministic harmony, motifs and section dynamics',async p=>{
+ await musicHarness(p);
+ const scores=await p.evaluate(()=>musicTest.tracks.map(t=>{
+  const events=musicTest.musicScore(t),again=musicTest.musicScore(t);
+  return {id:t.id,count:events.length,deterministic:JSON.stringify(events)===JSON.stringify(again),sections:t.sections.length,kinds:new Set(events.map(e=>e.kind)).size,
+   valid:events.every((e,i)=>Number.isFinite(e.time+e.midi+e.duration+e.velocity+e.pan)&&e.time>=0&&e.time<t.length&&e.duration>0&&e.velocity>0&&Math.abs(e.pan)<=1&&(!i||e.time>=events[i-1].time)),
+   energies:new Set(t.sections.map(s=>s[2])).size,chords:new Set(t.chords.map(c=>c.join(','))).size};
+ }));
+ for(const s of scores){assert.ok(s.count>600,s.id+' score too sparse');assert.ok(s.deterministic&&s.valid,s.id+' invalid score');assert.ok(s.sections>=8&&s.kinds>=8&&s.energies>=5&&s.chords>=6,s.id+' arrangement missing variety');}
+});
+for(const [i,id] of ['dusk','tide','orbit'].entries())test(`MU0${i+2} ${id} full stereo render is finite dynamic and unclipped`,async p=>{
+ await musicHarness(p);
+ const result=await p.evaluate(async id=>{
+  const {tracks,musicScore,OriginalMusicEngine}=musicTest,t=tracks.find(t=>t.id===id),rate=24000;
+  const c=new OfflineAudioContext(2,Math.ceil(rate*t.length),rate),engine=new OriginalMusicEngine(c,t,c.destination);
+  engine.timeline(0,0);for(const e of musicScore(t))engine.schedule(e,e.time);
+  const buffer=await c.startRendering(),left=buffer.getChannelData(0),right=buffer.getChannelData(1);
+  let peak=0,sum=0,side=0,end=0,valid=true;const rms=[];
+  for(let second=0;second<t.length;second++){
+   let square=0;
+   for(let j=second*rate;j<Math.min(left.length,(second+1)*rate);j++){
+    const a=left[j],b=right[j];valid=valid&&Number.isFinite(a)&&Number.isFinite(b);peak=Math.max(peak,Math.abs(a),Math.abs(b));square+=a*a+b*b;side+=(a-b)**2;
+    if(j>left.length-rate*.1)end=Math.max(end,Math.abs(a),Math.abs(b));
+   }
+   rms.push(Math.sqrt(square/(rate*2)));sum+=square;
+  }
+  const sectionRms=t.sections.map(([bar],i)=>{
+   const a=Math.ceil(bar*240/t.tempo),b=Math.floor((t.sections[i+1]?.[0]??t.bars)*240/t.tempo);
+   return rms.slice(a,b).reduce((s,n)=>s+n,0)/Math.max(1,b-a);
+  });
+  return {id,peak,rms:Math.sqrt(sum/(left.length*2)),side:Math.sqrt(side/left.length),end,valid,sectionRms,silent:rms.slice(2,-5).filter(x=>x<.0001).length};
+ },id);
+ console.log('AUDIO '+JSON.stringify(result));assert.ok(result.valid);assert.ok(result.peak<.98&&result.peak>.1,'Peak/headroom');assert.ok(result.rms>.015,'Unexpectedly quiet');assert.ok(result.side>.002,'Stereo missing');assert.ok(result.end<.015,'Ending not faded');assert.equal(result.silent,0,'Unexpected silence');assert.ok(Math.max(...result.sectionRms)>Math.min(...result.sectionRms)*1.5,'No section dynamics');
+});
+test('MU05 actual playback advances and seek rebuilds the matching score position',async p=>{
+ await open(p,'music','player');await act(p,'musicToggle');await p.waitForTimeout(350);
+ assert.ok(await p.evaluate(()=>Aura.music.playing&&Aura.music.elapsed()>.15));
+ const state=await p.evaluate(()=>{const m=Aura.music,old=m.engine;const input=document.querySelector('#music-progress');input.value=91;input.dispatchEvent(new Event('input'));return {position:m.elapsed(),changed:m.engine!==old,disposed:old.disposed,cursor:m.score[m.cursor]?.time,playing:m.playing};});
+ assert.ok(state.changed&&state.disposed&&state.playing);assert.ok(state.position>=91&&state.position<92);assert.ok(state.cursor>=91&&state.cursor<93);
+});
+test('MU06 pause releases every scheduled voice and effect graph',async p=>{
+ await p.evaluate(()=>{const m=Aura.music;m.position=65;m.start();window.oldMusicEngine=m.engine;m.pause();});await p.waitForTimeout(160);
+ const state=await p.evaluate(()=>({playing:Aura.music.playing,scheduler:Aura.music.scheduler,engine:Aura.music.engine,voices:oldMusicEngine.voices.size,nodes:oldMusicEngine.nodes.length,position:Aura.music.elapsed()}));
+ assert.equal(state.playing,false);assert.equal(state.scheduler,null);assert.equal(state.engine,null);assert.equal(state.voices,0);assert.equal(state.nodes,0);assert.ok(state.position>=65&&state.position<66);
+});
+test('MU07 live volume zero is silent and restored volume produces signal',async p=>{
+ await p.evaluate(()=>{const m=Aura.music;m.position=65;m.start();window.musicMeter=m.context.createAnalyser();musicMeter.fftSize=2048;m.gain.connect(musicMeter);Aura.settings.volume=0;m.setVolume();});await p.waitForTimeout(900);
+ const level=()=>p.evaluate(()=>{const a=new Float32Array(musicMeter.fftSize);musicMeter.getFloatTimeDomainData(a);return Math.max(...a.map(Math.abs));});
+ assert.ok(await level()<.0001,'Mute leaked audio');await p.evaluate(()=>{Aura.settings.volume=80;Aura.music.setVolume();});await p.waitForTimeout(450);assert.ok(await level()>.002,'Unmute silent');
+});
+test('MU08 rapid start seek pause and track switch cannot leave stale graphs',async p=>{
+ const expected=await p.evaluate(()=>{const m=Aura.music;window.oldMusicEngines=[];for(let i=0;i<12;i++){m.select(['dusk','tide','orbit'][i%3]);oldMusicEngines.push(m.engine);m.seek(i*9);oldMusicEngines.push(m.engine);}m.select('tide',false);return oldMusicEngines.length;});await p.waitForTimeout(200);
+ const result=await p.evaluate(()=>({clean:oldMusicEngines.filter(e=>e.disposed&&!e.voices.size&&!e.nodes.length).length,id:Aura.music.track.id,playing:Aura.music.playing}));
+ assert.equal(result.clean,expected);assert.equal(result.id,'tide');assert.equal(result.playing,false);
+});
+test('MU09 transport follows suspended audio clock not wall time',async p=>{
+ await p.evaluate(async()=>{Aura.music.start();await Aura.music.context.suspend();});const before=await p.evaluate(()=>Aura.music.elapsed());await p.waitForTimeout(200);
+ assert.equal(await p.evaluate(()=>Aura.music.elapsed()),before);await p.evaluate(async()=>{await Aura.music.context.resume();});await p.waitForTimeout(200);assert.ok(await p.evaluate(()=>Aura.music.elapsed())>before+.1);
+});
+test('MU10 resume rejection cleans up and unsupported audio fails gracefully',async p=>{
+ await p.evaluate(()=>{const C=window.AudioContext,W=window.webkitAudioContext;window.AudioContext=window.webkitAudioContext=undefined;Aura.music.start();window.AudioContext=C;window.webkitAudioContext=W;});
+ assert.equal(await p.evaluate(()=>Aura.music.playing),false);
+ await p.evaluate(()=>{const m=Aura.music;m.start();m.pause();m.context.resume=()=>Promise.reject(Error('Blocked'));m.start();});await p.waitForTimeout(150);
+ assert.deepEqual(await p.evaluate(()=>({playing:Aura.music.playing,engine:Aura.music.engine,scheduler:Aura.music.scheduler})),{playing:false,engine:null,scheduler:null});
+});
+test('MU11 ending advances once to next track and updates player metadata',async p=>{
+ await open(p,'music','player');await p.evaluate(()=>{Aura.music.seek(Aura.music.track.length-.18);Aura.music.start();});await p.waitForTimeout(600);
+ assert.equal(await p.evaluate(()=>Aura.music.track.id),'tide');assert.equal(await p.locator('.player-info h2').textContent(),'A Quiet Tide');assert.equal(await p.locator('#music-progress').getAttribute('max'),'214');assert.ok(await p.evaluate(()=>Aura.music.elapsed())<1);
+});
+test('MU12 paused seek clamps invalid inputs and leaves playback stopped',async p=>{
+ const state=await p.evaluate(()=>{const m=Aura.music;m.seek(-5);const a=m.elapsed();m.seek(Infinity);const b=m.elapsed();m.seek('invalid');const c=m.elapsed();m.seek(50);const d=m.elapsed();return {a,b,c,d,playing:m.playing};});
+ assert.deepEqual(state,{a:0,b:192,c:0,d:50,playing:false});
+});
+test('MU13 audio buffer reuse and all score voices stay bounded during playback',async p=>{
+ await p.evaluate(()=>{const m=Aura.music;m.start();window.originalNoise=m.engine.noise;m.seek(64);});await p.waitForTimeout(1100);
+ assert.ok(await p.evaluate(()=>Aura.music.engine.noise===originalNoise));assert.ok(await p.evaluate(()=>Aura.music.engine.voices.size>0&&Aura.music.engine.voices.size<150));
+});
+
 (async()=>{
  const browser=await chromium.launch({headless:true});let passed=0;const failures=[];
  try{for(const {name,run} of cases.filter(c=>!process.env.AURA_TEST_FILTER||c.name.includes(process.env.AURA_TEST_FILTER))){const context=await browser.newContext({viewport:{width:390,height:844}}),p=await context.newPage();
