@@ -145,19 +145,179 @@
   const run=A.actions[action];A.actions[action]=el=>{if(saveNoteDraft(noteCurrent))return run(el);};
  }
 
- // Calendar: month/week/agenda views, colors, durations and bounded recurrence.
- const eventColors={rose:'#c98895',sage:'#80a18a',blue:'#83a5c4',gold:'#c6a36c',violet:'#a591bb'};
+ // Calendar Atelier: the existing event model remains the single source of truth.
+ const eventColors={rose:'#bf6f70',sage:'#678c76',blue:'#638cae',gold:'#b68a45',violet:'#9680b1'};
+ const calColors=[['rose','ローズ'],['sage','セージ'],['blue','ブルー'],['gold','ゴールド'],['violet','ラベンダー']];
+ const calViews=[['month','月'],['week','週'],['day','日'],['agenda','予定']];
  let calendarView=A.load('calendarView','month'),calendarDay=day(),calendarMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1),eventQuery='';
- const sortedEvents=()=>[...A.eventModel.get()].sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
- function agendaRows(rows){return rows.map(e=>`<button class="pd-agenda-row" data-action="calendarEdit" data-id="${esc(e.id)}" style="--event-color:${eventColors[e.color]||eventColors.rose}"><time>${esc(e.time)}${e.endTime?`<small>${esc(e.endTime)}</small>`:''}</time><span><strong>${esc(e.title)}</strong><small>${esc(e.place||'')}${e.series?' · ↻':''}</small></span><i>›</i></button>`).join('')||empty('予定はありません');}
- function calendar(){const y=calendarMonth.getFullYear(),m=calendarMonth.getMonth(),events=A.eventModel.get();let content='';if(calendarView==='month'){const first=new Date(y,m,1).getDay(),count=new Date(y,m+1,0).getDate();content=`<div class="month-grid pd-month-grid">${['日','月','火','水','木','金','土'].map(x=>`<span class="weekday">${x}</span>`).join('')}${'<span></span>'.repeat(first)}${Array.from({length:count},(_,i)=>{const date=day(new Date(y,m,i+1)),items=events.filter(e=>e.date===date);return `<button class="month-day ${date===day()?'today':''} ${date===calendarDay?'selected':''}" data-action="calendarSelect" data-date="${date}"><strong>${i+1}</strong><span class="pd-event-dots">${items.slice(0,3).map(e=>`<i style="background:${eventColors[e.color]||eventColors.rose}"></i>`).join('')}</span></button>`;}).join('')}</div><header class="pd-section"><h3>${new Date(calendarDay+'T12:00:00').toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'short'})}</h3></header><div class="pd-agenda calendar-agenda">${agendaRows(sortedEvents().filter(e=>e.date===calendarDay))}</div>`;}else if(calendarView==='week'){const start=new Date(calendarDay+'T12:00:00');start.setDate(start.getDate()-start.getDay());content=Array.from({length:7},(_,i)=>{const d=new Date(start);d.setDate(start.getDate()+i);const key=day(d);return `<section class="pd-week-day ${key===day()?'today':''}"><header><strong>${d.getDate()}</strong><small>${d.toLocaleDateString('ja-JP',{weekday:'short'})}</small><button data-action="pdCalendarDayAdd" data-id="${key}" aria-label="${key}に追加">+</button></header><div class="pd-agenda">${agendaRows(sortedEvents().filter(e=>e.date===key))}</div></section>`;}).join('');}else{content=`${A.search('pd-event-search','予定・場所を検索')}<div id="pd-event-results"></div>`;}
- page('カレンダー',`${tabs([['month','月'],['week','週'],['agenda','予定']],calendarView,'pdCalendarView')}<div class="calendar-month-head"><h3>${y}年 ${m+1}月</h3><div><button data-action="calendarMove" data-value="-1" aria-label="前へ">‹</button><button data-action="calendarToday" class="pd-calendar-today">今日</button><button data-action="calendarMove" data-value="1" aria-label="次へ">›</button></div></div>${content}`,button('calendarAdd','予定を追加','plus'));if(calendarView==='agenda'){const render=()=>{const rows=sortedEvents().filter(e=>(e.title+' '+e.place+' '+e.date).toLowerCase().includes(eventQuery.toLowerCase())&&(eventQuery||e.date>=calendarDay));let previous='';$('#pd-event-results').innerHTML=rows.map(e=>{const heading=e.date!==previous?`<header class="pd-section"><h3>${esc(e.date)}</h3></header>`:'';previous=e.date;return heading+agendaRows([e]);}).join('')||empty('予定はありません');};$('#pd-event-search').value=eventQuery;$('#pd-event-search').oninput=e=>{eventQuery=e.target.value;render();};render();}}
- A.apps.calendar.render=calendar;A.actions.pdCalendarView=el=>{calendarView=el.dataset.id;A.save('calendarView',calendarView);calendar();};
- A.actions.calendarToday=()=>{calendarDay=day();calendarMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1);calendar();};
- A.actions.calendarMove=el=>{if(calendarView==='week'){const d=new Date(calendarDay+'T12:00:00');d.setDate(d.getDate()+Number(el.dataset.value)*7);calendarDay=day(d);calendarMonth=new Date(d.getFullYear(),d.getMonth(),1);}else{calendarMonth.setMonth(calendarMonth.getMonth()+Number(el.dataset.value));calendarDay=day(calendarMonth);}calendar();};
- A.actions.calendarSelect=el=>{calendarDay=el.dataset.date;calendarMonth=new Date(calendarDay+'T12:00:00');calendarMonth.setDate(1);calendar();};A.actions.pdCalendarDayAdd=el=>{calendarDay=el.dataset.id;eventEditor();};
- function eventEditor(event){const defaultEnd=event?.endTime||'';A.form(event?'予定を編集':'予定を追加',field('タイトル','title',event?.title||'','text','required maxlength="80"')+field('日付','date',event?.date||calendarDay,'date','required')+`<div class="pd-form-two">${field('開始','time',event?.time||'15:00','time','required')}${field('終了','endTime',defaultEnd,'time')}</div>`+field('場所','place',event?.place||'','text','maxlength="120"')+select('色','color',[['rose','ローズ'],['sage','セージ'],['blue','ブルー'],['gold','ゴールド'],['violet','ラベンダー']],event?.color||'rose')+(event?'':select('繰り返し','repeat',[['none','なし'],['daily','毎日'],['weekly','毎週'],['monthly','毎月']],'none')+field('回数','count',4,'number','required min="1" max="52" step="1"'))+(event?`<div class="pd-form-actions"><button type="button" data-action="pdCalendarDuplicate" data-id="${event.id}">複製</button><button type="button" class="pd-danger" data-action="calendarDelete" data-id="${event.id}">削除</button>${event.series?`<button type="button" class="pd-danger" data-action="pdCalendarDeleteSeries" data-id="${event.series}">繰り返しを削除</button>`:''}</div>`:''),v=>{if(!v.title.trim())return false;const base={...event,id:event?.id||A.id(),title:v.title.trim(),date:v.date,time:v.time,endTime:v.endTime,place:v.place,color:v.color};let rows=A.eventModel.get();if(event)rows=rows.map(e=>e.id===event.id?base:e);else{const count=v.repeat==='none'?1:Math.max(1,Math.min(52,Number(v.count))),series=count>1?A.id():null,start=new Date(v.date+'T12:00:00'),added=[];for(let i=0;i<count;i++){const d=new Date(start);if(v.repeat==='monthly'){d.setDate(1);d.setMonth(start.getMonth()+i);d.setDate(Math.min(start.getDate(),new Date(d.getFullYear(),d.getMonth()+1,0).getDate()));}else d.setDate(start.getDate()+i*(v.repeat==='weekly'?7:1));added.push({...base,id:i?A.id():base.id,date:day(d),series});}rows=[...rows,...added];}if(!A.eventModel.replace(rows))return false;calendarDay=v.date;calendarMonth=new Date(v.date+'T12:00:00');calendarMonth.setDate(1);calendar();});}
- A.actions.calendarAdd=()=>eventEditor();A.actions.calendarEdit=el=>{const e=A.eventModel.get().find(x=>x.id===el.dataset.id);if(e)eventEditor(e);};A.actions.calendarDelete=el=>A.confirm('予定を削除？','この予定だけを削除します。',()=>{if(A.eventModel.replace(A.eventModel.get().filter(e=>e.id!==el.dataset.id)))calendar();});A.actions.pdCalendarDeleteSeries=el=>A.confirm('繰り返しを削除？','同じ繰り返しの予定をまとめて削除します。',()=>{if(A.eventModel.replace(A.eventModel.get().filter(e=>e.series!==el.dataset.id)))calendar();});A.actions.pdCalendarDuplicate=el=>{const e=A.eventModel.get().find(x=>x.id===el.dataset.id);if(!e)return;A.closeOverlay();calendarDay=e.date;eventEditor();const f=$('#modal-form');for(const key of ['title','date','time','endTime','place','color'])f.elements[key].value=e[key]||'';};
+ if(!calViews.some(([id])=>id===calendarView))calendarView='month';
+ let calWeekStart=A.load('calendarWeekStart',0)===1?1:0,calFilter='all',calMotion='',calUndo=[],calResultLimit=80,calArtId=0;
+ const calKey=d=>`${String(d.getFullYear()).padStart(4,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+ const calValid=value=>/^\d{4}-\d{2}-\d{2}$/.test(value||'')&&value>='0100-01-01'&&value<='9998-12-31'&&calKey(new Date(value+'T12:00:00'))===value;
+ const calShift=(value,n)=>{const d=new Date(value+'T12:00:00');d.setDate(d.getDate()+n);return calKey(d);};
+ const calDateLabel=value=>new Date(value+'T12:00:00').toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'short'});
+ const calColor=e=>Object.hasOwn(eventColors,e.color)?e.color:'rose';
+ const calNormalize=text=>String(text||'').normalize('NFKC').trim().toLocaleLowerCase('ja-JP');
+ const calTime=n=>`${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;
+ const calButton=(action,label,id='',extra='')=>`<button type="button" data-action="${action}" data-id="${esc(id)}" ${extra}>${label}</button>`;
+ const sortedEvents=()=>[...A.eventModel.get()].sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(!!b.allDay)-Number(!!a.allDay)||String(a.time||'').localeCompare(String(b.time||''))||String(a.title).localeCompare(String(b.title),'ja'));
+ // End dates remain implicit for legacy overnight events. Use local date arithmetic,
+ // not 24-hour millisecond offsets, for midnight boundaries (including DST days).
+ function calRange(e){
+  if(!calValid(e.date))return null;
+  const start=new Date(`${e.date}T${e.allDay?'00:00':e.time||'00:00'}:00`);
+  let end=e.allDay?new Date(calShift(e.date,1)+'T00:00:00'):e.endTime?new Date(`${e.date}T${e.endTime}:00`):new Date(+start+3600000);
+  if(e.endTime&&!e.allDay&&end<=start)end.setDate(end.getDate()+1);
+  return Number.isFinite(+start)&&Number.isFinite(+end)?{start,end}:null;
+ }
+ const calOn=(events,key)=>{const from=new Date(key+'T00:00:00'),to=new Date(calShift(key,1)+'T00:00:00');return events.filter(e=>{const r=calRange(e);return r&&r.start<to&&r.end>from;});};
+ function calWeek(){const d=new Date(calendarDay+'T12:00:00');return calShift(calendarDay,-((d.getDay()-calWeekStart+7)%7));}
+ function calChoose(key){if(!calValid(key))return false;calendarDay=key;calendarMonth=new Date(key+'T12:00:00');calendarMonth.setDate(1);return true;}
+ function calArt(key){
+  const id='cal-art-'+(++calArtId),d=new Date(key+'T12:00:00');
+  return `<svg class="cal-art" viewBox="0 0 180 160" fill="none" aria-hidden="true" focusable="false"><defs>
+   <linearGradient id="${id}-paper" x1="25" y1="25" x2="140" y2="145" gradientUnits="userSpaceOnUse"><stop stop-color="#fffef6"/><stop offset=".65" stop-color="#f9f0e3"/><stop offset="1" stop-color="#dbc9b3"/></linearGradient>
+   <linearGradient id="${id}-red" x2="1" y2="1"><stop stop-color="#e4a08c"/><stop offset=".5" stop-color="#c87870"/><stop offset="1" stop-color="#94514f"/></linearGradient>
+   <linearGradient id="${id}-metal" x2="1" y2="0"><stop stop-color="#806c50"/><stop offset=".35" stop-color="#ffedc4"/><stop offset=".55" stop-color="#c3ab80"/><stop offset=".8" stop-color="#fff1d2"/><stop offset="1" stop-color="#8b775b"/></linearGradient>
+   </defs><ellipse cx="89" cy="143" rx="57" ry="8" fill="#634d3d" opacity=".12"/><circle cx="143" cy="33" r="22" fill="#eacb8b" opacity=".35"/><circle class="cal-sun" cx="143" cy="33" r="13" fill="#dbb369"/><path d="M17 80C-5 29 65 8 131 18s61 86-1 119" stroke="#c4ad8f" stroke-dasharray="2 5" opacity=".55"/>
+   <g class="cal-paper-art"><path d="M31 47l111-5 9 85-108 15z" fill="#c8b49e"/><path d="M27 42l112-3 9 87-110 13z" fill="#f0e5d5" stroke="#cbb9a2"/><path d="M28 40l111 3 3 84-109 8z" fill="#eee0cc" stroke="#fff6e7"/><g transform="rotate(-8 83 81)"><rect x="27" y="28" width="111" height="105" rx="9" fill="url(#${id}-paper)" stroke="#fff9ef"/><path d="M36 28h93a9 9 0 0 1 9 9v22H27V37a9 9 0 0 1 9-9" fill="url(#${id}-red)"/><path d="M30 61h105" stroke="#c7afa0" stroke-dasharray="2 3"/><path d="M34 121h84" stroke="#d6c7b5"/><path d="M118 133v-15h20" fill="#ead9c3"/><path d="M118 133l20-15" stroke="#cbb79c"/>
+   ${[50,113].map(x=>`<ellipse cx="${x}" cy="39" rx="6" ry="4" fill="#824f4b"/><rect x="${x-4}" y="17" width="8" height="24" rx="4" fill="url(#${id}-metal)" stroke="#8b7356" stroke-width=".6"/>`).join('')}
+   <text x="82" y="52" text-anchor="middle" fill="#fff6e7" font-size="8" letter-spacing="3">${['SUN','MON','TUE','WED','THU','FRI','SAT'][d.getDay()]}</text><text x="82" y="111" text-anchor="middle" fill="#694f49" font-family="Georgia,serif" font-size="51">${d.getDate()}</text></g></g>
+   <g stroke="#789080" stroke-width="2" stroke-linecap="round"><path d="M148 137q-4-24 11-49"/><path d="M149 126q-17-3-16-15 12 0 16 15M151 114q17-3 17-16-13 2-17 16" fill="#9aaf94" stroke-width="1"/></g><path d="M19 37v10m-5-5h10" stroke="#bd9960" stroke-width="1.5"/></svg>`;
+ }
+ function calEmpty(key,filtered=false){return `<div class="cal-empty"><svg viewBox="0 0 80 60" aria-hidden="true"><path d="M12 42Q40 24 68 42" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M19 42v8m42-8v8" stroke="currentColor"/><circle cx="40" cy="19" r="10" fill="currentColor" opacity=".18"/><path d="M40 4v-3M25 9l-3-3m33 3 3-3" stroke="currentColor"/></svg><strong>${filtered?'この色の予定はありません':'余白のある一日。'}</strong><span>${filtered?'「すべて」で他の色も表示':'小さな楽しみを、ひとつ。'}</span>${calButton('pdCalendarDayAdd','＋ 予定を追加',key)}</div>`;}
+ function agendaRows(rows,key=calendarDay){
+  if(!rows.length)return calEmpty(key,calFilter!=='all');
+  return rows.map((e,i)=>{const r=calRange(e),overnight=r&&calKey(r.end)!==e.date,clash=!e.allDay&&rows.some(other=>{if(other.id===e.id||other.allDay)return false;const t=calRange(other);return r&&t&&r.start<t.end&&t.start<r.end;});
+   return `<button class="cal-event" data-action="calendarEdit" data-id="${esc(e.id)}" style="--event-color:${eventColors[calColor(e)]};--cal-i:${Math.min(i,6)}"><span class="cal-event-time">${e.allDay?'終日':esc(e.time||'00:00')}<small>${e.allDay?'ALL DAY':(overnight?'翌 ':'')+esc(e.endTime||(r?r.end.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',hour12:false}):''))}</small></span><span class="cal-event-body"><strong>${esc(e.title)}</strong>${e.place?`<small>${A.icon('pin')}${esc(e.place)}</small>`:''}${e.notes?`<span class="cal-note-preview">${esc(e.notes)}</span>`:''}<span class="cal-event-tags">${e.date<key?'<em>前日から</em>':''}${e.series?'<em>繰り返し</em>':''}${clash?'<em class="cal-clash">時間が重複</em>':''}</span></span><span class="cal-event-arrow" aria-hidden="true">›</span></button>`;
+  }).join('');
+ }
+ function calDaySection(key,events){return `<section class="cal-daily"><header class="cal-section-heading"><h3>${calDateLabel(key)}</h3>${calButton('pdCalendarDayAdd',A.icon('plus'),key,`aria-label="${key}に予定を追加"`)}</header><div class="cal-event-list">${agendaRows(calOn(events,key),key)}</div></section>`;}
+ function calMonthGrid(events){
+  const first=new Date(calendarMonth),offset=(first.getDay()-calWeekStart+7)%7,start=calShift(calKey(first),-offset),today=day();
+  return `<div class="cal-month-paper"><div class="cal-binding" aria-hidden="true"><i></i><i></i></div><div class="cal-grid" role="group" aria-label="日付を選択・矢印キーで移動">${Array.from({length:7},(_,i)=>`<span class="cal-weekday" data-weekday="${(i+calWeekStart)%7}">${['日','月','火','水','木','金','土'][(i+calWeekStart)%7]}</span>`).join('')}${Array.from({length:42},(_,i)=>{const key=calShift(start,i),d=new Date(key+'T12:00:00'),items=calOn(events,key);return `<button class="cal-date ${d.getMonth()!==calendarMonth.getMonth()?'is-outside':''} ${key===today?'is-today':''}" data-action="calendarSelect" data-date="${key}" data-weekday="${d.getDay()}" aria-pressed="${key===calendarDay}" ${key===today?'aria-current="date"':''} aria-label="${calDateLabel(key)}、${items.length}件${key===today?'、今日':''}" tabindex="${key===calendarDay?'0':'-1'}"><strong>${d.getDate()}</strong><span class="cal-dots" aria-hidden="true">${items.slice(0,3).map(e=>`<i style="background:${eventColors[calColor(e)]}"></i>`).join('')}${items.length>3?'<b>+</b>':''}</span></button>`;}).join('')}</div><div class="cal-paper-footer"><span>${calFilter==='all'?'すべての予定':'色で絞り込み中'}</span><span>● 今日　<span class="cal-selected-key">選択日</span></span></div></div>`;
+ }
+ function calWeekChart(events){
+  const start=calWeek(),counts=Array.from({length:7},(_,i)=>calOn(events,calShift(start,i)).length),max=Math.max(3,...counts);
+  return `<div class="cal-week-chart"><header><span>WEEKLY RHYTHM</span><small>${calDateLabel(start)} から7日間</small></header><div>${counts.map((n,i)=>{const key=calShift(start,i);return calButton('calOpenDay',`<span class="cal-chart-count">${n}</span><svg viewBox="0 0 24 48" aria-hidden="true"><rect x="6" y="0" width="12" height="48" rx="6" fill="currentColor" opacity=".08"/><rect class="cal-chart-bar" x="6" y="${48-Math.max(3,n/max*48)}" width="12" height="${Math.max(3,n/max*48)}" rx="6" fill="currentColor"/></svg><span>${['日','月','火','水','木','金','土'][(i+calWeekStart)%7]}</span>`,key,`aria-label="${calDateLabel(key)}、${n}件、日表示を開く" aria-pressed="${key===calendarDay}"`);}).join('')}</div></div>`;
+ }
+ function calDayPlan(events){
+  const all=calOn(A.eventModel.get(),calendarDay),visible=calOn(events,calendarDay),busy=all.filter(e=>!e.allDay).map(e=>{const r=calRange(e),start=r.start<new Date(calendarDay+'T00:00:00')?0:r.start.getHours()*60+r.start.getMinutes(),end=calKey(r.end)>calendarDay?1440:r.end.getHours()*60+r.end.getMinutes();return {start,end};}).sort((a,b)=>a.start-b.start);
+  let cursor=540;const gaps=[];
+  for(const r of busy){if(r.end<=540||r.start>=1080)continue;if(r.start>cursor)gaps.push([cursor,Math.min(r.start,1080)]);cursor=Math.max(cursor,Math.min(r.end,1080));}
+  if(cursor<1080)gaps.push([cursor,1080]);
+  const free=all.some(e=>e.allDay)?[]:gaps.filter(([a,b])=>b-a>=30);
+  return `<div class="cal-day-strip" aria-label="一日の予定位置（24時間）"><div class="cal-hours"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div><div class="cal-day-track">${visible.filter(e=>!e.allDay).map(e=>{const r=calRange(e),start=calKey(r.start)<calendarDay?0:r.start.getHours()*60+r.start.getMinutes(),end=calKey(r.end)>calendarDay?1440:r.end.getHours()*60+r.end.getMinutes();return `<i style="left:${start/14.4}%;width:${Math.max(.4,(end-start)/14.4)}%;background:${eventColors[calColor(e)]}"></i>`;}).join('')}</div><p>帯は時間指定のみ・重複する予定は下のカードで確認</p></div>${calDaySection(calendarDay,events)}<section class="cal-free"><header class="cal-section-heading"><h3>${A.icon('sun')}空き時間から追加</h3><span>9:00–18:00</span></header><div>${free.length?free.map(([a,b])=>calButton('calFreeAdd',`${calTime(a)}–${calTime(b)} <span>＋</span>`,`${a}:${b}`)).join(''):`<p>${all.some(e=>e.allDay)?'終日予定があるため候補を表示しません':'30分以上の空き時間はありません'}</p>`}</div><small>全色の予定を参照。移動・休憩時間は含みません。</small></section>`;
+ }
+ function calendar(focus=''){
+  const old=$('.calendar-atelier'),scroll=old?.scrollTop||0,events=sortedEvents(),visible=events.filter(e=>calFilter==='all'||calColor(e)===calFilter),monthKey=calKey(calendarMonth).slice(0,7),monthEvents=visible.filter(e=>e.date.startsWith(monthKey));
+  let content='';
+  if(calendarView==='month')content=calMonthGrid(visible)+calDaySection(calendarDay,visible);
+  else if(calendarView==='week'){const start=calWeek();content=calWeekChart(visible)+Array.from({length:7},(_,i)=>calDaySection(calShift(start,i),visible)).join('');}
+  else if(calendarView==='day')content=calDayPlan(visible);
+  else content=`<div class="cal-search">${A.search('pd-event-search','タイトル・場所・メモ・日付を検索')}</div><p class="cal-result-caption" id="cal-result-caption" role="status"></p><div id="pd-event-results"></div>`;
+  const title=calendarView==='week'?`${calDateLabel(calWeek())}〜`:calendarView==='day'?calDateLabel(calendarDay):`${calendarMonth.getFullYear()}年 ${calendarMonth.getMonth()+1}月`;
+  A.view(A.nav('カレンダー',button('calOptions','カレンダーの設定と書き出し','settings')+button('calendarAdd','予定を追加','plus'))+`<div class="app-content productivity calendar-atelier"><header class="cal-hero"><div><span class="cal-eyebrow">CALENDAR ATELIER</span><h2>${calendarMonth.getMonth()+1}<small>月</small><span>${calendarMonth.toLocaleDateString('en-US',{month:'long'})} ${calendarMonth.getFullYear()}</span></h2><p>${monthEvents.length}件の予定 <i></i> ${new Set(monthEvents.map(e=>e.date)).size}日${calFilter!=='all'?' · 絞込中':''}</p></div>${calArt(calendarDay)}</header>
+   <div class="cal-view-tabs" role="group" aria-label="カレンダーの表示">${calViews.map(([id,label])=>calButton('pdCalendarView',label,id,`aria-pressed="${id===calendarView}"`)).join('')}</div>
+   <nav class="cal-navigation" aria-label="表示期間"><button data-action="calendarMove" data-value="-1" aria-label="前の${calendarView==='week'?'週':calendarView==='day'?'日':'月'}">‹</button><button class="cal-date-jump" data-action="calJump" aria-label="日付へ移動">${title}<span aria-hidden="true">⌄</span></button><button class="cal-today" data-action="calendarToday">今日</button><button data-action="calendarMove" data-value="1" aria-label="次の${calendarView==='week'?'週':calendarView==='day'?'日':'月'}">›</button></nav>
+   <div class="cal-color-filters" role="group" aria-label="予定の色で絞り込み">${calButton('calFilter','すべて','all',`aria-pressed="${calFilter==='all'}"`)}${calColors.map(([id,label])=>calButton('calFilter',`<i style="background:${eventColors[id]}"></i><span>${label}</span>`,id,`aria-pressed="${calFilter===id}"`)).join('')}</div>
+   ${calUndo.length?`<div class="cal-undo" role="status"><span>${calUndo.length}件を削除しました</span>${calButton('calUndo','元に戻す')}<button data-action="calDismissUndo" aria-label="取り消しを閉じる">×</button></div>`:''}
+   <div class="cal-page ${calMotion}">${content}</div><button class="cal-add-button" data-action="calendarAdd">${A.icon('plus')}予定をつくる<span aria-hidden="true">↗</span></button><p class="cal-local-note">${A.icon('lock')}このブラウザに保存・自動同期なし</p></div>`);
+  calMotion='';$('.calendar-atelier').scrollTop=scroll;
+  if(calendarView==='agenda'){
+   $('#pd-event-search').value=eventQuery;
+   $('#pd-event-search').oninput=e=>{eventQuery=e.target.value;calResultLimit=80;calRenderSearch();};calRenderSearch();
+  }
+  const grid=$('.cal-grid');if(grid)grid.onkeydown=e=>{
+   if(!e.target.matches('.cal-date')||e.altKey||e.ctrlKey||e.metaKey)return;
+   const offsets={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7};let offset=offsets[e.key];
+   if(e.key==='Home')offset=-((new Date(calendarDay+'T12:00:00').getDay()-calWeekStart+7)%7);
+   if(e.key==='End')offset=6-((new Date(calendarDay+'T12:00:00').getDay()-calWeekStart+7)%7);
+   if(offset===undefined)return;e.preventDefault();if(calChoose(calShift(calendarDay,offset)))calendar(`[data-date="${calendarDay}"]`);
+  };
+  if(typeof focus==='string'&&focus)$(focus,$('.calendar-atelier'))?.focus({preventScroll:true});
+ }
+ function calRenderSearch(){
+  const query=calNormalize(eventQuery),rows=sortedEvents().filter(e=>(calFilter==='all'||calColor(e)===calFilter)&&(query?calNormalize([e.title,e.place,e.notes,e.date].join(' ')).includes(query):e.date>=calendarDay));
+  let previous='';$('#cal-result-caption').textContent=`${rows.length}件${query?' · 全期間を検索':` · ${calendarDay} 以降`}（最大${calResultLimit}件表示）`;
+  $('#pd-event-results').innerHTML=rows.slice(0,calResultLimit).map(e=>{const heading=e.date!==previous?`<header class="cal-section-heading"><h3>${esc(e.date)} · ${calDateLabel(e.date)}</h3></header>`:'';previous=e.date;return heading+agendaRows([e],e.date);}).join('')||calEmpty(calendarDay,calFilter!=='all');
+  if(rows.length>calResultLimit)$('#pd-event-results').insertAdjacentHTML('beforeend',calButton('calMore','さらに80件表示','','class="cal-more"'));
+ }
+ A.apps.calendar.render=calendar;
+ A.actions.pdCalendarView=el=>{if(!calViews.some(([id])=>id===el.dataset.id)||!A.save('calendarView',el.dataset.id))return;calendarView=el.dataset.id;calendar(`[data-action="pdCalendarView"][data-id="${calendarView}"]`);};
+ A.actions.calendarToday=()=>{calChoose(day());calendar('[data-action="calendarToday"]');};
+ A.actions.calendarMove=el=>{const n=Number(el.dataset.value);if(![-1,1].includes(n))return;let key;if(calendarView==='week'||calendarView==='day')key=calShift(calendarDay,n*(calendarView==='week'?7:1));else{const d=new Date(calendarMonth);d.setMonth(d.getMonth()+n);key=calKey(d);}if(!calChoose(key))return;calMotion=n>0?'cal-next':'cal-prev';calendar(`[data-action="calendarMove"][data-value="${n}"]`);};
+ A.actions.calendarSelect=el=>{if(calChoose(el.dataset.date))calendar(`[data-date="${calendarDay}"]`);};
+ A.actions.calOpenDay=el=>{if(!calValid(el.dataset.id)||!A.save('calendarView','day'))return;calChoose(el.dataset.id);calendarView='day';calendar('[data-action="pdCalendarView"][data-id="day"]');};
+ A.actions.calFilter=el=>{if(el.dataset.id!=='all'&&!Object.hasOwn(eventColors,el.dataset.id))return;calFilter=el.dataset.id;calendar(`[data-action="calFilter"][data-id="${calFilter}"]`);};
+ A.actions.calMore=()=>{calResultLimit+=80;calRenderSearch();};
+ A.actions.calJump=()=>A.form('日付へ移動',field('日付','date',calendarDay,'date','required min="0100-01-01" max="9998-12-31"'),v=>{if(!calChoose(v.date))return false;calendar();},'移動');
+ A.actions.calOptions=()=>{
+  A.form('カレンダーの設定',select('週の始まり','weekStart',[['0','日曜日'],['1','月曜日']],String(calWeekStart))+`<div class="cal-options"><h4>予定の書き出し</h4>${calButton('calendarExchange',A.icon('share')+'Google カレンダー・ICS')}${calButton('calDayICS',A.icon('download')+'選択日の予定をICS保存')}<p>選択日の書き出しは全色・前日から続く予定も含みます。外部への自動同期はありません。</p><h4>操作のヒント</h4><p>日付は矢印キーでも選択できます。日表示の空き時間から、新しい予定を作成できます。削除の取り消しは直前の1操作・このタブ内のみです。</p></div>`,v=>{const value=Number(v.weekStart);if(![0,1].includes(value)||!A.save('calendarWeekStart',value))return false;calWeekStart=value;calendar();});
+ };
+ A.actions.calDayICS=()=>A.network.exportCalendar?.(calOn(A.eventModel.get(),calendarDay),`aura-calendar-${calendarDay}.ics`);
+ const calTemplates={meeting:{title:'打ち合わせ',time:'10:00',endTime:'11:00',color:'blue'},focus:{title:'集中する時間',time:'09:00',endTime:'10:00',color:'sage'},rest:{title:'ひと息つく時間',time:'15:00',endTime:'15:30',color:'gold'}};
+ function eventEditor(event,defaults={}){
+  const e=event||{date:calendarDay,time:'15:00',endTime:'16:00',color:calFilter==='all'?'rose':calFilter,...defaults};
+  A.form(event?'予定を編集':'予定をつくる',`<div class="cal-editor-lead">${A.icon('calendar')}<span>一日を、あなたらしく。</span></div>${event?'':`<div class="cal-templates" role="group" aria-label="予定テンプレート">${[['meeting','打ち合わせ'],['focus','集中'],['rest','ひと息']].map(([id,label])=>calButton('calTemplate',label,id)).join('')}</div>`}`+
+   field('タイトル','title',e.title||'','text','required maxlength="80" placeholder="何をする？"')+field('日付','date',e.date,'date','required min="0100-01-01" max="9998-12-31"')+
+   `<label class="cal-all-day"><input type="checkbox" name="allDay" ${e.allDay?'checked':''}><span>終日</span><small>時間を指定しない予定</small></label><div id="cal-time-fields"><div class="cal-time-fields">${field('開始','time',e.time||'15:00','time','required')}${field('終了','endTime',e.endTime||'','time')}</div><div class="cal-durations" role="group" aria-label="予定の長さ">${[15,30,60,90,120].map(n=>calButton('calDuration',`${n}分`,String(n))).join('')}</div></div><p class="cal-editor-hint" id="cal-time-hint"></p>`+
+   field('場所','place',e.place||'','text','maxlength="120" placeholder="場所・オンラインなど"')+select('色','color',calColors,calColor(e))+
+   `<label class="form-label" for="cal-event-notes">メモ</label><textarea class="text-input" id="cal-event-notes" name="notes" rows="3" maxlength="2000" placeholder="持ちもの、確認したいこと…">${esc(e.notes||'')}</textarea>`+
+   (event?(e.series?'<p class="cal-editor-hint">繰り返しのうち、この予定だけを編集します。</p>':''):`<details class="cal-repeat"><summary>繰り返し</summary>${select('頻度','repeat',[['none','なし'],['daily','毎日'],['weekdays','平日（月〜金）'],['weekly','毎週'],['monthly','毎月']],'none')}${field('作成する回数','count',4,'number','min="1" max="52" step="1" required')}<p>最大52件を実際の予定として作成。月末日は各月の末日に調整します。平日は祝日を除外しません。</p></details>`)+
+   `<p class="cal-editor-warning" id="cal-conflicts" role="status"></p><p class="cal-editor-warning" id="cal-save-error" role="alert" hidden></p>`+
+   (event?`<div class="cal-editor-actions">${calButton('pdCalendarDuplicate',A.icon('layers')+'複製',event.id)}${calButton('calendarDelete',A.icon('trash')+'削除',event.id)}${event.series?calButton('pdCalendarDeleteSeries','繰り返しをまとめて削除',event.series):''}</div>`:''),v=>{
+    const fail=message=>{const el=$('#cal-save-error');el.hidden=false;el.textContent=message;return false;};
+    if(!v.title.trim()||!calValid(v.date))return fail('タイトルと有効な日付を入力してください。');
+    const allDay=v.allDay==='on',timePattern=/^(?:[01]\d|2[0-3]):[0-5]\d$/;
+    if(!allDay&&(!timePattern.test(v.time)||v.endTime&&!timePattern.test(v.endTime)))return fail('開始・終了時刻を確認してください。');
+    const base={...event,id:event?.id||A.id(),title:v.title.trim(),date:v.date,time:allDay?'':v.time,endTime:allDay?'':v.endTime,allDay,place:v.place.trim(),notes:v.notes.trim(),color:Object.hasOwn(eventColors,v.color)?v.color:'rose'};
+    let rows=A.eventModel.get();
+    if(event){if(!rows.some(x=>x.id===event.id))return fail('この予定は削除されています。閉じて一覧をご確認ください。');rows=rows.map(x=>x.id===event.id?base:x);}
+    else{
+     const repeat=v.repeat,count=repeat==='none'?1:Number(v.count);
+     if(!['none','daily','weekdays','weekly','monthly'].includes(repeat)||!Number.isInteger(count)||count<1||count>52)return fail('繰り返し回数は1〜52で指定してください。');
+     const added=[],series=count>1?A.id():null,start=new Date(v.date+'T12:00:00');let weekdayKey=v.date;
+     for(let i=0;i<count;i++){
+      const d=new Date(start);let key;
+      if(repeat==='monthly'){d.setDate(1);d.setMonth(start.getMonth()+i);d.setDate(Math.min(start.getDate(),new Date(d.getFullYear(),d.getMonth()+1,0).getDate()));key=calKey(d);}
+      else if(repeat==='weekdays'){while([0,6].includes(new Date(weekdayKey+'T12:00:00').getDay()))weekdayKey=calShift(weekdayKey,1);key=weekdayKey;weekdayKey=calShift(key,1);}
+      else key=calShift(v.date,i*(repeat==='weekly'?7:1));
+      if(!calValid(key))return fail('作成する日付が対応範囲を超えています。');
+      added.push({...base,id:i?A.id():base.id,date:key,series});
+     }
+     rows=[...rows,...added];base.date=added[0].date;
+    }
+    if(!A.eventModel.replace(rows))return fail('未保存です。入力はこの画面に残っています。容量を確保して再度保存してください。');
+    calChoose(base.date);calFilter='all';calendar();A.toast(event?'予定を更新しました':'予定を保存しました');
+   });
+  $('#modal-form').classList.add('cal-editor');
+  const form=$('#modal-form');
+  const update=()=>{
+   const allDay=form.elements.allDay.checked;$('#cal-time-fields').hidden=allDay;
+   form.elements.time.disabled=allDay;form.elements.endTime.disabled=allDay;
+   const candidate={date:form.elements.date.value,time:form.elements.time.value,endTime:form.elements.endTime.value,allDay},r=calRange(candidate);
+   $('#cal-time-hint').textContent=allDay?'日付のみで保存・時刻通知なし':candidate.endTime?(r&&calKey(r.end)>candidate.date?'終了は翌日です。':'端末のタイムゾーンで保存'):'終了未指定は開始の1時間後として扱います。';
+   const conflicts=!allDay&&r?A.eventModel.get().filter(x=>{if(x.id===event?.id||x.allDay)return false;const t=calRange(x);return t&&r.start<t.end&&t.start<r.end;}):[];
+   const repeated=form.elements.repeat&&form.elements.repeat.value!=='none';
+   $('#cal-conflicts').textContent=(conflicts.length?`${conflicts.length}件と時間が重複しています。重複したまま保存できます。`:'')+(repeated?' 重複判定は入力した日のみです。':'');
+  };
+  form.addEventListener('input',update);form.addEventListener('change',update);update();
+ }
+ A.actions.calendarAdd=()=>eventEditor();
+ A.actions.pdCalendarDayAdd=el=>{if(calChoose(el.dataset.id))eventEditor();};
+ A.actions.calendarEdit=el=>{const e=A.eventModel.get().find(x=>x.id===el.dataset.id);if(e)eventEditor(e);};
+ A.actions.calFreeAdd=el=>{const [start,end]=el.dataset.id.split(':').map(Number);if(!Number.isInteger(start)||!Number.isInteger(end)||start<540||end>1080||end-start<30)return;eventEditor(null,{time:calTime(start),endTime:calTime(Math.min(start+60,end))});};
+ A.actions.calTemplate=el=>{const t=calTemplates[el.dataset.id],f=$('#modal-form');if(!t||!f)return;for(const [key,value]of Object.entries(t))f.elements[key].value=value;f.elements.allDay.checked=false;f.dispatchEvent(new Event('input'));};
+ A.actions.calDuration=el=>{const f=$('#modal-form'),n=Number(el.dataset.id);if(!f||![15,30,60,90,120].includes(n))return;const parts=f.elements.time.value.split(':').map(Number);if(parts.length!==2)return;f.elements.endTime.value=calTime((parts[0]*60+parts[1]+n)%1440);f.dispatchEvent(new Event('input'));};
+ A.actions.pdCalendarDuplicate=el=>{const e=A.eventModel.get().find(x=>x.id===el.dataset.id);if(e)eventEditor(null,{...e,title:(e.title+' コピー').slice(0,80)});};
+ function calDelete(predicate,title){
+  A.confirm(title,'削除後、一覧の「元に戻す」で直前の削除を取り消せます。',()=>{const current=A.eventModel.get(),removed=current.filter(predicate);if(!removed.length)return;if(!A.eventModel.replace(current.filter(e=>!predicate(e)))){A.toast('削除できませんでした。予定は残っています。');return;}calUndo=removed;calendar();});
+ }
+ A.actions.calendarDelete=el=>calDelete(e=>e.id===el.dataset.id,'この予定を削除？');
+ A.actions.pdCalendarDeleteSeries=el=>{if(el.dataset.id)calDelete(e=>e.series===el.dataset.id,'繰り返しをまとめて削除？');};
+ A.actions.calUndo=()=>{const current=A.eventModel.get(),restored=calUndo.filter(e=>!current.some(x=>x.id===e.id));if(!A.eventModel.replace([...current,...restored]))return;calUndo=[];calendar();A.toast('予定を復元しました');};
+ A.actions.calDismissUndo=()=>{calUndo=[];calendar();};
 
  // Files: local folders, safe previews, version history and bulk text import.
  let fileCurrent=null,fileFolder='all',fileQuery='',fileKind='all',fileSort='date';
