@@ -328,3 +328,102 @@
 .ev-reminders.rm-compact .rm-hero{padding:13px 16px;grid-template-columns:minmax(0,1fr) 66px;border-radius:18px;min-height:96px}.rm-compact .rm-hero h1{font-size:18px;line-height:1.5}.rm-compact .rm-hero h1 br{display:none}.rm-compact .rm-eyebrow{margin-bottom:5px}.rm-compact .rm-hero-copy{display:none}.rm-compact .rm-progress-label{margin-top:5px}.rm-compact .rm-orbit{width:66px;height:72px}.rm-compact .rm-paper{display:none}#app-screen .rm-compact .rm-orbit>svg{width:66px;height:66px}.rm-compact .rm-orbit>small{bottom:auto;top:24px;font-size:14px}.rm-compact .rm-smart{margin:9px 0 12px}.rm-compact .rm-smart>button{min-height:64px;padding:10px}.rm-compact .rm-smart strong{font-size:21px;margin-top:5px}.rm-compact .rm-task{padding-block:2px}.rm-compact .rm-note-preview{display:none}.rm-compact .rm-group{margin-bottom:12px}.rm-compact .rm-task-main{padding-block:8px}
 @media(pointer:coarse){.rm-compose input,.rm-step-add input,.rm-editor .text-input{font-size:16px}}
 @media(forced-colors:active){.rm-task-list,.rm-hero,.rm-smart>button,.rm-compose,.rm-batch,.rm-undo{border:1px solid CanvasText}.rm-check>span{border-color:ButtonText}.rm-check.is-done>span,.rm-task.is-selected{background:Highlight;color:HighlightText}.rm-orbit-value{stroke:Highlight}}
+
+/* Sketch atelier: the paper leads; one optional inspector at a time. */
+#app-screen[data-visual-app=sketch]{--visual-accent:#526b61;--visual-soft:#e7ece7;--visual-tint:#f3f3ef;--visual-surface:#fffefa;--visual-line:#52635520;--visual-muted:#70786f}
+#app-screen .ev-sketch{--sk-accent:#456555;--sk-tint:#526b6110;--ev-surface:#fffefa;--ev-muted:#727870;--ev-border:#52635520;color:#333e36;padding-top:6px;padding-bottom:44px}
+#app-screen .ev-sketch:has(#ev-canvas){padding-inline:12px}
+#app-screen .ev-sketch button{transition:background .15s,color .15s}
+#app-screen .ev-sketch button[aria-pressed=true]:not(.ev-swatch){background:#e0e9df;color:#365d43;box-shadow:inset 0 0 0 1px #79907a45}
+#app-screen .ev-sketch button:focus-visible,#app-screen .ev-sketch select:focus-visible,#app-screen .ev-sketch input:focus-visible{outline:2px solid var(--sk-accent);outline-offset:2px}
+#app-screen .ev-sketch .sk-title-row{height:44px;gap:5px}
+#app-screen .ev-sketch .sk-title-row input{font-size:16px;letter-spacing:-.02em;font-weight:600}
+#app-screen .ev-sketch .sk-title-row>button{display:grid;place-items:center;min-width:40px;height:40px;padding:4px;font-size:28px;border-radius:10px}
+#app-screen .ev-sketch .sk-title-row svg{width:19px;height:19px}
+#app-screen .ev-sketch .sk-command-bar{gap:2px;margin:0 0 10px;flex-wrap:nowrap;border-bottom:1px solid var(--ev-border);padding-bottom:8px}
+#app-screen .ev-sketch .sk-command-bar button{min-height:36px;min-width:34px;padding:5px 7px;background:transparent;font-size:10px}
+#app-screen .ev-sketch .sk-command-bar select{min-height:34px;background:transparent;border:0;font-size:11px;max-width:78px}
+.sk-active-tool{flex:1;min-width:0;font-size:10px;color:var(--ev-muted);white-space:nowrap;text-overflow:ellipsis;overflow:hidden;text-align:center}
+#app-screen .ev-sketch .sk-viewport{border-radius:8px;padding:14px;background:#e5e6df;max-height:52vh;border:1px solid #7d88791c;box-shadow:inset 0 1px 4px #26352506}
+#app-screen .ev-sketch .sk-viewport #ev-canvas{box-shadow:0 2px 4px #29332412,0 8px 24px #29332410;border-radius:1px}
+#sk-canvas-size{position:relative}
+#sk-trace-image{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;user-select:none}
+.sk-quick-tools{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;margin:12px 0 6px;padding:5px;border:1px solid var(--ev-border);border-radius:15px;background:var(--ev-surface);box-shadow:0 3px 12px #2e3c2c06}
+.sk-quick-tools button,.sk-panel-tabs button{min-width:0;min-height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border-radius:10px;color:inherit;padding:5px 1px}
+.sk-quick-tools span{font-size:9px;white-space:nowrap;letter-spacing:-.04em}
+#app-screen .sk-quick-tools svg{width:21px;height:21px}
+#app-screen .ev-sketch-footer{font-size:9px;min-height:28px;gap:6px;line-height:1.5;margin:0 3px 8px;flex-wrap:wrap}
+#app-screen .ev-sketch-footer>span{min-width:0;flex:1}
+#app-screen .ev-sketch-footer #sk-document-info{text-align:right;font-variant-numeric:tabular-nums}
+.sk-panel-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:1px solid var(--ev-border);gap:3px;padding-top:6px}
+.sk-panel-tabs button{min-height:49px;color:var(--ev-muted);font-size:10px}
+#app-screen .sk-panel-tabs svg{height:18px;width:18px}
+#app-screen .ev-sketch .sk-panel-tabs button[aria-expanded=true]{color:var(--sk-accent);background:var(--sk-tint);box-shadow:inset 0 -2px var(--sk-accent)}
+.sk-inspector{margin:10px 0 14px;padding:14px 12px;border:1px solid var(--ev-border);border-radius:16px;background:var(--ev-surface);min-width:0}
+.sk-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px}
+.sk-panel-heading h2{font-size:13px;font-weight:600;margin:0}
+.sk-panel-heading h2 span{font-size:10px;font-weight:400;color:var(--ev-muted);margin-left:6px}
+.sk-panel-heading button{min-height:36px;padding:8px;color:var(--ev-muted);font-size:10px}
+#app-screen .ev-sketch .sk-toolbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:0;gap:5px;overflow:visible}
+#app-screen .ev-sketch .sk-toolbar button{min-height:58px;min-width:0;padding:8px 1px;font-size:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;background:transparent;border-color:var(--ev-border);border-radius:10px}
+#app-screen .sk-toolbar svg{width:22px;height:22px}
+#sk-brush-preview{width:100%;height:auto;display:block;max-height:65px;border:1px solid var(--ev-border);background:#f5f5f0;border-radius:10px;margin-top:12px}
+#app-screen .ev-sketch .sk-settings{margin:14px 0 16px;gap:18px}
+#app-screen .ev-sketch input[type=range]{accent-color:var(--sk-accent);min-height:28px}
+#app-screen .ev-sketch input[type=checkbox]{accent-color:var(--sk-accent)}
+.sk-inspector>button,.sk-preset-list button{min-height:38px;padding:8px 12px;font-size:11px;color:var(--sk-accent);border-radius:8px;background:var(--sk-tint)}
+.sk-preset-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.sk-preset-list>div{display:flex;align-items:center;max-width:100%;border:1px solid var(--ev-border);border-radius:8px;overflow:hidden}
+.sk-preset-list button{background:transparent;overflow-wrap:anywhere}
+.sk-preset-list button+button{font-size:18px;padding-inline:10px;border-left:1px solid var(--ev-border)}
+.sk-inline-label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px;padding:4px 10px 10px;color:var(--ev-muted)}
+#app-screen .ev-sketch .sk-options{background:transparent;margin-bottom:0;border-radius:10px}
+#app-screen .ev-sketch .sk-options summary{font-size:11px}
+#app-screen .ev-sketch .sk-palette{gap:12px;padding:4px 2px}
+#app-screen .ev-sketch .sk-palette .ev-swatch{width:36px;height:36px;border:4px solid var(--ev-surface);box-shadow:0 0 0 1px var(--ev-border)}
+#app-screen .ev-sketch .sk-palette .ev-swatch.selected{box-shadow:0 0 0 2px var(--sk-accent)}
+.sk-color-custom{display:flex;align-items:center;gap:10px;border-top:1px solid var(--ev-border);padding-top:12px;font-size:11px}
+.sk-color-custom input{width:42px;height:38px;border:0;padding:0;background:transparent}
+.sk-color-custom span{font-size:10px;color:var(--ev-muted);margin-left:auto}
+.sk-inspector h3{font-size:11px;font-weight:500;margin:20px 0 8px;color:var(--ev-muted)}
+.sk-paper-choices{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.sk-paper-choices button{padding:7px;color:inherit;border:1px solid var(--ev-border);border-radius:10px;font-size:10px}
+.sk-paper-sample{display:block;background-color:#fffdf8;aspect-ratio:3/4;border:1px solid #d9ded5;border-radius:2px;margin-bottom:8px;box-shadow:0 3px 4px #263c2410}
+.sk-paper-sample.grid{background-image:linear-gradient(#9eaca52b 1px,transparent 1px),linear-gradient(90deg,#9eaca52b 1px,transparent 1px);background-size:10px 10px}
+.sk-paper-sample.dots{background-image:radial-gradient(#788b8277 1px,transparent 1px);background-size:8px 8px}
+.sk-paper-sample.ruled{background-image:linear-gradient(#9eaca52b 1px,transparent 1px);background-size:100% 10px}
+.sk-hint,#sk-reference-status{font-size:11px;line-height:1.8;color:var(--ev-muted);margin:5px 0 12px}
+#sk-reference-file{max-width:100%;font:inherit;font-size:11px;margin:6px 0 12px}
+#sk-reference-file::file-selector-button{padding:10px;border:1px solid var(--ev-border);border-radius:8px;background:var(--sk-tint);color:inherit;margin-right:6px}
+#sk-reference-preview{display:block;max-width:100%;max-height:230px;object-fit:contain;margin:auto;border-radius:8px}
+.sk-reference-options{display:flex;flex-wrap:wrap;align-items:center;gap:12px;font-size:11px;margin-top:12px}
+.sk-reference-options label{display:flex;align-items:center;gap:7px}
+.sk-reference-options input[type=range]{max-width:130px}
+.sk-reference-options button{color:var(--sk-accent);min-height:36px}
+#app-screen .ev-sketch .sk-layer{padding:5px 0;gap:1px}
+#app-screen .ev-sketch .sk-layer>button:first-child{font-size:12px;padding-left:9px}
+#app-screen .ev-sketch .sk-layer.active{border-left:2px solid var(--sk-accent)}
+#app-screen .ev-sketch .sk-layer-actions{padding:12px 0 2px}
+#app-screen .ev-sketch .sk-selection{padding:12px;border:1px solid var(--ev-border);border-radius:12px;background:var(--ev-surface);margin:10px 0}
+#app-screen .ev-sketch.sk-focused .sk-inspector,#app-screen .ev-sketch.sk-focused .sk-panel-tabs,#app-screen .ev-sketch.sk-focused .ev-sketch-footer{display:none}
+#app-screen .ev-sketch.sk-focused .sk-viewport{max-height:68vh}
+#app-screen .ev-sketch.sk-focused .sk-command-bar{background:var(--visual-tint)}
+#app-screen .ev-sketch .sk-hero{padding:25px 22px 20px;border-radius:12px;background:var(--ev-surface);border:1px solid var(--ev-border);box-shadow:0 5px 20px #2c3a2c05;color:inherit}
+#app-screen .ev-sketch .sk-hero:after{width:70px;height:90px;right:-24px;top:19px;border:1px solid #718d7838;border-radius:2px;transform:rotate(15deg);box-shadow:-6px 6px 0 #fffefa,-7px 7px 0 #718d7830}
+#app-screen .ev-sketch .sk-hero>span{color:var(--sk-accent);font-size:9px;letter-spacing:3px}
+#app-screen .ev-sketch .sk-hero h1{font-size:22px;font-weight:500;letter-spacing:-.05em;margin:15px 0 7px}
+#app-screen .ev-sketch .sk-hero p{color:var(--ev-muted);font-size:11px;margin-bottom:20px}
+#app-screen .ev-sketch .sk-hero .primary-button{border-radius:8px;background:#526b61;color:#fff;min-height:44px;font-weight:500}
+#app-screen .ev-sketch .sk-hero>button:not(.primary-button){min-height:40px;font-size:11px;padding:8px 0;margin:5px 0 0;display:block;color:var(--sk-accent)}
+#app-screen .ev-sketch .sk-tile{border-radius:8px;border-color:var(--ev-border);box-shadow:0 4px 12px #33452c08;background:var(--ev-surface)}
+#app-screen .ev-sketch .sk-tile strong{font-weight:500}
+.screen-dark-mode #app-screen[data-visual-app=sketch]{--visual-accent:#b1cbb9;--visual-soft:#343e37;--visual-tint:#232924;--visual-surface:#2b332d;--visual-line:#c5d9b91c;--visual-muted:#acb8ab}
+.screen-dark-mode #app-screen .ev-sketch{--sk-accent:#b1cbb9;--sk-tint:#b1cbb914;--ev-surface:#2b332d;--ev-muted:#acb8ab;--ev-border:#c5d9b922;color:#e0e7dd}
+.screen-dark-mode #app-screen .ev-sketch .sk-viewport{background:#1d241f;border-color:#ffffff10}
+.screen-dark-mode #app-screen .ev-sketch button[aria-pressed=true]:not(.ev-swatch){background:#405247;color:#d5efdc;box-shadow:inset 0 0 0 1px #8ca18f66}
+.screen-dark-mode #sk-brush-preview{background:#ecefe7}
+.screen-dark-mode #app-screen .ev-sketch .sk-hero:after{box-shadow:-6px 6px 0 #2b332d,-7px 7px 0 #718d7850}
+@media(max-width:360px){#app-screen .ev-sketch:has(#ev-canvas){padding-inline:9px}.sk-quick-tools{gap:1px;padding:4px}.sk-quick-tools span{font-size:8px}.sk-inspector{padding:10px 8px}#app-screen .ev-sketch .sk-viewport{padding:9px}.sk-active-tool{font-size:9px}.sk-paper-choices{gap:4px}}
+@media(min-width:650px){#app-screen .ev-sketch .sk-viewport{max-height:60vh}.sk-quick-tools button{flex-direction:row;gap:8px}.sk-quick-tools span{font-size:11px}}
+@media(prefers-reduced-motion:reduce){#app-screen .ev-sketch button{transition:none}}
+[data-reduce-motion=true] #app-screen .ev-sketch button{transition:none}
