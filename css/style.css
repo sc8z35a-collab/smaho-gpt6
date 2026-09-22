@@ -876,3 +876,84 @@ a.primary-button{text-decoration:none;text-align:center;display:inline-flex;just
 @media(prefers-reduced-motion:reduce){.weather-app .wx-motion{animation:none!important}.weather-app button{transition:none!important}}
 @media(hover:hover){.wx-chart-tabs button:hover,.weather-app .hourly-forecast>button:hover{background:#bedfed20}}
 @media(max-width:350px){.weather-app .app-content{padding-left:12px;padding-right:12px}.weather-app .weather-summary{padding:16px 9px 7px}.weather-summary .wx-hero-reading .big-temperature{font-size:70px}.wx-hero-reading{gap:17px}.weather-app .weather-card{padding:15px 11px}.wx-card-heading>span{font-size:7px}.weather-app .live-forecast-row{column-gap:6px}.weather-app .weather-stat>strong{font-size:28px}.wx-sun-times b{font-size:12px}.wx-source-pill{font-size:8px}.weather-summary .wx-scene-note{font-size:7px}}
+
+/* Atmosphere II — twilight dioramas, time exploration and meteorological instruments. */
+.wx-sky-frame{position:relative;border-radius:23px;overflow:hidden;isolation:isolate;background:#18374d;box-shadow:0 9px 20px -12px #030f23aa}
+.weather-app .wx-sky-frame .weather-landscape{border-radius:0;box-shadow:none}
+.wx-sky-caption,.wx-sky-footer{position:absolute;z-index:1;left:0;right:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 13px;pointer-events:none;font-size:8px;line-height:1.5;text-shadow:0 1px 4px #102036}
+.wx-sky-caption{top:0;background:linear-gradient(#11263980,transparent);color:#f0f5f9}
+.wx-sky-caption b{font-size:8px;font-weight:500;letter-spacing:.08em}
+.wx-sky-footer{bottom:0;padding-top:16px;background:linear-gradient(transparent,#0c253bb0);color:#e9f5f5}
+.wx-sky-footer span:last-child{font-size:6px;letter-spacing:1.8px;color:#c6dee8}
+.wx-sky-frame[data-phase=dawn]{box-shadow:0 7px 28px -17px #e9b7a488}
+.wx-sky-frame[data-phase=dusk]{box-shadow:0 7px 28px -17px #c397b088}
+.wx-sky-controls{padding:12px 4px 0;display:flex;flex-direction:column;gap:10px}
+.wx-sky-controls>button{min-height:39px;border:1px solid #c5e6f032;border-radius:12px;background:#b5deee0a;color:#dcecf3;font-size:10px;letter-spacing:.06em}
+.wx-sky-controls>button[aria-pressed=true]{background:#d4be9820;border-color:#ecd5a850;color:#ffe7bf}
+.wx-sky-controls>div{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:3px;background:#091e352b;border-radius:11px}
+.wx-sky-controls>div button{min-height:32px;border-radius:8px;font-size:9px;color:#afc6d7}
+.wx-sky-controls>div button[aria-pressed=true]{background:#afd3dd25;color:#f2f6ed;box-shadow:inset 0 1px 0 #ebf9ff12}
+.weather-summary .wx-motion-note{font-size:8px;color:#b7cbd7;text-align:center;line-height:1.6;margin:8px 0 3px}
+.wx-sunbeams{animation:wxSunbeams 18s ease-in-out infinite alternate;transform-origin:260px 40px}
+.wx-ripple{animation:wxRipple 4s ease-out infinite;opacity:.5}
+.wx-reeds{animation:wxReeds 9s ease-in-out infinite alternate;transform-origin:180px 240px}
+@keyframes wxSunbeams{from{transform:rotate(-4deg);opacity:.45}to{transform:rotate(3deg);opacity:.8}}
+@keyframes wxRipple{0%{transform:scale(.3);opacity:0}20%{opacity:.55}100%{transform:scale(1.8);opacity:0}}
+@keyframes wxReeds{from{transform:skewX(-1deg)}to{transform:skewX(2deg)}}
+#live-weather[data-wx-motion=calm] .wx-motion{animation-duration:30s}
+#live-weather[data-wx-motion=calm] :is(.wx-rain,.wx-flake,.wx-ripple){animation-duration:9s}
+#live-weather[data-wx-motion=calm] .wx-orbit{animation-duration:160s}
+#live-weather[data-wx-motion=still] .wx-motion{animation:none!important}
+.weather-app .wx-outlook{background:radial-gradient(ellipse at 95% 5%,#9dd4df12,transparent 65%),linear-gradient(135deg,#d1e8f00c,#071e3324);padding-bottom:14px}
+.wx-outlook-numbers{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:19px}
+.wx-outlook-numbers>div+div{border-left:1px solid #d5e8f318;padding-left:16px}
+.wx-outlook-numbers small{display:block;color:#bfd0dc;font-size:9px;letter-spacing:.04em}
+.wx-outlook-numbers strong{display:block;font-size:32px;color:#eaf2f4;font-weight:400;letter-spacing:-1px;line-height:1.3;margin:5px 0;font-variant-numeric:tabular-nums}
+.wx-outlook-numbers>div:first-child strong{color:#f1d7ac}
+.wx-outlook-numbers em{font-size:16px;font-style:normal;margin-left:2px}
+.wx-outlook-numbers span{font-size:9px;color:#b8ccdc;font-variant-numeric:tabular-nums}
+.wx-rain-strip{display:block;width:100%;height:53px;margin:20px 0 8px}
+.weather-app .wx-outlook>p{font-size:9px;color:#bfd7e4;margin:0 0 4px;line-height:1.7}
+.wx-outlook>small{font-size:8px;color:#a5bfd0}
+.wx-chart-tabs{grid-template-columns:repeat(3,1fr)}
+.wx-chart-legend{display:flex;justify-content:space-between;gap:8px;margin:12px 1px 0;font-size:8px;color:#b0c9db}
+.wx-chart-legend>span{display:flex;gap:5px;align-items:center}
+.wx-chart-legend i{width:8px;height:3px;background:#dfca9e;border-radius:3px}
+.wx-chart-legend>span+span i{height:8px;border-radius:2px;background:#081a2d;border:1px solid #b8d5e329}
+.wx-time-scrubber{display:flex;gap:10px;align-items:center;padding-top:13px;margin-top:8px;border-top:1px solid #d2e5f215}
+.wx-time-scrubber label{font-size:9px;color:#c0d6e5;white-space:nowrap}
+.wx-time-scrubber input{min-width:0;flex:1;accent-color:#c3dce5;height:32px;cursor:pointer;margin:0}
+.wx-time-scrubber button{font-size:9px;min-width:35px;min-height:36px;border-radius:9px;border:1px solid #d8ebf324;background:#aacbdc0a}
+.weather-app .wx-hour-detail{min-height:43px;line-height:1.9}
+.weather-app .wx-daily{border-top:1px solid #d8e8f312}
+.weather-app .wx-daily>.live-forecast-row{border-top:0;cursor:pointer;padding-right:13px;list-style:none;outline-offset:2px}
+.wx-daily>summary::-webkit-details-marker{display:none}
+.wx-daily>summary:focus-visible{outline:2px solid #c8e7fa;border-radius:9px}
+.weather-app .live-forecast-row .wx-day-chevron{position:absolute;right:0;top:24px;font-size:12px;color:#99b7cc;transition:transform .25s}
+.wx-daily[open] .wx-day-chevron{transform:rotate(180deg)}
+.wx-daily[open] .live-forecast-row{background:linear-gradient(90deg,transparent,#c6dfec06);border-radius:12px}
+.wx-daily-details{padding:4px 10px 13px;border-radius:13px;background:#081a2b26;margin-bottom:9px}
+.wx-daily-details>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:15px}
+.wx-daily-details p{display:flex;flex-direction:column;gap:5px;margin:12px 0 3px}
+.wx-daily-details p>span{font-size:9px;color:#a9c2d6}
+.wx-daily-details strong{font-size:14px;font-weight:400;color:#e2eff5;font-variant-numeric:tabular-nums}
+.wx-daily-details>small{display:block;margin-top:14px;font-size:8px;color:#a3bdce}
+.weather-app .wx-instruments{margin-top:15px;background:radial-gradient(ellipse at 15% 50%,#7fafb90a,transparent 70%),#aec5d307}
+.wx-instrument-grid{display:grid;grid-template-columns:1.05fr 1fr;align-items:center;gap:19px;padding:9px 2px}
+.wx-compass{width:100%;max-width:145px;height:auto;margin:0 auto 12px}
+.wx-compass-cell{text-align:center;min-width:0}
+.wx-compass-cell>strong{font-size:16px;font-weight:400;color:#ead7b9;display:block}
+.wx-compass-cell>strong>small{font-size:10px;color:#bdd3df}
+.wx-compass-cell>p{font-size:8px;color:#b0c7d7;margin:9px 0 0}
+.wx-air-values{border-left:1px solid #cbdfef1a;padding-left:16px;min-width:0}
+.wx-air-values>p{margin:0 0 13px}
+.wx-air-values>p>span{display:block;font-size:9px;color:#b3c9d9;margin-bottom:4px}
+.wx-air-values strong{font-size:21px;font-weight:400;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.wx-air-values strong small{font-size:9px;letter-spacing:0;margin-left:4px;color:#b6cddd}
+.wx-cloud-matrix{width:100%;height:auto;max-height:44px}
+.wx-instrument-note{font-size:8px;line-height:1.9;color:#9fbbcf;margin:15px 0 0;text-align:center}
+.weather-app :is(button,input,summary):focus-visible{outline-color:#c5e5f9}
+@media(hover:hover){.wx-sky-controls button:hover,.wx-daily>summary:hover{background-color:#cce7f50c}}
+@media(prefers-contrast:more){.weather-app :is(.weather-card,.weather-summary,.wx-sky-controls button){border-color:#c0dbe988}.weather-app :is(.wx-motion-note,.wx-scene-note,.wx-card-heading>span,.wx-instrument-note){color:#dfedf6}}
+@media(prefers-reduced-motion:reduce){.wx-daily .wx-day-chevron{transition:none}.weather-app .wx-motion{animation:none!important}}
+@media(max-width:350px){.wx-sky-caption,.wx-sky-footer{padding-left:10px;padding-right:10px;font-size:7px}.wx-sky-caption b{font-size:7px}.wx-sky-footer span:last-child{font-size:5px;letter-spacing:1.2px}.wx-outlook-numbers{gap:10px}.wx-outlook-numbers>div+div{padding-left:10px}.wx-instrument-grid{gap:11px}.wx-air-values{padding-left:11px}.wx-air-values strong{font-size:19px}.wx-chart-legend{font-size:7px}.wx-time-scrubber{gap:6px}}
