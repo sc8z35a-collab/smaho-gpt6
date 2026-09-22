@@ -651,3 +651,69 @@ a.primary-button{text-decoration:none;text-align:center;display:inline-flex;just
 .health-record button{min-height:44px;font-size:11px;color:var(--blue)}
 .health-real .health-water .health-controls{position:relative;z-index:1}
 @media(max-width:360px){.health-real .health-hero{gap:12px;padding:15px 12px}.health-real .health-ring-art{width:115px}.health-real .health-heading h1{font-size:22px}}
+
+/* Mori wallet: layered, locally drawn materials; motion is finite, never a render loop. */
+.app-screen.mori-wallet{--mori-ink:#254d40;--mori-muted:#697b6f;--mori-border:#4765491c;--mori-surface:#fffdf8;--mori-base:#f3f3ec;background:radial-gradient(ellipse at 100% 0,#dbe5d48c,transparent 55%),var(--mori-base);color:var(--mori-ink)}
+.mori-wallet .app-nav{background:transparent;color:var(--mori-ink)}
+.mori-wallet .mori-content{padding:6px 20px 30px;overflow-x:hidden}
+.mori-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0 0}
+.mori-heading .mori-eyebrow{font-family:'DM Sans',sans-serif;font-size:9px;letter-spacing:2.6px;color:var(--mori-muted);margin:0 0 9px}
+.mori-heading h3{font-size:21px;font-weight:500;letter-spacing:.06em;margin:0}
+.mori-heading .demo-label{font-size:9px;letter-spacing:0;white-space:nowrap;padding:6px 8px;color:#6a6246;background:#e8e5d4;border:1px solid #b5aa7929;border-radius:7px}
+.mori-stage{position:relative;isolation:isolate;padding:31px 3px 0;perspective:900px}
+.mori-stage:before{content:'';position:absolute;left:9%;right:9%;bottom:47px;height:32px;border-radius:50%;background:#1a4a3430;filter:blur(12px);transform:rotate(-3deg);pointer-events:none}
+.mori-card-stack{position:absolute;top:26px;left:14px;right:9px;aspect-ratio:1.57;border-radius:22px;transform:rotate(3deg);background:linear-gradient(130deg,#d1d7bf,#8da58e);border:1px solid #f8f7db;box-shadow:0 3px 0 #79937d,0 10px 15px -8px #173c3940;pointer-events:none}
+.mori-card-stack:after{content:'';position:absolute;inset:6px;border:1px solid #ffffff50;border-radius:17px}
+.mori-card-float{position:relative;animation:moriCardArrive .95s cubic-bezier(.18,.75,.22,1) both}
+.mori-wallet .mori-card{aspect-ratio:1.57;min-height:205px;border-radius:22px;margin:0;padding:23px 24px 16px;background:#244f42;border:1px solid #b5c8a6;color:#f7f5df;box-shadow:0 2px 0 #6b8864,0 4px 0 #244e3e,0 9px 13px -6px #153a3c66,0 24px 32px -16px #1e3e3866;transform:rotateX(var(--mori-rx,2deg)) rotateY(var(--mori-ry,-3deg)) rotateZ(-2deg);transition:transform .45s cubic-bezier(.2,.7,.2,1);isolation:isolate}
+.mori-wallet .mori-card:after{inset:0;width:auto;height:auto;border:0;border-radius:inherit;box-shadow:inset 0 1px 0 #fff8,inset 1px 0 0 #e8edc454,inset 0 -1px 0 #081e3260;background:radial-gradient(ellipse at var(--mori-light-x,25%) var(--mori-light-y,0%),#e8f8c325,transparent 65%);pointer-events:none}
+.mori-landscape{position:absolute;inset:0;width:100%;height:100%;z-index:-1}
+.mori-card-sheen{position:absolute;inset:-70%;z-index:2;pointer-events:none;background:linear-gradient(110deg,transparent 40%,#fff7db05 44%,#fff7db30 49%,#fff7db08 54%,transparent 58%);transform:translateX(-65%);animation:moriFoilPass 2.4s .3s ease-in-out both}
+.mori-card-top{display:flex;align-items:start;justify-content:space-between;position:relative;z-index:1}
+.mori-wallet .mori-card h3{font-family:'DM Sans',sans-serif;font-size:29px;line-height:1;margin:0;font-weight:500;letter-spacing:-1.8px;text-shadow:0 1px 0 #ffffff40,0 -1px 0 #082e2a}
+.mori-card h3 span{color:#e4d4a7}.mori-card-top>span{font-size:7px;letter-spacing:1.4px;text-align:right;line-height:1.9;color:#f3edcf}.mori-card-top b{font-weight:400;font-size:6px;letter-spacing:2px;opacity:.8}
+.mori-balance{position:relative;margin-top:60px;z-index:1;width:fit-content;max-width:100%;text-shadow:0 2px 4px #173e39}
+.mori-wallet .mori-balance small{font-size:9px;letter-spacing:1px;margin:0 0 4px;opacity:1;display:flex;align-items:center;gap:7px;color:#e0e6d3}
+.mori-balance small span{font-size:8px;letter-spacing:0;padding:1px 5px;border:1px solid #e8e9c749;border-radius:4px}
+.mori-balance strong{display:block;font-family:'DM Sans',sans-serif;font-size:34px;font-weight:500;line-height:1.15;letter-spacing:-1px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.mori-card-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px;position:relative;margin-top:15px;font-size:8px;letter-spacing:2px;color:#dbe2c8}.mori-card-bottom>span:last-child{font-family:'DM Sans',sans-serif;letter-spacing:1px;font-size:8px}
+.mori-card-caption{display:flex;align-items:center;justify-content:center;gap:7px;font-size:9px;color:var(--mori-muted);margin:20px 0 22px;letter-spacing:.04em}
+.mori-card-caption>span{height:5px;width:5px;border-radius:50%;background:#8b9d7a;box-shadow:0 0 0 3px #8b9d7a15}
+.mori-wallet .mori-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:0 0 26px}
+.mori-actions .secondary-button{position:relative;display:flex;flex-wrap:wrap;align-items:center;justify-content:start;gap:7px;min-height:93px;padding:12px 10px;text-align:left;border-radius:18px;background:linear-gradient(140deg,var(--mori-surface),var(--mori-base));border:1px solid var(--mori-border);border-top-color:#fff;color:var(--mori-ink);box-shadow:inset 0 1px 0 #fff,0 3px 0 #d8dfd080,0 9px 15px -12px #36523b55;transition:transform .25s,box-shadow .25s}
+.mori-wallet .mori-object{display:block;width:54px;height:54px;flex-shrink:0;filter:drop-shadow(0 3px 2px #18352912)}
+.mori-actions .mori-object{width:44px;height:44px;transition:transform .4s cubic-bezier(.2,.7,.2,1)}
+.mori-actions button>span{font-size:11px;font-weight:600;line-height:1.6;letter-spacing:0}
+.mori-actions button small{display:block;font-size:8px;font-weight:400;color:var(--mori-muted);margin-top:3px}
+.mori-actions button>b{position:absolute;right:10px;top:8px;font-size:13px;font-weight:400;color:var(--mori-muted)}
+.mori-actions button:focus-visible{outline:2px solid #718f64;outline-offset:4px}
+.mori-actions button:active{transform:translateY(2px);box-shadow:inset 0 1px 3px #244c3920}
+@media(hover:hover) and (pointer:fine){.mori-actions button:hover{transform:translateY(-3px);box-shadow:inset 0 1px 0 #fff8,0 4px 0 #8f9d7429,0 14px 20px -13px #36523b80}.mori-actions button:hover .mori-object{transform:translateY(-3px) rotate(-8deg)}}
+.mori-history>header{display:flex;align-items:center;justify-content:space-between;padding:0 2px;margin-bottom:12px}
+.mori-history h3{font-size:13px;font-weight:600;margin:0;letter-spacing:.05em}.mori-history header>span{font-size:9px;color:var(--mori-muted)}
+.mori-transactions{padding:0 13px;border-radius:22px;background:var(--mori-surface);border:1px solid var(--mori-border);box-shadow:0 8px 25px -20px #2b4a3566,inset 0 1px 0 #fff9;overflow:hidden}
+.mori-wallet .mori-transaction{display:flex;gap:10px;padding:15px 0;border-bottom:1px solid var(--mori-border);animation:moriRowArrive .55s var(--mori-delay,0ms) ease-out both}
+.mori-transaction:last-child{border-bottom:0}.mori-transaction-art{border-radius:14px;background:linear-gradient(140deg,#ebeedf,#f4f1e7);flex-shrink:0;border:1px solid #6b845c12}
+.mori-transaction-info{flex:1;min-width:0}.mori-wallet .mori-transaction strong{display:block;font-size:11px;font-weight:500;line-height:1.65;overflow-wrap:anywhere}
+.mori-wallet .mori-transaction small{font-size:9px;color:var(--mori-muted);line-height:1.5;margin-top:4px}.mori-transaction small span{white-space:nowrap}
+.mori-wallet .mori-amount{font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;letter-spacing:-.3px;font-variant-numeric:tabular-nums;max-width:42%;overflow-wrap:anywhere;text-align:right;flex-shrink:0}.mori-wallet .mori-credit{color:#477752}
+.mori-empty{display:flex;align-items:center;flex-direction:column;text-align:center;padding:24px 10px}.mori-empty strong{font-size:12px;font-weight:500;margin-top:12px}.mori-empty p{font-size:10px;color:var(--mori-muted);margin:8px 0}
+.mori-disclaimer{display:flex;align-items:start;justify-content:center;gap:7px;margin:22px 0 0;color:var(--mori-muted)}.mori-disclaimer>svg{width:14px;height:14px;flex-shrink:0;margin-top:2px}.mori-disclaimer p{font-size:9px;line-height:1.9;margin:0}
+.mori-complete{display:flex;align-items:center;gap:9px;border:1px solid #94aa7833;border-radius:16px;padding:11px 12px;margin:-3px 0 17px;background:linear-gradient(110deg,#e6eddc,#f1f2e8);animation:moriRowArrive .5s ease-out both}
+.mori-complete>svg{width:35px;height:35px;flex-shrink:0;fill:none;stroke:#5c805b;stroke-width:1.5}.mori-complete>svg circle{fill:#f8f9ee;stroke:#a5bb91}.mori-complete>svg path{stroke-linecap:round;stroke-linejoin:round;stroke-width:2.5;stroke-dasharray:1;animation:moriCheckDraw .6s .15s both}
+.mori-complete>div{flex:1;min-width:0}.mori-complete strong{display:block;font-size:10px;font-weight:600}.mori-complete small{display:block;font-size:8px;margin-top:4px;color:var(--mori-muted)}.mori-complete>span{max-width:35%;overflow-wrap:anywhere;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500}
+.mori-card-updated .mori-balance strong{animation:moriBalanceReveal .7s ease-out both}.mori-transaction-new{background:linear-gradient(90deg,#b9d3a626,transparent)}
+@keyframes moriCardArrive{from{opacity:0;transform:translateY(20px) rotateX(10deg) rotateZ(2deg)}to{opacity:1;transform:none}}
+@keyframes moriFoilPass{0%{transform:translateX(-65%)}100%{transform:translateX(65%)}}
+@keyframes moriRowArrive{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes moriBalanceReveal{from{opacity:.3;transform:translateY(7px)}to{opacity:1;transform:none}}
+@keyframes moriCheckDraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+.screen-dark-mode .app-screen.mori-wallet{--mori-ink:#e0e7d6;--mori-muted:#adbaab;--mori-border:#c4dac018;--mori-surface:#28372f;--mori-base:#1d2b26;background:radial-gradient(ellipse at 100% 0,#506c3c25,transparent 60%),var(--mori-base)}
+.screen-dark-mode .mori-heading .demo-label{color:#dbcf9e;background:#383c2c;border-color:#dcc38d20}.screen-dark-mode .mori-card-stack{background:linear-gradient(130deg,#6b8160,#3c5947);border-color:#a4b79044}
+.screen-dark-mode .mori-actions .secondary-button{border-top-color:#bbceaf30;box-shadow:inset 0 1px 0 #d2e5c112,0 3px 0 #15231a,0 9px 15px -12px #0008}.screen-dark-mode .mori-transactions{box-shadow:inset 0 1px 0 #ffffff0a,0 8px 25px -20px #0008}.screen-dark-mode .mori-transaction-art{background:linear-gradient(140deg,#415340,#32473a)}.screen-dark-mode .mori-credit{color:#b7d5a0}.screen-dark-mode .mori-complete{background:linear-gradient(110deg,#354932,#283a30)}.screen-dark-mode .mori-complete>svg circle{fill:#d6dfc8}
+@media(max-width:360px){.mori-wallet .mori-content{padding-inline:14px}.mori-heading h3{font-size:18px}.mori-heading .demo-label{font-size:8px;padding:5px}.mori-wallet .mori-card{padding:21px 20px 16px;min-height:195px}.mori-balance{margin-top:56px}.mori-balance strong{font-size:30px}.mori-actions .secondary-button{padding:12px 9px;gap:5px}.mori-actions .mori-object{width:37px;height:37px}.mori-actions button>span{font-size:10px}.mori-wallet .mori-transaction{gap:7px}.mori-transaction .mori-object{width:43px;height:43px}.mori-transactions{padding-inline:10px}.mori-wallet .mori-amount{font-size:12px}}
+/* Override pointer transforms as well as CSS motion when either preference is active. */
+[data-reduce-motion=true] .mori-card{transform:rotateZ(-2deg)!important}
+[data-reduce-motion=true] .mori-card-sheen{display:none}
+[data-reduce-motion=true] .mori-actions button,[data-reduce-motion=true] .mori-actions .mori-object{transform:none!important}
+@media(prefers-reduced-motion:reduce){.mori-card{transform:rotateZ(-2deg)!important}.mori-card-sheen{display:none}.mori-actions button,.mori-actions .mori-object{transform:none!important}}
