@@ -463,8 +463,144 @@ window.addEventListener('pagehide',()=>{healthStopMotion();healthDisconnect();})
 window.addEventListener('beforeunload',e=>{if(healthPending.length||healthFlushing){e.preventDefault();e.returnValue='';}});
 // Wallet holds fictional balance only, with no payment integrations.
 let wallet=A.load('wallet',{balance:3240,transactions:[{id:'tx1',title:'喫茶 余白',amount:-580,date:Date.now()-3600000},{id:'tx2',title:'青葉駅 → 緑町駅',amount:-220,date:Date.now()-7200000},{id:'tx3',title:'デモチャージ',amount:2000,date:Date.now()-86400000}]});
-function walletApp(){A.view(A.nav('ウォレット')+`<div class="app-content"><p class="app-subtitle"><span class="demo-label">デモ・架空残高</span></p><div class="wallet-card"><h3>mori.</h3><strong>¥${wallet.balance.toLocaleString()}</strong><span>•••• 2048</span></div><div class="wallet-actions"><button class="secondary-button" data-action="walletCharge" style="background:#e3ede8;color:#739082">＋ デモチャージ</button><button class="secondary-button" data-action="walletPay" style="background:#e3ede8;color:#739082">デモで支払う</button></div><p class="section-label">デモ履歴</p>${wallet.transactions.slice(0,15).map(t=>`<div class="transaction-row"><div><strong>${esc(t.title)}</strong><small>${new Date(t.date).toLocaleDateString('ja-JP',{month:'short',day:'numeric'})}</small></div><span style="color:${t.amount>0?'#72a080':'inherit'}">${t.amount>0?'+':'−'} ¥${Math.abs(t.amount).toLocaleString()}</span></div>`).join('')}<p class="setting-description" style="margin-top:23px">実決済・乗車不可。個人情報・カード番号は入力しないでください</p></div>`);}
-A.apps.wallet.render=walletApp;A.actions.walletCharge=()=>A.form('デモ残高を追加','<p>実決済なし</p><label class="form-label">金額（デモ）</label><select class="text-input" name="amount"><option value="1000">¥1,000</option><option value="3000">¥3,000</option><option value="5000">¥5,000</option></select>',v=>{wallet.balance+=+v.amount;wallet.transactions.unshift({id:A.id(),title:'デモチャージ',amount:+v.amount,date:Date.now()});A.save('wallet',wallet);walletApp();A.toast('デモ残高を追加済み');},'デモチャージ');A.actions.walletPay=()=>A.form('デモのお買いもの','<label class="form-label">購入するもの（架空）</label><select class="text-input" name="item"><option value="coffee">喫茶 余白 · コーヒー ¥580</option><option value="train">青葉線 · 乗車 ¥220</option><option value="book">栞の書店 · 文庫本 ¥820</option></select>',v=>{const items={coffee:['喫茶 余白',580],train:['青葉線 デモ乗車',220],book:['栞の書店',820]},[title,amount]=items[v.item];if(wallet.balance<amount){A.toast('デモ残高が足りません。チャージしてください。');return false;}wallet.balance-=amount;wallet.transactions.unshift({id:A.id(),title,amount:-amount,date:Date.now()});A.save('wallet',wallet);walletApp();A.toast('デモ完了・実決済なし');},'デモ支払い');
+// All artwork is local vector geometry. Paint IDs are unique even in app snapshots.
+let walletPaintId=0,walletFinish='forest';
+const walletFinishes={forest:'深い森',dusk:'夕映え',moon:'月あかり'};
+function walletArt(kind){
+  const id=`mori-art-${++walletPaintId}`;
+  const gold=`url(#${id}-gold)`,green=`url(#${id}-green)`;
+  const drawings={
+    charge:`<ellipse cx="34" cy="53" rx="23" ry="5" fill="#173e3420"/><path d="M12 42v6c0 8 39 8 39 0v-6" fill="#af8045"/><ellipse cx="31.5" cy="42" rx="19.5" ry="7" fill="${gold}" stroke="#b48b50"/><path d="M17 47v5m6-3v5m7-4v5m7-5v4m7-5v3" stroke="#fce4aa"/><circle cx="32" cy="28" r="18" fill="${gold}" stroke="#ad8048"/><circle cx="32" cy="28" r="14" fill="none" stroke="#fff0c6"/><path d="M32 20v16m-8-8h16" stroke="#876436" stroke-width="2.5" stroke-linecap="round"/><path d="M20 17a17 17 0 0 1 18-5" fill="none" stroke="#fff7df" stroke-width="2"/>`,
+    coffee:`<ellipse cx="32" cy="52" rx="24" ry="5" fill="#173e3420"/><ellipse cx="31" cy="47" rx="23" ry="6" fill="#d3b492"/><ellipse cx="31" cy="45" rx="22" ry="5" fill="#f6e9d8"/><path d="M45 24h5c13 0 10 17-4 17" fill="none" stroke="#b79675" stroke-width="5"/><path d="M14 23h32l-3 17c-2 10-24 10-26 0Z" fill="${gold}"/><ellipse cx="30" cy="23" rx="16" ry="6" fill="#fff2da"/><ellipse cx="30" cy="24" rx="12" ry="4" fill="#68442e"/><path d="M23 24q7-6 14 0q-7 6-14 0" fill="none" stroke="#d9b88c"/><path d="M24 15c-5-5 4-6 0-11m11 10c-4-4 4-6 1-10" fill="none" stroke="#82998c" stroke-width="1.5" stroke-linecap="round"/>`,
+    train:`<ellipse cx="32" cy="55" rx="20" ry="4" fill="#173e3420"/><path d="M24 46l-6 12m22-12 6 12m-26-5h24" stroke="#617b72" stroke-width="2"/><rect x="15" y="8" width="34" height="41" rx="11" fill="${green}" stroke="#486d61"/><path d="M19 32h26v8H19Z" fill="#dec891"/><rect x="20" y="17" width="24" height="13" rx="4" fill="#c7e2db"/><path d="M32 17v13m-10-9 7-2m5 2 7-2" stroke="#f3fff3"/><path d="M26 12h12" stroke="#d1e2bc" stroke-width="2" stroke-linecap="round"/><circle cx="23" cy="40" r="3" fill="#fff3c8"/><circle cx="41" cy="40" r="3" fill="#fff3c8"/>`,
+    book:`<ellipse cx="32" cy="54" rx="22" ry="4" fill="#173e3420"/><path d="M13 13 39 8l12 9v33l-27 6-11-9Z" fill="#385e50"/><path d="m17 16 24-5 7 6-25 6Z" fill="#fff2dc"/><path d="m23 23 28-6v33l-28 6Z" fill="${green}"/><path d="M17 17v29l6 6V23Z" fill="#87a38c"/><path d="m29 29 15-3m-15 8 11-2m-11 8 15-3" stroke="#d4dfbe" stroke-linecap="round"/><path d="m39 20 5-1v11l-3-2-2 3Z" fill="#d8b580"/>`,
+    pay:`<ellipse cx="32" cy="53" rx="23" ry="5" fill="#173e3420"/><g transform="rotate(-12 30 34)"><rect x="9" y="21" width="44" height="29" rx="6" fill="#284e42"/><rect x="9" y="18" width="44" height="29" rx="6" fill="${green}" stroke="#8aaa94"/><rect x="15" y="27" width="10" height="8" rx="2" fill="${gold}"/><path d="M15 40h15m10-12q5 5 0 10m4-14q9 9 0 18" fill="none" stroke="#e6edd3" stroke-width="1.5"/></g><path d="M27 9q7-5 14 0m-11 5q4-3 8 0" fill="none" stroke="#587f68" stroke-width="2" stroke-linecap="round"/>`,
+    receipt:`<ellipse cx="32" cy="55" rx="20" ry="4" fill="#173e3420"/><path d="M17 8h30v46l-5-3-5 3-5-3-5 3-5-3-5 3Z" fill="#fff4df" stroke="#b5a48b"/><circle cx="32" cy="22" r="8" fill="${green}"/><path d="m28 22 3 3 5-6M24 37h16m-16 6h11" fill="none" stroke="#7f977e" stroke-width="2"/><path d="m28 22 3 3 5-6" fill="none" stroke="#fff" stroke-width="1.5"/>`
+  };
+  return `<svg class="mori-object mori-object-${kind}" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="${id}-gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff0c7"/><stop offset=".45" stop-color="#dfbf82"/><stop offset=".7" stop-color="#f4daa4"/><stop offset="1" stop-color="#b68c50"/></linearGradient><linearGradient id="${id}-green" x2="1" y2="1"><stop stop-color="#acc4a5"/><stop offset=".45" stop-color="#739982"/><stop offset="1" stop-color="#416b5b"/></linearGradient></defs>${drawings[kind]||drawings.receipt}</svg>`;
+}
+function walletLandscape(){
+  const id=`mori-land-${++walletPaintId}`;
+  return `<svg class="mori-landscape" viewBox="0 0 360 230" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><defs>
+    <linearGradient id="${id}-sky" x2="1" y2="1"><stop stop-color="var(--mori-sky-light,#597c67)"/><stop offset=".5" stop-color="var(--mori-sky-mid,#244f42)"/><stop offset="1" stop-color="var(--mori-sky-dark,#123d35)"/></linearGradient>
+    <linearGradient id="${id}-ridge" x2=".3" y2="1"><stop stop-color="var(--mori-ridge-light,#a2b89a)"/><stop offset="1" stop-color="var(--mori-ridge-dark,#376754)"/></linearGradient>
+    <linearGradient id="${id}-foil" x2="1" y2=".6"><stop stop-color="#d2b57b"/><stop offset=".3" stop-color="#fff1be"/><stop offset=".5" stop-color="#b5965e"/><stop offset=".75" stop-color="#f9dfa1"/><stop offset="1" stop-color="#b38a4e"/></linearGradient>
+    <radialGradient id="${id}-sun"><stop stop-color="#ffedbd"/><stop offset=".72" stop-color="#dbc993"/><stop offset="1" stop-color="#b5ad78"/></radialGradient>
+    <pattern id="${id}-grain" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M0 .5h5" stroke="#fff" stroke-opacity=".045" stroke-width=".5"/><circle cx="2" cy="3" r=".45" fill="#fff" opacity=".09"/></pattern>
+  </defs><rect width="360" height="230" fill="url(#${id}-sky)"/>
+  <g class="mori-orbits" fill="none" stroke="#dbd8a4" stroke-width=".55" opacity=".19">${Array.from({length:10},(_,i)=>`<ellipse cx="303" cy="100" rx="${45+i*9}" ry="${57+i*11}" transform="rotate(-28 303 100)"/>`).join('')}</g>
+  <g class="mori-sun"><circle cx="276" cy="65" r="29" fill="url(#${id}-sun)"/><circle cx="276" cy="65" r="34" fill="none" stroke="#e6d5a1" stroke-opacity=".3"/><path d="M250 59h52m-54 6h56m-54 6h52" stroke="#797e55" stroke-opacity=".17" stroke-width=".6"/></g>
+  <path d="m123 174 40-47 21 12 41-58 33 43 30-17 72 44v79H123Z" fill="#91aa8a" opacity=".36"/>
+  <path d="m158 196 49-52 26 13 42-55 33 38 25-10 27 20v80H158Z" fill="url(#${id}-ridge)"/>
+  <path d="m275 102-7 32 10-8 15 20-6-27Z" fill="#dce0b9" opacity=".52"/>
+  <path d="M95 230c60-61 100-21 147-67s79 4 118-19v86Z" fill="#2e624f"/><path d="M172 230c45-34 60-26 92-47s70-9 96-16" fill="none" stroke="#c1c69a" stroke-width=".7" opacity=".6"/>
+  <path d="M208 230c43-54 103-21 152-60v60Z" fill="#184a3e"/>
+  <g fill="#0c382e">${[242,261,302,324,345].map((x,i)=>`<path d="m${x} ${179-i*3} -9 19h5l-9 15h11v15h4v-15h11l-9-15h5Z"/>`).join('')}</g>
+  <g class="mori-contours" fill="none" stroke="#e1e1b9" stroke-width=".45" opacity=".22">${Array.from({length:8},(_,i)=>`<path d="M${179+i*5} 230Q${195+i*5} ${193-i*2} 266 ${174-i*3}T370 ${139-i*4}"/>`).join('')}</g>
+  <g class="mori-mist" fill="none" stroke="#e7ebd3" stroke-width="1.2" opacity=".15"><path d="M169 143q35-13 74-3t110-8M212 152q35-12 74-2t71-5"/></g>
+  <g class="mori-starlight" fill="#f8e8b2"><circle cx="204" cy="57" r="1.2"/><circle cx="327" cy="76" r=".8"/><path d="m317 26 1 4 4 1-4 1-1 4-1-4-4-1 4-1Z"/></g>
+  <rect width="360" height="230" fill="url(#${id}-grain)"/>
+  <g transform="translate(26 78)"><rect width="39" height="29" rx="6" fill="url(#${id}-foil)" stroke="#f7e8b1" stroke-width=".7"/><g fill="none" stroke="#846d43" stroke-width=".7"><rect x="12" y="6" width="15" height="17" rx="4"/><path d="M0 9h12m15 0h12M0 20h12m15 0h12M9 0l6 7m15-7-6 7M9 29l6-7m15 7-6-7"/></g><path d="M5 2h28" stroke="#fff6d2"/></g>
+  <g transform="translate(77 84)" fill="none" stroke="#e8e4c7" stroke-width="1.5" stroke-linecap="round"><path d="M0 6q4 4 0 8m5-12q8 8 0 16m5-20q12 12 0 24"/></g>
+  <rect x="1" y="1" width="358" height="228" rx="21" fill="none" stroke="#ebefc6" stroke-opacity=".38"/><rect x="5" y="5" width="350" height="220" rx="18" fill="none" stroke="#d5d9b1" stroke-opacity=".12"/>
+  </svg>`;
+}
+function walletSeal(){
+  const id=`mori-seal-${++walletPaintId}`;
+  return `<svg class="mori-seal" viewBox="0 0 100 100" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="${id}" x2="1" y2="1"><stop stop-color="#f7e5b1"/><stop offset=".28" stop-color="#9fc7b5"/><stop offset=".5" stop-color="#e9c6e3"/><stop offset=".75" stop-color="#dedc9b"/><stop offset="1" stop-color="#b2d3cb"/></linearGradient></defs><circle cx="50" cy="53" r="43" fill="#061e2544"/><circle cx="50" cy="50" r="42" fill="url(#${id})" stroke="#fff2c8"/><circle cx="50" cy="50" r="37" stroke="#274b4755"/><g stroke="#355d5355" stroke-width=".65">${Array.from({length:48},(_,i)=>`<path d="M50 10v${i%4===0?6:3}" transform="rotate(${i*7.5} 50 50)"/>`).join('')}</g><g class="mori-seal-engraving"><path d="M33 65c-7-25 8-38 32-40 7 26-7 42-32 40Z" fill="#f0efd380" stroke="#396855"/><path d="m29 73 31-41M38 61l-3-15m10 6 12-1m-5-9-2-10" stroke="#396855" stroke-width="1.4" stroke-linecap="round"/><circle cx="50" cy="50" r="30" stroke="#fffde88c" stroke-dasharray="1 3"/></g><path d="M22 24a38 38 0 0 1 43-9" stroke="#fffbea" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+}
+function walletReverse(){
+  const id=`mori-reverse-${++walletPaintId}`;
+  return `<svg class="mori-reverse-art" viewBox="0 0 360 230" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="${id}-ink" x2="1" y2="1"><stop stop-color="var(--mori-sky-dark,#123d35)"/><stop offset="1" stop-color="#101e26"/></linearGradient><pattern id="${id}-lines" width="4" height="4" patternUnits="userSpaceOnUse"><path d="M0 1h4" stroke="#e1d9b2" stroke-opacity=".06" stroke-width=".6"/></pattern></defs><rect width="360" height="230" fill="url(#${id}-ink)"/><rect width="360" height="230" fill="url(#${id}-lines)"/><g fill="none" stroke="#d7d0a1" stroke-width=".5" opacity=".2">${Array.from({length:18},(_,i)=>`<ellipse cx="300" cy="112" rx="${24+i*5}" ry="${32+i*6}" transform="rotate(${i*9} 300 112)"/>`).join('')}</g><path d="M0 41h360v29H0Z" fill="#091c20"/><path d="M0 43h360m-360 24h360" stroke="#e0d5ae" stroke-opacity=".18"/><rect x="19" y="84" width="158" height="29" rx="3" fill="#d4ddc4"/><g stroke="#91a58b" stroke-width=".45" opacity=".7">${Array.from({length:6},(_,i)=>`<path d="M22 ${88+i*4}h152"/>`).join('')}</g><path d="M30 104c6-22 7-9 8-3s4-24 7-9 6 7 10 0 6 12 15 4 12 4 23-2" fill="none" stroke="#4a6c59" stroke-width="1.3"/><rect x="5" y="5" width="350" height="220" rx="18" fill="none" stroke="#d6dfb1" stroke-opacity=".2"/></svg>`;
+}
+function walletCelebration(){
+  return `<div class="mori-celebration" aria-hidden="true"><span class="mori-success-halo"></span>${Array.from({length:10},(_,i)=>`<i style="--mori-spark-x:${Math.round(Math.cos(i*Math.PI/5)*100)}px;--mori-spark-y:${Math.round(Math.sin(i*Math.PI/5)*64)-18}px;--mori-spark-turn:${i*39}deg;--mori-spark-delay:${i*25}ms"></i>`).join('')}</div>`;
+}
+function walletApp(result){
+  // Aura.open may pass route arguments; only an explicit successful transaction animates.
+  const completed=result?.kind==='charge'||result?.kind==='pay';
+  $('#app-screen').classList.add('mori-wallet');
+  A.view(A.nav('ウォレット')+`<div class="app-content mori-content" data-wallet-finish="${walletFinish}">
+    <header class="mori-heading"><div><p class="mori-eyebrow">MORI / WALLET</p><h3>日々に、余白を。</h3></div><span class="demo-label">デモ・架空残高</span></header>
+    <div class="mori-stage"><div class="mori-stage-aura" aria-hidden="true"></div><div class="mori-card-stack" aria-hidden="true"></div><div class="mori-card-float"><div class="wallet-card mori-card${completed?' mori-card-updated':''}"><div class="mori-card-rotor" id="mori-card-rotor">
+      <div class="mori-card-face mori-card-front" aria-hidden="false">${walletLandscape()}<div class="mori-card-sheen" aria-hidden="true"></div><div class="mori-holographic-glow" aria-hidden="true"></div>
+      <div class="mori-card-top"><h3>mori<span>.</span></h3><span>FOREST ATELIER<br><b>DEMO CARD / 01</b></span></div>
+      <div class="mori-balance"><small>ご利用可能残高<span>架空</span></small><strong>¥${wallet.balance.toLocaleString()}</strong></div>
+      <div class="mori-card-bottom"><span>•••• &nbsp;2048</span><span>mori / aura</span></div></div>
+      <div class="mori-card-face mori-card-back" aria-hidden="true">${walletReverse()}<div class="mori-card-sheen" aria-hidden="true"></div><div class="mori-reverse-top"><span>THE QUIET COLLECTION</span><b>mori.</b></div><div class="mori-reverse-body"><div><p>ここだけの、小さな体験。</p><strong>DEMO ONLY</strong><small>実決済・乗車には使えません。<br>カード情報の登録は不要です。</small></div>${walletSeal()}</div><div class="mori-reverse-bottom"><span>NOT FOR PAYMENT</span><span>DESIGNED BY AURA</span></div></div>
+    </div></div>${completed?walletCelebration():''}</div><p class="mori-card-caption"><span aria-hidden="true"></span>このブラウザだけの、デモカード</p></div>
+    <div class="mori-card-tools"><div class="mori-finish-picker" role="group" aria-label="カードの色合い">${Object.entries(walletFinishes).map(([value,label])=>`<button type="button" class="mori-finish-swatch mori-finish-${value}" data-action="walletFinish" data-value="${value}" aria-label="${label}" aria-pressed="${value===walletFinish}"><span aria-hidden="true"></span></button>`).join('')}<span class="mori-finish-name">${walletFinishes[walletFinish]}</span></div><button type="button" class="mori-flip-button" data-action="walletFlip" aria-pressed="false" aria-controls="mori-card-rotor">${icon('refresh')}<span>裏面を見る</span></button></div>
+    ${completed?`<div class="mori-complete" role="status"><svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><circle cx="24" cy="24" r="20"/><path d="m15 24 6 6 13-14" pathLength="1"/></svg><div><strong>${result.kind==='charge'?'デモチャージ完了':'デモのお買いもの完了'}</strong><small>実際のお金は移動していません</small></div><span>${result.kind==='charge'?'+':'−'}¥${result.amount.toLocaleString()}</span></div>`:''}
+    <div class="wallet-actions mori-actions"><button class="secondary-button" data-action="walletCharge">${walletArt('charge')}<span>デモチャージ<small>残高を追加</small></span><b aria-hidden="true">＋</b></button><button class="secondary-button" data-action="walletPay">${walletArt('pay')}<span>デモで支払う<small>お買いもの体験</small></span><b aria-hidden="true">↗</b></button></div>
+    <section class="mori-history" aria-labelledby="mori-history-title"><header><h3 id="mori-history-title">デモ履歴</h3><span>最新 ${Math.min(wallet.transactions.length,15)} 件</span></header>
+    <div class="mori-transactions">${wallet.transactions.slice(0,15).map((t,i)=>{const kind=t.amount>0?'charge':/喫茶|コーヒー/.test(t.title)?'coffee':/駅|乗車|青葉線/.test(t.title)?'train':/書店|文庫/.test(t.title)?'book':'receipt';return `<div class="transaction-row mori-transaction${completed&&i===0?' mori-transaction-new':''}" style="--mori-delay:${Math.min(i,5)*45}ms"><div class="mori-transaction-art">${walletArt(kind)}</div><div class="mori-transaction-info"><strong>${esc(t.title)}</strong><small>${new Date(t.date).toLocaleDateString('ja-JP',{month:'short',day:'numeric'})} <span>· ${t.amount>0?'チャージ':'お支払い'}</span></small></div><span class="mori-amount${t.amount>0?' mori-credit':''}">${t.amount>0?'+':'−'} ¥${Math.abs(t.amount).toLocaleString()}</span></div>`;}).join('')||`<div class="mori-empty">${walletArt('receipt')}<strong>まだ履歴はありません</strong><p>デモチャージから、はじめましょう。</p></div>`}</div></section>
+    <footer class="mori-disclaimer">${icon('info')}<p>実決済・乗車はできません。<br>個人情報・カード番号は入力しないでください。</p></footer>
+  </div>`);
+  // Element-scoped handlers disappear with this view: no global listeners or RAF loops.
+  const stage=$('.mori-stage'),card=$('.mori-card');
+  const reset=()=>{card.style.removeProperty('--mori-rx');card.style.removeProperty('--mori-ry');card.style.removeProperty('--mori-light-x');card.style.removeProperty('--mori-light-y');};
+  stage.onpointermove=e=>{
+    if(e.pointerType!=='mouse'||A.settings.reduceMotion||matchMedia('(prefers-reduced-motion: reduce)').matches)return reset();
+    const box=stage.getBoundingClientRect(),x=Math.max(0,Math.min(1,(e.clientX-box.left)/box.width)),y=Math.max(0,Math.min(1,(e.clientY-box.top)/box.height));
+    card.style.setProperty('--mori-rx',`${(0.5-y)*8}deg`);card.style.setProperty('--mori-ry',`${(x-0.5)*10}deg`);
+    card.style.setProperty('--mori-light-x',`${x*100}%`);card.style.setProperty('--mori-light-y',`${y*100}%`);
+  };
+  stage.onpointerleave=reset;stage.onpointercancel=reset;
+}
+A.actions.walletFlip=el=>{
+  const rotor=$('#mori-card-rotor');if(!rotor)return;
+  const flipped=el.getAttribute('aria-pressed')!=='true';
+  rotor.classList.toggle('mori-is-flipped',flipped);el.setAttribute('aria-pressed',String(flipped));
+  el.querySelector('span').textContent=flipped?'表面を見る':'裏面を見る';
+  rotor.querySelector('.mori-card-front').setAttribute('aria-hidden',String(flipped));
+  rotor.querySelector('.mori-card-back').setAttribute('aria-hidden',String(!flipped));
+};
+A.actions.walletFinish=el=>{
+  const value=el.dataset.value,content=$('.mori-content');
+  if(!content||!Object.hasOwn(walletFinishes,value))return;
+  walletFinish=value;content.dataset.walletFinish=value;
+  content.querySelectorAll('[data-action="walletFinish"]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.value===value)));
+  content.querySelector('.mori-finish-name').textContent=walletFinishes[value];
+};
+function walletCommit(title,amount,kind){
+  const next={...wallet,balance:wallet.balance+amount,transactions:[{id:A.id(),title,amount,date:Date.now()},...wallet.transactions]};
+  // Never celebrate or change the displayed balance if persistence failed.
+  if(!Number.isSafeInteger(next.balance)){A.toast('デモ残高の上限を超えています');return false;}
+  if(!A.save('wallet',next)){A.toast('保存できませんでした。もう一度お試しください');return false;}
+  wallet=next;walletApp({kind,amount:Math.abs(amount)});
+  A.toast(kind==='charge'?'デモ残高を追加済み':'デモ完了・実決済なし');
+}
+A.apps.wallet.render=walletApp;
+const walletDemoItems={coffee:['喫茶 余白',580],train:['青葉線 デモ乗車',220],book:['栞の書店',820]};
+function walletCheckout(kind,title,amount,charge=false){
+  return `<div class="mori-checkout" data-checkout-kind="${kind}"><div class="mori-checkout-stage" aria-hidden="true"><div class="mori-checkout-arch"></div><svg class="mori-checkout-floor" viewBox="0 0 240 66" fill="none" focusable="false"><ellipse cx="120" cy="40" rx="96" ry="22" fill="#233f2c0d"/><path d="M42 29v7c0 25 156 25 156 0v-7" fill="#a7b79a"/><ellipse cx="120" cy="29" rx="78" ry="20" fill="#edf0db" stroke="#aab99a"/><ellipse cx="120" cy="28" rx="69" ry="15" stroke="#fffdf1"/><path d="M53 42q68 22 134 0" stroke="#d9e4bd"/></svg><div class="mori-checkout-object" id="mori-checkout-object">${walletArt(kind)}</div><span class="mori-checkout-orbit"></span></div><div class="mori-checkout-summary" aria-live="polite" aria-atomic="true"><span id="mori-checkout-title">${esc(title)}</span><strong id="mori-checkout-total">${charge?'+ ':''}¥${amount.toLocaleString()}</strong><small>${charge?'追加する架空の残高':'架空の商品・実決済なし'}</small></div></div>`;
+}
+A.actions.walletCharge=()=>{
+  A.form('デモ残高を追加',`${walletCheckout('charge','デモチャージ',1000,true)}<p class="mori-checkout-note">実際のお金は移動しません。</p><label class="form-label" for="mori-charge-amount">金額（デモ）</label><select class="text-input" name="amount" id="mori-charge-amount"><option value="1000">¥1,000</option><option value="3000">¥3,000</option><option value="5000">¥5,000</option></select>`,v=>{
+    const amount=Number(v.amount);if(![1000,3000,5000].includes(amount))return false;
+    return walletCommit('デモチャージ',amount,'charge');
+  },'デモチャージ');
+  $('#mori-charge-amount').onchange=e=>{
+    const amount=Number(e.target.value);if(![1000,3000,5000].includes(amount))return;
+    $('#mori-checkout-total').textContent=`+ ¥${amount.toLocaleString()}`;
+    $('#mori-checkout-object').innerHTML=walletArt('charge');
+  };
+};
+A.actions.walletPay=()=>{
+  A.form('デモのお買いもの',`${walletCheckout('coffee','喫茶 余白',580)}<p class="mori-checkout-note">実決済・乗車はできません。</p><label class="form-label" for="mori-purchase-item">購入するもの（架空）</label><select class="text-input" name="item" id="mori-purchase-item"><option value="coffee">喫茶 余白 · コーヒー ¥580</option><option value="train">青葉線 · 乗車 ¥220</option><option value="book">栞の書店 · 文庫本 ¥820</option></select>`,v=>{
+    if(!Object.hasOwn(walletDemoItems,v.item))return false;
+    const [title,amount]=walletDemoItems[v.item];
+    if(wallet.balance<amount){A.toast('デモ残高が足りません。チャージしてください。');return false;}
+    return walletCommit(title,-amount,'pay');
+  },'デモ支払い');
+  $('#mori-purchase-item').onchange=e=>{
+    const kind=e.target.value;if(!Object.hasOwn(walletDemoItems,kind))return;
+    const [title,amount]=walletDemoItems[kind];
+    $('.mori-checkout').dataset.checkoutKind=kind;
+    $('#mori-checkout-title').textContent=title;$('#mori-checkout-total').textContent=`¥${amount.toLocaleString()}`;
+    $('#mori-checkout-object').innerHTML=walletArt(kind);
+  };
+};
 // Local text file CRUD and client-side downloads.
 let files=A.load('files',[{id:'file-welcome',name:'はじめに.txt',content:'auraへようこそ。\n\nこのファイルアプリでは、テキストファイルを作成・保存・読み込むことができます。\n\n端末にあるすべてのファイルにはアクセスしません。\n選択して読み込んだテキストだけを、このブラウザに保存します。\n\nダウンロードボタンから、実際の端末に保存できます。',date:Date.now()},{id:'file-journey',name:'小さな旅の計画.md',content:'# 次の週末\n\n## 持っていくもの\n- 読みかけの本\n- カメラ\n- 小さなノート\n\n## やってみたいこと\n1. 知らない道を歩く\n2. 喫茶店でひと休み\n3. 空の写真を一枚撮る\n\n急がなくても、大丈夫。',date:Date.now()-86400000}]);let selectedFile=null;
 function filesApp(){const bytes=new Blob([JSON.stringify(files)]).size;A.view(A.nav('ファイル',`<button data-action="fileNew" aria-label="ファイル作成">${icon('plus')}</button>`)+`<div class="app-content"><div class="storage-card"><header><span>このaura内のテキスト</span><small>${(bytes/1024).toFixed(1)} KB · ${files.length}ファイル</small></header><div class="storage-bar"><span></span><span></span><span></span></div><p>ブラウザ内保存 · 端末本体の容量表示ではありません</p></div>${A.search('file-search','ファイルを検索')}<div class="files-grid" id="files-grid"></div><button class="primary-button" data-action="fileImport" style="margin-top:22px">${icon('download')}テキストを読み込む</button><button class="secondary-button" data-action="fileExportNotes" style="width:100%;margin-top:10px">保存済みメモをJSONで書き出す</button><p class="setting-description" style="margin-top:17px">TXT・MD・JSON・CSV（100KB以下）</p></div>`);const render=q=>{$('#files-grid').innerHTML=files.filter(f=>f.name.includes(q)).map(f=>`<button class="file-tile" data-action="fileOpen" data-id="${f.id}">${icon('document')}<h3>${esc(f.name)}</h3><small>${new Blob([f.content]).size.toLocaleString()} bytes</small></button>`).join('')||'<p class="empty-state" style="grid-column:span 2">ファイルがありません。</p>';};render('');$('#file-search').oninput=e=>render(e.target.value);}
