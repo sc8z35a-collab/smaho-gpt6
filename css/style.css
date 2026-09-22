@@ -1143,3 +1143,10 @@ a.primary-button{text-decoration:none;text-align:center;display:inline-flex;just
 @media(prefers-contrast:more){#app-screen[data-visual-app=photos]{--pa-muted:#435949;--pa-line:#577b6190}.pa-sample{background:#153426}.pa-tile,.pa-controls>button{border-width:2px}}
 [data-reduce-motion=true] :is(.pa-cover,.pa-tile,.pa-view-tools button,.pa-edit-actions button){transform:none!important}
 @media(prefers-reduced-motion:reduce){.pa-cover,.pa-tile,.pa-view-tools button,.pa-edit-actions button{transform:none!important}}
+.pa-histogram{display:flex;align-items:center;gap:15px;margin:12px 2px 0;padding:8px 12px;background:#0b151433;border:1px solid #d0e0c914;border-radius:10px}
+.pa-histogram svg{flex:1;min-width:0;height:40px;max-width:256px;overflow:visible}
+.pa-histogram>span{font-size:8px;line-height:1.8;max-width:75px;color:#a4b9aa;letter-spacing:.5px}
+.pa-edit-export{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:45px;margin-top:18px;border:1px solid #c5daba44;border-radius:12px;color:#d2e1c9;font-size:11px;background:linear-gradient(140deg,#cfdec910,#30453922)}
+.pa-edit-export svg{width:18px;height:18px}
+[data-reduce-motion=true] :is(.pa-cover:hover>img,.pa-tile:hover img){transform:none!important}
+@media(prefers-reduced-motion:reduce){.pa-cover:hover>img,.pa-tile:hover img{transform:none!important}}
