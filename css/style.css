@@ -720,6 +720,65 @@ a.primary-button{text-decoration:none;text-align:center;display:inline-flex;just
 [data-reduce-motion=true] .mori-actions button,[data-reduce-motion=true] .mori-actions .mori-object{transform:none!important}
 @media(prefers-reduced-motion:reduce){.mori-card{transform:rotateZ(-2deg)!important}.mori-card-sheen{display:none}.mori-actions button,.mori-actions .mori-object{transform:none!important}}
 
+/* Mori Atelier: two real card faces, engraved foil and three session-only finishes. */
+.mori-content[data-wallet-finish=forest]{--mori-sky-light:#597c67;--mori-sky-mid:#244f42;--mori-sky-dark:#123d35;--mori-ridge-light:#a2b89a;--mori-ridge-dark:#376754;--mori-aura:#aac795}
+.mori-content[data-wallet-finish=dusk]{--mori-sky-light:#a88179;--mori-sky-mid:#685358;--mori-sky-dark:#423f4b;--mori-ridge-light:#c5b39e;--mori-ridge-dark:#7e786d;--mori-aura:#d5b292}
+.mori-content[data-wallet-finish=moon]{--mori-sky-light:#617c97;--mori-sky-mid:#344e6b;--mori-sky-dark:#1d324c;--mori-ridge-light:#a6bfd0;--mori-ridge-dark:#536e87;--mori-aura:#a9b8d9}
+.mori-wallet .mori-card{padding:0;border:0;min-height:0;aspect-ratio:auto;background:transparent;box-shadow:none;overflow:visible;isolation:auto;transform-style:preserve-3d}
+.mori-wallet .mori-card:after{display:none}
+.mori-card-rotor{display:grid;position:relative;transform-style:preserve-3d;transition:transform .95s cubic-bezier(.22,.7,.18,1);transform:rotateY(0)}
+.mori-card-rotor.mori-is-flipped{transform:rotateY(180deg)}
+.mori-card-face{grid-area:1/1;min-width:0;position:relative;isolation:isolate;overflow:hidden;border-radius:22px;padding:23px 24px 16px;min-height:225px;backface-visibility:hidden;-webkit-backface-visibility:hidden;border:1px solid #bdcbaa;background:#244f42;box-shadow:0 1px 0 #c0cba5,0 3px 0 #5b7655,0 5px 0 #244a3c,0 12px 16px -8px #153a3c77,0 27px 34px -18px #173c386b}
+.mori-card-front{transform:translateZ(1px)}
+.mori-card-back{transform:rotateY(180deg) translateZ(1px);display:flex;flex-direction:column;background:#18382f}
+.mori-card-face:after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:inset 0 1px 0 #ffffe6a0,inset 1px 0 0 #ffffde55,inset -1px -1px 0 #091d3770;background:radial-gradient(ellipse at var(--mori-light-x,25%) var(--mori-light-y,0%),#eff5cc25,transparent 62%);z-index:3}
+.mori-stage-aura{position:absolute;inset:14% 0 15%;border-radius:50%;background:radial-gradient(ellipse,var(--mori-aura,#aac795),transparent 69%);opacity:.32;filter:blur(20px);pointer-events:none;transition:background 1s}
+.mori-card-stack{box-shadow:0 2px 0 #bed0ae,0 4px 0 #78957a,0 7px 0 #66836b,0 10px 15px -8px #173c3940;transition:transform .7s ease,background .6s}
+.mori-card-stack:before{content:'';position:absolute;inset:7px -3px -7px 5px;border:1px solid #b9c4a5;border-radius:20px;background:linear-gradient(130deg,#becbad,#72947f);z-index:-1;transform:rotate(-5deg)}
+.mori-holographic-glow{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:.22;background:conic-gradient(from 125deg at var(--mori-light-x,70%) var(--mori-light-y,25%),transparent 0deg,#9dd9bd44 50deg,transparent 80deg,#f0d4ac66 110deg,transparent 145deg,#c2bbe744 195deg,transparent 240deg);mix-blend-mode:screen}
+.mori-mist{animation:moriMistDrift 4s ease-in-out 2 alternate}.mori-starlight{animation:moriStarReveal 3.4s .4s ease-in-out 2 alternate;transform-origin:317px 31px}
+.mori-reverse-art{position:absolute;inset:0;width:100%;height:100%;z-index:-1}
+.mori-reverse-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:'DM Sans',sans-serif;line-height:1;color:#e4e9ce}
+.mori-reverse-top>span{font-size:7px;letter-spacing:1.6px}.mori-reverse-top>b{font-size:20px;font-weight:500;letter-spacing:-1px}
+.mori-reverse-body{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:81px;margin-bottom:15px}
+.mori-reverse-body>div{min-width:0}.mori-reverse-body p{font-size:8px;letter-spacing:.05em;margin:0 0 7px;color:#d3dac4}.mori-reverse-body strong{display:block;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;letter-spacing:2px;color:#eee3b9}
+.mori-wallet .mori-reverse-body small{font-size:8px;letter-spacing:0;line-height:1.75;color:#e0e5d4;opacity:1;margin-top:7px}
+.mori-seal{width:77px;height:77px;flex-shrink:0;filter:drop-shadow(0 4px 3px #06192466);transform:rotate(-12deg)}
+.mori-is-flipped .mori-seal-engraving{animation:moriSealReveal 1.2s .25s both;transform-origin:50px 50px}
+.mori-reverse-bottom{display:flex;justify-content:space-between;gap:8px;margin-top:auto;padding-top:9px;border-top:1px solid #e3e6ba26;font-size:6px;letter-spacing:1px;color:#c6d3bb}
+.mori-card-rotor .mori-card-sheen{animation:none;transform:translateX(-65%)}
+.mori-card-rotor:not(.mori-is-flipped) .mori-card-front .mori-card-sheen{animation:moriFoilPass 2.4s .3s ease-in-out both}
+.mori-card-rotor.mori-is-flipped .mori-card-back .mori-card-sheen{animation:moriFoilPass 2.4s .3s ease-in-out both}
+.mori-card-tools{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px;margin:-13px 0 21px;padding-bottom:10px;border-bottom:1px solid var(--mori-border)}
+.mori-finish-picker{display:flex;align-items:center;gap:0;min-width:0}.mori-finish-name{font-size:9px;color:var(--mori-muted);white-space:nowrap;margin-left:6px}
+.mori-finish-swatch{display:grid;place-items:center;width:36px;height:44px;padding:0;border-radius:12px;transition:transform .25s}
+.mori-finish-swatch>span{display:block;position:relative;width:20px;height:20px;border-radius:50%;border:1px solid #fff8;box-shadow:inset 0 1px 0 #fff9,0 2px 4px #203e332a;transition:box-shadow .25s,transform .25s}
+.mori-finish-forest>span{background:linear-gradient(140deg,#b4c3a1,#2a5845 75%)}.mori-finish-dusk>span{background:linear-gradient(140deg,#e0c0a1,#75565e 75%)}.mori-finish-moon>span{background:linear-gradient(140deg,#c2d6df,#3b5078 75%)}
+.mori-finish-swatch[aria-pressed=true]>span{outline:1px solid var(--mori-ink);outline-offset:3px;transform:scale(.9)}.mori-finish-swatch[aria-pressed=true]>span:after{content:'';position:absolute;inset:7px;border-radius:50%;background:#fff8d4}
+.mori-flip-button{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:8px 10px;border-radius:12px;border:1px solid var(--mori-border);background:var(--mori-surface);color:var(--mori-ink);font-size:10px;box-shadow:inset 0 1px 0 #fff4,0 3px 7px -5px #24423270;transition:background .3s,transform .3s}
+.mori-flip-button>svg{width:14px;height:14px;transition:transform .8s}.mori-flip-button[aria-pressed=true]>svg{transform:rotate(180deg)}
+.mori-card-tools button:focus-visible{outline:2px solid var(--mori-ink);outline-offset:2px}
+.mori-celebration{position:absolute;inset:0;pointer-events:none;z-index:5;overflow:visible}
+.mori-celebration>i{position:absolute;left:50%;top:40%;width:6px;height:10px;border:1px solid #fff0b1;border-radius:2px;background:linear-gradient(135deg,#fff9da,#c2a66b);opacity:0;animation:moriGoldBurst 1.5s var(--mori-spark-delay,0ms) cubic-bezier(.15,.7,.3,1) both}
+.mori-celebration>i:nth-child(3n){width:5px;height:5px;border-radius:50%;background:#d4e9bb;border-color:#d4e9bb}
+.mori-success-halo{position:absolute;left:50%;top:40%;width:70px;height:70px;margin:-35px;border-radius:50%;border:1px solid #c6d7a2;opacity:0;animation:moriSuccessHalo 1.1s ease-out both}
+.mori-complete{position:relative;isolation:isolate;overflow:hidden;border-style:solid;box-shadow:inset 0 1px 0 #fff7,0 5px 14px -11px #284e3250}
+.mori-complete:after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 20%,#ffffe855 50%,transparent 75%);transform:translateX(-110%);animation:moriReceiptSheen 1.4s .2s ease-out both;pointer-events:none}
+.mori-transaction-art{position:relative;box-shadow:inset 0 1px 0 #fff9,0 3px 5px -4px #23482d44}.mori-transaction-art:after{content:'';position:absolute;inset:2px;border:1px solid #ffffff38;border-radius:11px;pointer-events:none}
+@media(hover:hover) and (pointer:fine){.mori-stage:hover .mori-card-stack{transform:rotate(4deg) translateY(2px)}.mori-finish-swatch:hover>span{transform:translateY(-2px)}.mori-flip-button:hover{transform:translateY(-2px)}.mori-transaction:hover .mori-object{transform:translateY(-2px) rotate(-3deg)}.mori-transaction .mori-object{transition:transform .35s ease}}
+@keyframes moriMistDrift{from{transform:translateX(-3px);opacity:.12}to{transform:translateX(5px);opacity:.24}}
+@keyframes moriStarReveal{from{opacity:.35;transform:scale(.9)}to{opacity:.9;transform:scale(1.05)}}
+@keyframes moriSealReveal{from{opacity:.55;transform:rotate(-14deg)}to{opacity:1;transform:rotate(0)}}
+@keyframes moriGoldBurst{0%{opacity:0;transform:translate(0,0) scale(.4)}15%{opacity:.85}100%{opacity:0;transform:translate(var(--mori-spark-x),var(--mori-spark-y)) rotate(var(--mori-spark-turn)) scale(.7)}}
+@keyframes moriSuccessHalo{0%{opacity:.6;transform:scale(.4)}100%{opacity:0;transform:scale(3)}}
+@keyframes moriReceiptSheen{to{transform:translateX(110%)}}
+.screen-dark-mode .mori-card-stack:before{background:linear-gradient(130deg,#71835b,#344d3b);border-color:#9bae7c66}.screen-dark-mode .mori-transaction-art{box-shadow:inset 0 1px 0 #e6edbd20,0 3px 5px -4px #0005}.screen-dark-mode .mori-flip-button{box-shadow:inset 0 1px 0 #c2d3b615,0 3px 7px -5px #0008}.screen-dark-mode .mori-stage-aura{opacity:.2}
+@media(max-width:360px){.mori-card-face{padding:21px 20px 16px;min-height:215px}.mori-reverse-body{margin-top:76px}.mori-reverse-body strong{font-size:14px}.mori-reverse-body small{font-size:7px}.mori-seal{width:65px;height:65px}.mori-reverse-bottom{font-size:5.5px;letter-spacing:.8px}.mori-finish-swatch{width:32px}.mori-finish-name{font-size:8px;margin-left:4px}.mori-flip-button{font-size:9px;padding-inline:8px}}
+[data-high-contrast=true] .mori-card-face,[data-high-contrast=true] .mori-flip-button{border-color:var(--mori-ink)}
+[data-reduce-motion=true] .mori-celebration,[data-reduce-motion=true] .mori-complete:after{display:none}
+[data-reduce-motion=true] .mori-card-stack,[data-reduce-motion=true] .mori-card-tools button,[data-reduce-motion=true] .mori-finish-swatch>span,[data-reduce-motion=true] .mori-transaction .mori-object{transform:none!important}
+@media(prefers-reduced-motion:reduce){.mori-celebration,.mori-complete:after{display:none}.mori-card-stack,.mori-card-tools button,.mori-finish-swatch>span,.mori-transaction .mori-object{transform:none!important}}
+
 /* Weather Atmosphere: all artwork is local SVG, all numeric graphics use forecast values. */
 .app-screen.weather-app{background:radial-gradient(ellipse at 95% 0,#91c7d322,transparent 55%),linear-gradient(155deg,#203e56,#142a40 68%,#112436);color:#f0f6fb}
 .app-screen.weather-app[data-weather-scene=rain],.app-screen.weather-app[data-weather-scene=thunder],.app-screen.weather-app[data-weather-scene=overcast]{background:radial-gradient(ellipse at 90% 0,#8596b52b,transparent 60%),linear-gradient(155deg,#2a394f,#182a3e 70%)}
