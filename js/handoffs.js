@@ -248,9 +248,25 @@
   function icsFold(line) { let out = '', bytes = 0; for (const c of line) { const n = new TextEncoder().encode(c).length; if (bytes + n > 75) { out += '\r\n '; bytes = 1; } out += c; bytes += n; } return out; }
   const dateICS = d => d.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z');
   const icsDownload = (lines,name) => A.download(new Blob([['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//aura//Connected 3//JA',...lines,'END:VCALENDAR'].map(icsFold).join('\r\n') + '\r\n'],{type:'text/calendar;charset=utf-8'}),name);
-  N.calendarEvent = event => { const start = new Date(`${event.date}T${event.time || '00:00'}:00`); if (!Number.isFinite(start.getTime())) return null; const end = event.endTime ? new Date(`${event.date}T${event.endTime}:00`) : new Date(start.getTime()+3600000); if(!Number.isFinite(end.getTime()))return null; if(end<=start)end.setDate(end.getDate()+1);return {start,end,google:'https://calendar.google.com/calendar/render?' + new URLSearchParams({action:'TEMPLATE',text:event.title || '予定',dates:`${dateICS(start)}/${dateICS(end)}`,location:event.place || '',details:'auraから作成。保存前に日時を確認してください。'})}; };
-  A.actions.calendarExchange = () => A.overlay(`${A.overlayTitle('予定を外部で使う')}<div class="connected-overlay"><p class="connected-caption">端末のタイムゾーン（${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)}）を使用。終了未指定は1時間後。変更の同期はありません。</p>${button('calendarICS','全予定をICSで書き出す')}${(A.allEvents?.() || []).map(event => { const info = N.calendarEvent(event); return info ? `<div class="connection-divider">${esc(event.date)} ${esc(event.time)}${event.endTime?'–'+esc(event.endTime):''} · ${esc(event.title)}</div>${N.link(info.google,'Google カレンダーで作成')}` : ''; }).join('') || '<p>予定がありません。</p>'}</div>`);
-  A.actions.calendarICS = () => { const lines = (A.allEvents?.() || []).flatMap(e => { const info = N.calendarEvent(e); return info ? ['BEGIN:VEVENT',`UID:${icsEscape(e.id)}@aura.local`,`DTSTAMP:${dateICS(new Date())}`,`DTSTART:${dateICS(info.start)}`,`DTEND:${dateICS(info.end)}`,`SUMMARY:${icsEscape(e.title)}`,`LOCATION:${icsEscape(e.place)}`,'END:VEVENT'] : []; }); if (!lines.length) return A.toast('書き出せる予定がありません'); icsDownload(lines,'aura-calendar.ics'); };
+  const calendarDateOnly = d => `${String(d.getFullYear()).padStart(4,'0')}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  N.calendarEvent = event => {
+    const start = new Date(`${event.date}T${event.allDay?'00:00':event.time || '00:00'}:00`);
+    if (!Number.isFinite(start.getTime())) return null;
+    let end;
+    if(event.allDay){end=new Date(start);end.setDate(end.getDate()+1);}
+    else{end=event.endTime?new Date(`${event.date}T${event.endTime}:00`):new Date(start.getTime()+3600000);if(end<=start)end.setDate(end.getDate()+1);}
+    if(!Number.isFinite(end.getTime()))return null;
+    const dates=event.allDay?`${calendarDateOnly(start)}/${calendarDateOnly(end)}`:`${dateICS(start)}/${dateICS(end)}`;
+    return {start,end,google:'https://calendar.google.com/calendar/render?' + new URLSearchParams({action:'TEMPLATE',text:event.title || '予定',dates,location:event.place || '',details:[event.notes,'auraから作成。保存前に日時を確認してください。'].filter(Boolean).join('\n\n')})};
+  };
+  A.actions.calendarExchange = () => A.overlay(`${A.overlayTitle('予定を外部で使う')}<div class="connected-overlay"><p class="connected-caption">端末のタイムゾーン（${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)}）を使用。終了未指定は1時間後。終日は日付のみで書き出します。繰り返しは個別予定として出力。変更の同期はありません。</p>${button('calendarICS','全予定をICSで書き出す')}${(A.allEvents?.() || []).map(event => { const info = N.calendarEvent(event); return info ? `<div class="connection-divider">${esc(event.date)} ${event.allDay?'終日':esc(event.time)}${!event.allDay&&event.endTime?'–'+esc(event.endTime):''} · ${esc(event.title)}</div>${N.link(info.google,'Google カレンダーで作成')}` : ''; }).join('') || '<p>予定がありません。</p>'}</div>`);
+  N.exportCalendar = (events,name='aura-calendar.ics') => {
+    const lines=events.flatMap(e=>{const info=N.calendarEvent(e);return info?['BEGIN:VEVENT',`UID:${icsEscape(e.id)}@aura.local`,`DTSTAMP:${dateICS(new Date())}`,
+      ...(e.allDay?[`DTSTART;VALUE=DATE:${calendarDateOnly(info.start)}`,`DTEND;VALUE=DATE:${calendarDateOnly(info.end)}`]:[`DTSTART:${dateICS(info.start)}`,`DTEND:${dateICS(info.end)}`]),
+      `SUMMARY:${icsEscape(e.title)}`,`LOCATION:${icsEscape(e.place)}`,`DESCRIPTION:${icsEscape(e.notes||'')}`,'END:VEVENT']:[];});
+    if(!lines.length)return A.toast('書き出せる予定がありません');icsDownload(lines,name);
+  };
+  A.actions.calendarICS = () => N.exportCalendar(A.allEvents?.() || []);
   A.actions.exportReminders = () => icsDownload(A.searchableReminders().flatMap(r => ['BEGIN:VTODO',`UID:${icsEscape(r.id)}@aura.local`,`DTSTAMP:${dateICS(new Date())}`,`SUMMARY:${icsEscape(r.text)}`,`STATUS:${r.done ? 'COMPLETED' : 'NEEDS-ACTION'}`,`PRIORITY:${r.priority ? '1' : '0'}`,...(/^\d{4}-\d{2}-\d{2}$/.test(r.due || '') ? [`DUE;VALUE=DATE:${r.due.replace(/-/g,'')}`] : []),'END:VTODO']),'aura-reminders.ics');
   A.actions.shareFile = () => { const file = A.currentTextFile?.(); if (!file) return A.toast('先に共有するファイルを開いてください'); N.share(file.name,file.content); };
   A.actions.fileURLImport = () => {
