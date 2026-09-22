@@ -380,7 +380,7 @@
   window.addEventListener('beforeunload',e=>{if(journalPending.size){e.preventDefault();e.returnValue='';}});
 
   // Reading Atelier: existing records stay canonical; all artwork is local SVG.
-  let activeBook=null,readingQuery='',readingSort='recent',readingCategory='',readingLimit=36;
+  let activeBook=null,readingQuery='',readingSort='recent',readingCategory='',readingLimit=36,readingQuoteLimit=30,readingSessionLimit=30;
   let readingLayout=A.load('readingLayout','shelf')==='list'?'list':'shelf',readingSvgId=0;
   const bookSessions=id=>read('readingSessions').filter(x=>x.bookId===id);
   const bookQuotes=id=>read('readingQuotes').filter(x=>x.bookId===id);
@@ -476,12 +476,20 @@
       <button class="rd-plan" data-action="rdDeadline" data-id="${esc(x.id)}">${A.icon('calendar')}<span><small>読了のプラン</small><strong>${esc(readingPlan(x))}</strong></span>${A.icon('arrow')}</button>
       ${section('しおり',btn('rdBookmarkAdd','しおりを追加','plus'))}<div class="rd-bookmarks">${marks.length?marks.map(m=>`<div class="rd-bookmark"><span><b>p. ${m.page}</b><span>${esc(m.text||'しおり')}</span></span>${btn('rdBookmarkDelete','しおりを削除','trash',m.id)}</div>`).join(''):'<p class="rd-small">気になるページを、ひとことと一緒に。</p>'}</div>
       ${section('読書メモ',btn('evBookEdit','メモを編集','edit',x.id))}<div class="rd-paper-note">${esc(x.note||'読んで感じたことを残しましょう。')}</div>
-      ${section('心に残った一節',btn('evQuoteAdd','引用を追加','plus'))}${quotes.slice(0,50).map(q=>`<blockquote class="rd-quote"><span class="rd-quote-glyph" aria-hidden="true">“</span><p>${esc(q.text)}</p><footer><span>${q.page?'p. '+q.page:'ページ未指定'}</span><span>${btn('rdQuoteEdit','引用を編集','edit',q.id)}${btn('evQuoteDelete','引用を削除','trash',q.id)}</span></footer></blockquote>`).join('')||'<p class="rd-small">残しておきたい言葉を引用に。</p>'}${quotes.length>50?'<p class="rd-small">最新50件を表示。全件は書き出しに含まれます。</p>':''}
-      <details class="rd-history" open><summary>読書の履歴 <span>${sessions.length}回</span></summary>${sessions.slice(0,30).map(s=>`<article><span class="rd-history-dot"></span><div><strong>${esc(s.date)} <small>${s.minutes}分</small></strong><p>${s.from} → ${s.to}ページ · ${Math.max(0,s.to-s.from)}ページ</p>${s.note?`<p>${esc(s.note)}</p>`:''}</div>${btn('rdSessionEdit','記録の日付・時間・メモを編集','edit',s.id)}${btn('rdSessionDelete','記録を削除','trash',s.id)}</article>`).join('')||'<p class="rd-small">記録はまだありません。</p>'}${sessions.length>30?'<p class="rd-small">最新30件を表示。全件は書き出しに含まれます。</p>':''}</details>
+      ${section('心に残った一節',btn('evQuoteAdd','引用を追加','plus'))}${quotes.slice(0,readingQuoteLimit).map(q=>`<blockquote class="rd-quote"><span class="rd-quote-glyph" aria-hidden="true">“</span><p>${esc(q.text)}</p><footer><span>${q.page?'p. '+q.page:'ページ未指定'}</span><span>${btn('rdQuoteEdit','引用を編集','edit',q.id)}${btn('evQuoteDelete','引用を削除','trash',q.id)}</span></footer></blockquote>`).join('')||'<p class="rd-small">残しておきたい言葉を引用に。</p>'}${quotes.length>readingQuoteLimit?readingButton('rdMoreQuotes','引用をさらに30件表示'):''}
+      <details class="rd-history" open><summary>読書の履歴 <span>${sessions.length}回</span></summary>${sessions.slice(0,readingSessionLimit).map(s=>`<article><span class="rd-history-dot"></span><div><strong>${esc(s.date)} <small>${s.minutes}分</small></strong><p>${s.from} → ${s.to}ページ · ${Math.max(0,s.to-s.from)}ページ</p>${s.note?`<p>${esc(s.note)}</p>`:''}</div>${btn('rdSessionEdit','記録の日付・時間・メモを編集','edit',s.id)}${btn('rdSessionDelete','記録を削除','trash',s.id)}</article>`).join('')||'<p class="rd-small">記録はまだありません。</p>'}${sessions.length>readingSessionLimit?readingButton('rdMoreSessions','履歴をさらに30件表示'):''}</details>
       <div class="rd-footer-actions">${readingButton('evBookExport','この本の記録を保存')}${readingButton('evReadingHome','本棚に戻る')}</div>`,btn('evBookExport','読書記録を書き出す','download'),true);
   }
-  A.actions.evBookOpen=el=>{activeBook=el.dataset.id;bookDetail();};
-  A.actions.rdFavorite=el=>{const x=read('reading').find(x=>x.id===el.dataset.id);if(x)upsert('reading',{...x,favorite:!x.favorite},activeBook===x.id?bookDetail:readingResults);};
+  A.actions.evBookOpen=el=>{activeBook=el.dataset.id;readingQuoteLimit=30;readingSessionLimit=30;bookDetail();};
+  const readingDetailRefresh=()=>{const top=$('.rd-atelier')?.scrollTop||0;bookDetail();const content=$('.rd-atelier');if(content)content.scrollTop=top;};
+  A.actions.rdMoreQuotes=()=>{readingQuoteLimit+=30;readingDetailRefresh();};
+  A.actions.rdMoreSessions=()=>{readingSessionLimit+=30;readingDetailRefresh();};
+  A.actions.rdFavorite=el=>{
+    const x=read('reading').find(x=>x.id===el.dataset.id);if(!x)return;
+    if(!upsert('reading',{...x,favorite:!x.favorite},activeBook===x.id?readingDetailRefresh:readingResults))return;
+    const button=A.$$('[data-action=rdFavorite]').find(b=>b.dataset.id===x.id);
+    (button||$('#rd-search'))?.focus({preventScroll:true});
+  };
   A.actions.evBookRate=el=>{const x=read('reading').find(x=>x.id===activeBook),n=Number(el.dataset.id);if(x&&readingNumber(n,1,5))upsert('reading',{...x,rating:x.rating===n?0:n},bookDetail);};
   A.actions.evBookProgress=el=>{
     const x=read('reading').find(x=>x.id===el.dataset.id);if(!x)return;
@@ -528,7 +536,7 @@
     A.form(quote?'引用を編集':'引用を追加',area('引用','text',quote?.text||'')+field('ページ（省略可）','page',quote?.page||'','number','min="1" max="100000" step="1"'),v=>{
       if(!v.text.trim()||(v.page&&!readingNumber(v.page,1,100000))||!read('reading').some(b=>b.id===x.id))return false;
       if(quote&&!bookQuotes(x.id).some(q=>q.id===quote.id))return false;
-      return upsert('readingQuotes',{...quote,id:quote?.id||A.id(),bookId:x.id,text:v.text.trim(),page:v.page?Number(v.page):null},bookDetail);
+      return upsert('readingQuotes',{...quote,id:quote?.id||A.id(),bookId:x.id,text:v.text.trim(),page:v.page?Number(v.page):null},readingDetailRefresh);
     });
   }
   A.actions.evQuoteAdd=()=>readingQuoteEditor();
