@@ -612,10 +612,11 @@
       if(!readingNumber(v.page,latest.page,latest.total)||!readingNumber(v.minutes,1,1440)||!readingDate(v.date)||v.date>dateKey())return false;
       const to=Number(v.page),finished=to>=latest.total&&latest.page<latest.total;
       const session={id:A.id(),bookId:x.id,date:v.date,from:latest.page,to,minutes:Number(v.minutes),note:v.note.trim(),...(measured?{timerId:measured.id}:{})};
+      if(measured&&!readingClockMatches()){readingClockTick();return false;}
       if(measured&&read('readingSessions').some(row=>row.timerId===measured.id)){A.toast('この計時はすでに記録済みです');return false;}
       books[at]={...latest,page:to,updatedAt:new Date().toISOString(),finishedAt:to>=latest.total?(latest.finishedAt||v.date):null,queued:to<latest.total&&!!latest.queued};
       if(!A.saveBatch({readingSessions:[session,...read('readingSessions')],reading:books,...(measured?{readingTimer:null}:{})}))return false;
-      if(measured){readingTimer=null;readingClockDirty=false;}
+      if(measured){readingTimer=null;readingClockDirty=false;readingClockExpected='null';readingClockConflict=false;}
       bookDetail();if(finished){$('.rd-detail-hero')?.classList.add('rd-completed');A.toast('読了おめでとうございます');}else A.toast('読書を記録しました');
     });
   };
@@ -674,11 +675,11 @@
   }
   function readingSprig(ratio){
     const filled=Math.min(8,Math.floor(Math.max(0,ratio)*8));
-    return `<svg class="rd-sprig" viewBox="0 0 90 110" fill="none" aria-hidden="true" focusable="false"><ellipse cx="45" cy="99" rx="29" ry="5" fill="currentColor" opacity=".1"/><path d="M44 98C32 72 57 44 44 13" stroke="currentColor" stroke-width="1.4"/>${Array.from({length:8},(_,i)=>{const y=82-i*9,left=i%2===0;return `<path class="${i<filled?'rd-leaf-filled':''}" d="${left?`M42 ${y}C23 ${y+1} 18 ${y-10} 22 ${y-18}c16 0 23 8 20 18Z`:`M46 ${y}c20 0 25-12 21-19-16 2-24 10-21 19Z`}" fill="currentColor" opacity="${i<filled?.8:.12}" stroke="currentColor" stroke-width=".5" style="--rd-leaf:${i}"/>`;}).join('')}<circle cx="43" cy="12" r="3" fill="#c2a15f"/></svg>`;
+    return `<svg class="rd-sprig" viewBox="0 0 90 110" fill="none" aria-hidden="true" focusable="false"><ellipse cx="45" cy="99" rx="29" ry="5" fill="currentColor" opacity=".1"/><path d="M44 98C32 72 57 44 44 13" stroke="currentColor" stroke-width="1.4"/>${Array.from({length:8},(_,i)=>{const y=82-i*9,left=i%2===0;return `<path class="${i<filled?'rd-leaf-filled':''}" d="${left?`M42 ${y}C23 ${y+1} 18 ${y-10} 22 ${y-18}c16 0 23 8 20 18Z`:`M46 ${y}c20 0 25-12 21-19-16 2-24 10-21 19Z`}" fill="currentColor" opacity="${i<filled ? 0.8 : 0.12}" stroke="currentColor" stroke-width=".5" style="--rd-leaf:${i}"/>`;}).join('')}<circle cx="43" cy="12" r="3" fill="#c2a15f"/></svg>`;
   }
   function readingDailyCard(){
     const sessions=readingRecordedSessions(),today=readingDayTotals(sessions).get(dateKey())||{pages:0},goal=readingDailyGoal(),streak=readingStreak(sessions);
-    return `<section class="rd-daily-card"><div><span class="rd-eyebrow">A LITTLE, EVERY DAY</span><button class="rd-daily-goal" data-action="rdDailyGoal"><strong>${today.pages}<small> / ${goal} p.</small></strong><span>今日の目標を変更 ›</span></button>${progress(today.pages/goal*100,'今日のページ目標')}<p>${today.pages>=goal?'今日のページ目標を達成':`目標まで、あと${goal-today.pages}ページ`} · ${streak}日連続</p></div>${readingSprig(today.pages/goal)}</section>`;
+    return `<section class="rd-daily-card"><div><span class="rd-eyebrow">A LITTLE, EVERY DAY</span><button class="rd-daily-goal" data-action="rdDailyGoal"><strong>${today.pages}<small> / ${goal} p.</small></strong><span>今日の目標を変更 ›</span></button>${progress(Math.min(100,today.pages/goal*100),'今日のページ目標')}<p>${today.pages>=goal?'今日のページ目標を達成':`目標まで、あと${goal-today.pages}ページ`} · ${streak}日連続</p></div>${readingSprig(today.pages/goal)}</section>`;
   }
   A.actions.rdDailyGoal=()=>{const insights=!!$('#rd-almanac');A.form('1日の読書目標',field('1日に読みたいページ数','dailyGoal',readingDailyGoal(),'number','required min="1" max="10000" step="1"')+'<p class="rd-small">「読書を記録」のページ数で集計。目標を変えると過去の達成表示も新しい基準に変わります。</p>',v=>{if(!readingNumber(v.dailyGoal,1,10000))return false;if(!A.save('readingDailyGoal',Number(v.dailyGoal)))return false;(insights?readingInsights:readingApp)();});};
   A.actions.rdQueue=el=>{const x=read('reading').find(x=>x.id===el.dataset.id);if(x&&x.page<x.total)upsert('reading',{...x,queued:!x.queued},readingDetailRefresh);};
@@ -727,31 +728,46 @@
 
   // Visible-only stopwatch. Restores paused checkpoints; never claims background measurement.
   const readingStoredClock=A.load('readingTimer',null);
-  let readingTimer=readingStoredClock&&typeof readingStoredClock.id==='string'&&typeof readingStoredClock.bookId==='string'&&Number.isFinite(readingStoredClock.elapsed)?{id:readingStoredClock.id,bookId:readingStoredClock.bookId,elapsed:Math.max(0,Math.min(86400000,readingStoredClock.elapsed)),target:[15,25,45,60].includes(readingStoredClock.target)?readingStoredClock.target:25}:null;
+  const readingNormalizeClock=value=>value&&typeof value.id==='string'&&typeof value.bookId==='string'&&Number.isFinite(value.elapsed)?{id:value.id,bookId:value.bookId,elapsed:Math.max(0,Math.min(86400000,value.elapsed)),target:[15,25,45,60].includes(value.target)?value.target:25}:null;
+  let readingTimer=readingNormalizeClock(readingStoredClock),readingClockExpected=JSON.stringify(readingStoredClock),readingClockConflict=false;
   let readingClockStart=null,readingClockInterval=null,readingClockCleanup=false,readingClockDirty=false,readingClockCheckpoint=0,readingClockNotified=false;
   let readingRoomTheme=['paper','night'].includes(A.load('readingRoomTheme','paper'))?A.load('readingRoomTheme','paper'):'paper';
   const readingClockElapsed=()=>Math.min(86400000,(readingTimer?.elapsed||0)+(readingClockStart===null?0:Math.max(0,performance.now()-readingClockStart)));
+  function readingClockMatches(){
+    if(!readingClockConflict&&JSON.stringify(A.load('readingTimer',null))===readingClockExpected)return true;
+    if(readingClockStart!==null&&readingTimer)readingTimer.elapsed=readingClockElapsed();
+    readingClockStart=null;clearInterval(readingClockInterval);readingClockInterval=null;
+    if(!readingClockConflict)A.toast('別の画面で計時が変更されました。上書きせず停止しました');
+    readingClockConflict=true;return false;
+  }
+  function readingStoreClock(next){
+    if(!readingClockMatches())return false;
+    if(!A.save('readingTimer',next)){readingClockDirty=true;return false;}
+    readingClockExpected=JSON.stringify(next);readingClockDirty=false;return true;
+  }
   function readingClockSave(){
     if(!readingTimer)return true;
-    readingClockDirty=!A.save('readingTimer',{...readingTimer,elapsed:Math.floor(readingClockElapsed())});
-    return !readingClockDirty;
+    return readingStoreClock({...readingTimer,elapsed:Math.floor(readingClockElapsed())});
   }
   function readingPauseClock(){
     if(readingClockStart!==null&&readingTimer){readingTimer.elapsed=readingClockElapsed();readingClockStart=null;readingClockSave();}
     if(readingClockInterval!==null)clearInterval(readingClockInterval);readingClockInterval=null;
   }
   function readingClockTick(){
-    const root=$('#rd-room');if(!root||!readingTimer)return;
+    const root=$('#rd-room');if(!root){readingPauseClock();return;}if(!readingTimer)return;
     if(document.hidden||A.current!=='reading'||A.locked){readingPauseClock();}
     const elapsed=readingClockElapsed(),seconds=Math.floor(elapsed/1000),clock=$('#rd-clock');
     clock.textContent=`${String(Math.floor(seconds/3600)).padStart(2,'0')}:${String(Math.floor(seconds/60)%60).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
     const percent=Math.min(100,elapsed/(readingTimer.target*600));
     root.style.setProperty('--rd-session-progress',percent+'%');root.dataset.running=String(readingClockStart!==null);
     $('#rd-clock-toggle').textContent=readingClockStart===null?'計測を開始':'一時停止';
-    const status=readingClockDirty?'未保存 · 再読み込み前に保存を再試行':readingClockStart!==null?'計測中 · 画面を離れると一時停止':elapsed?'一時停止 · 続きから計測できます':'本を手元に用意して、はじめましょう';
+    const status=readingClockConflict?'別の画面で変更されています。計時を退避するか、保存済みを読み直してください':readingClockDirty?'未保存 · 再読み込み前に保存を再試行':readingClockStart!==null?'計測中 · 画面を離れると一時停止':elapsed?'一時停止 · 続きから計測できます':'本を手元に用意して、はじめましょう';
     if($('#rd-clock-state').textContent!==status)$('#rd-clock-state').textContent=status;
-    $('#rd-clock-retry').hidden=!readingClockDirty;
-    A.$$('[data-action=rdClockTarget]').forEach(b=>b.disabled=readingClockStart!==null);
+    $('#rd-clock-retry').hidden=!readingClockDirty||readingClockConflict;
+    $('#rd-clock-reload').hidden=!readingClockConflict;
+    $('#rd-clock-toggle').disabled=readingClockConflict;
+    $('#rd-clock-export').hidden=!readingClockConflict&&!readingClockDirty;
+    A.$$('[data-action=rdClockTarget]').forEach(b=>b.disabled=readingClockStart!==null||readingClockConflict);
     if(elapsed>=readingTimer.target*60000&&!readingClockNotified){readingClockNotified=true;A.toast('目標時間に到達しました。計測は続きます');}
     if(elapsed>=86400000){readingPauseClock();$('#rd-clock-state').textContent='24時間の上限です。記録またはリセットしてください。';}
     if(readingClockStart!==null&&!readingClockDirty&&performance.now()-readingClockCheckpoint>15000){readingClockCheckpoint=performance.now();readingClockSave();}
@@ -760,20 +776,22 @@
     const x=read('reading').find(b=>b.id===activeBook);if(!x)return readingApp();
     readingPauseClock();
     const show=()=>{
-      readingView(`<section id="rd-room" class="rd-room" data-theme="${readingRoomTheme}" data-running="false"><header><span class="rd-eyebrow">A MOMENT WITH YOUR BOOK</span>${readingButton('rdRoomTheme',readingRoomTheme==='paper'?'夜の書斎':'昼の書斎')}</header><div class="rd-room-arch"><span class="rd-lamp" aria-hidden="true"></span>${readingCover(x)}<span class="rd-room-table" aria-hidden="true"></span></div><h1>${esc(x.title)}</h1><p class="rd-room-page">${x.page}ページの続きから · ${esc(x.author||'あなたの読書時間')}</p><div class="rd-clock-face"><span class="rd-clock-ticks" aria-hidden="true"></span><small>ELAPSED TIME</small><output id="rd-clock" aria-label="経過時間" aria-live="off">00:00:00</output><span class="rd-clock-track" aria-hidden="true"><i></i></span></div><div class="rd-time-presets" aria-label="目標時間">${[15,25,45,60].map(n=>readingButton('rdClockTarget',n+'分',String(n),`aria-pressed="${readingTimer.target===n}"`)).join('')}</div><p id="rd-clock-state" class="rd-small" role="status"></p><div class="rd-clock-actions">${readingButton('rdClockToggle','計測を開始','','id="rd-clock-toggle"')}${readingButton('rdClockFinish','記録して終了')}${readingButton('rdClockReset','リセット')}${readingButton('rdClockRetry','保存を再試行','','id="rd-clock-retry" hidden')}</div><p class="rd-small">画面移動・ロック・タブ非表示で停止。保存済みの計時は再読み込み後も一時停止で復帰します。15秒ごとに保存し、強制終了では直近の未保存分を失う場合があります。同じ本棚を複数タブで同時編集しないでください。履歴への追加は「記録して終了」から。端数は1分に切り上げ、保存前に修正できます。</p><div class="rd-room-links">${readingButton('rdRoomBook','本の詳細へ')}${readingButton('evReadingHome','本棚へ')}</div></section>`,'',true);
+      readingView(`<section id="rd-room" class="rd-room" data-theme="${readingRoomTheme}" data-running="false"><header><span class="rd-eyebrow">A MOMENT WITH YOUR BOOK</span>${readingButton('rdRoomTheme',readingRoomTheme==='paper'?'夜の書斎':'昼の書斎')}</header><div class="rd-room-arch"><span class="rd-lamp" aria-hidden="true"></span>${readingCover(x)}<span class="rd-room-table" aria-hidden="true"></span></div><h1>${esc(x.title)}</h1><p class="rd-room-page">${x.page}ページの続きから · ${esc(x.author||'あなたの読書時間')}</p><div class="rd-clock-face"><span class="rd-clock-ticks" aria-hidden="true"></span><small>ELAPSED TIME</small><output id="rd-clock" aria-label="経過時間" aria-live="off">00:00:00</output><span class="rd-clock-track" aria-hidden="true"><i></i></span></div><div class="rd-time-presets" aria-label="目標時間">${[15,25,45,60].map(n=>readingButton('rdClockTarget',n+'分',String(n),`aria-pressed="${readingTimer.target===n}"`)).join('')}</div><p id="rd-clock-state" class="rd-small" role="status"></p><div class="rd-clock-actions">${readingButton('rdClockToggle','計測を開始','','id="rd-clock-toggle"')}${readingButton('rdClockFinish','記録して終了')}${readingButton('rdClockReset','リセット')}${readingButton('rdClockRetry','保存を再試行','','id="rd-clock-retry" hidden')}${readingButton('rdClockReload','保存済みを読み直す','','id="rd-clock-reload" hidden')}${readingButton('rdClockExport','未記録の計時を退避','','id="rd-clock-export" hidden')}</div><p class="rd-small">画面移動・ロック・タブ非表示で停止。保存済みの計時は再読み込み後も一時停止で復帰します。15秒ごとに保存し、強制終了では直近の未保存分を失う場合があります。同じ本棚を複数タブで同時編集しないでください。履歴への追加は「記録して終了」から。端数は1分に切り上げ、保存前に修正できます。</p><div class="rd-room-links">${readingButton('rdRoomBook','本の詳細へ')}${readingButton('evReadingHome','本棚へ')}</div></section>`,'',true);
       readingClockTick();
       if(!readingClockCleanup){
         readingClockCleanup=true;
         const hidden=()=>{if(document.hidden){readingPauseClock();readingClockTick();}},unload=()=>readingPauseClock();
         document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',unload);
-        A.cleanups.push(()=>{readingPauseClock();document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',unload);readingClockCleanup=false;});
+        const changed=e=>{if(e.key==='aura.readingTimer'||e.key===null){readingClockMatches();readingClockTick();}};
+        window.addEventListener('storage',changed);
+        A.cleanups.push(()=>{readingPauseClock();document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',unload);window.removeEventListener('storage',changed);readingClockCleanup=false;});
       }
     };
     if(readingTimer&&readingTimer.bookId!==x.id){
       const old=read('reading').find(b=>b.id===readingTimer.bookId);
       A.overlay(`<div class="modal-sheet"><h3>別の本の計時が残っています</h3><p>${esc(old?.title||'削除された本')} · ${Math.ceil(readingTimer.elapsed/60000)}分</p><p>同時に計測できるのは1冊です。前の計時を記録するか、破棄して切り替えてください。</p>${old?readingButton('rdClockPrevious','前の本へ戻る'):''}${readingButton('rdClockReplace','前の計時を破棄して切替',x.id)}${readingButton('closeOverlay','キャンセル')}</div>`,'sheet-overlay');return;
     }
-    if(!readingTimer){const next={id:A.id(),bookId:x.id,elapsed:0,target:25};if(!A.save('readingTimer',next))return;readingTimer=next;readingClockDirty=false;}
+    if(!readingTimer){const next={id:A.id(),bookId:x.id,elapsed:0,target:25};if(!readingStoreClock(next)){readingClockTick();return;}readingTimer=next;readingClockDirty=false;}
     show();
   }
   A.actions.rdRoom=el=>{activeBook=el.dataset.id||activeBook;readingRoom();};
@@ -783,17 +801,19 @@
     if(!readingTimer||!$('#rd-room')||document.hidden)return;
     if(readingClockStart!==null)readingPauseClock();else{
       if(readingClockElapsed()>=86400000)return A.toast('24時間の上限です。記録またはリセットしてください');
-      if(!readingClockSave())return;
+      if(!readingClockSave()){readingClockTick();return;}
       readingClockStart=performance.now();readingClockCheckpoint=performance.now();readingClockNotified=readingTimer.elapsed>=readingTimer.target*60000;
       readingClockInterval=setInterval(readingClockTick,500);
     }readingClockTick();
   };
-  A.actions.rdClockTarget=el=>{if(!readingTimer||readingClockStart!==null)return;const target=Number(el.dataset.id);if(![15,25,45,60].includes(target))return;const next={...readingTimer,target};if(!A.save('readingTimer',next))return;readingTimer=next;readingClockDirty=false;readingClockNotified=false;readingRoom();};
+  A.actions.rdClockTarget=el=>{if(!readingTimer||readingClockStart!==null)return;const target=Number(el.dataset.id);if(![15,25,45,60].includes(target))return;const next={...readingTimer,target};if(!readingStoreClock(next)){readingClockTick();return;}readingTimer=next;readingClockDirty=false;readingClockNotified=false;readingRoom();};
   A.actions.rdClockRetry=()=>{readingClockSave();readingClockTick();};
-  A.actions.rdClockFinish=()=>{readingPauseClock();readingClockTick();if(!readingTimer?.elapsed)return A.toast('先に読書時間を計測してください');activeBook=readingTimer.bookId;A.actions.evReadingSession({dataset:{timerId:readingTimer.id}});};
-  A.actions.rdClockReset=()=>{readingPauseClock();readingClockTick();A.confirm('計時をリセット？','未記録の計時だけを破棄します。保存済みの読書履歴は残ります。',()=>{if(!readingTimer)return;const next={...readingTimer,id:A.id(),elapsed:0};if(!A.save('readingTimer',next))return;readingTimer=next;readingClockDirty=false;readingClockNotified=false;readingRoom();});};
+  A.actions.rdClockExport=()=>{if(readingTimer)exportText('reading_unsaved_time.txt',[read('reading').find(b=>b.id===readingTimer.bookId)?.title||'読書の計時','未記録の時間：'+Math.ceil(readingClockElapsed()/60000)+'分','計時ID：'+readingTimer.id,'書き出し：'+new Date().toISOString(),'このテキストは自動復元用ではありません。本の「読書を記録」から手動で入力してください。'].join('\n'));};
+  A.actions.rdClockReload=()=>A.confirm('保存済みの計時を読み直す？','この画面だけの未記録時間を破棄します。必要なら先に「計時を退避」を選んでください。',()=>{clearInterval(readingClockInterval);readingClockInterval=null;readingClockStart=null;const value=A.load('readingTimer',null);readingClockExpected=JSON.stringify(value);readingTimer=readingNormalizeClock(value);readingClockConflict=false;readingClockDirty=false;if(readingTimer&&read('reading').some(b=>b.id===readingTimer.bookId))activeBook=readingTimer.bookId;readingRoom();});
+  A.actions.rdClockFinish=()=>{readingPauseClock();if(!readingClockMatches()){readingClockTick();return;}readingClockTick();if(!readingTimer?.elapsed)return A.toast('先に読書時間を計測してください');activeBook=readingTimer.bookId;A.actions.evReadingSession({dataset:{timerId:readingTimer.id}});};
+  A.actions.rdClockReset=()=>{readingPauseClock();readingClockTick();A.confirm('計時をリセット？','未記録の計時だけを破棄します。保存済みの読書履歴は残ります。',()=>{if(!readingTimer)return;const next={...readingTimer,id:A.id(),elapsed:0};if(!readingStoreClock(next)){readingClockTick();return;}readingTimer=next;readingClockDirty=false;readingClockNotified=false;readingRoom();});};
   A.actions.rdClockPrevious=()=>{if(readingTimer){activeBook=readingTimer.bookId;A.closeOverlay();readingRoom();}};
-  A.actions.rdClockReplace=el=>{const id=el.dataset.id;A.confirm('前の計時を破棄？','まだ記録していない時間は失われます。',()=>{if(!A.save('readingTimer',null))return;readingTimer=null;readingClockDirty=false;activeBook=id;readingRoom();});};
+  A.actions.rdClockReplace=el=>{const id=el.dataset.id;A.confirm('前の計時を破棄？','まだ記録していない時間は失われます。',()=>{if(!readingStoreClock(null))return;readingTimer=null;readingClockDirty=false;activeBook=id;readingRoom();});};
   A.actions.rdBookmarkEdit=el=>{
     const x=read('reading').find(b=>b.id===activeBook),mark=x?.bookmarks?.find(m=>m.id===el.dataset.id);if(!mark)return;
     A.form('しおりを編集',field('ページ','page',mark.page,'number','required min="1" max="100000" step="1"')+field('ひとこと','text',mark.text||'','text','maxlength="120"'),v=>{
