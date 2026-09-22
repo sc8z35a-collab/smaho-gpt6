@@ -110,7 +110,7 @@
   };
   const wxTime = value => Number.isFinite(wxMinutes(value)) ? value.slice(11,16) : '—';
   const wxFixed = value => wxValid(value) ? Number(value.toFixed(1)) : '—';
-  function weatherPhase(d, time = d.current.time, isDay = d.current.is_day) {
+  function weatherPhase(d, time, isDay) {
     const i = d.daily.time.indexOf(time.slice(0,10)), now = wxMinutes(time);
     const rise = wxMinutes(d.daily.sunrise?.[i]), set = wxMinutes(d.daily.sunset?.[i]);
     // Twilight is a visual window around the provider's sunrise/set, not calculated astronomy.
@@ -162,8 +162,8 @@
       <clipPath id="${id}-clip"><rect width="360" height="240" rx="22"/></clipPath>
     </defs><g clip-path="${paint('clip')}">
       <rect width="360" height="240" fill="${paint('sky')}"/>
-      ${night && !storm ? `<g fill="#eef6ff">${Array.from({length:24},(_,i)=>`<circle class="wx-star wx-motion" style="--wx-delay:-${i*.7}s" cx="${15+i*83%334}" cy="${9+i*19%106}" r="${i%3===0?1.1:.6}"/>`).join('')}</g>` : ''}
-      ${!night && !storm && phase !== 'unknown' ? `<g class="wx-sunbeams wx-motion" fill="${paint('ray')}"><path d="m260 40-112 178h49Zm0 0 4 183h42Zm0 0 70 160h59Z"/></g>` : ''}
+      ${night && ['clear','cloudy'].includes(kind) ? `<g fill="#eef6ff">${Array.from({length:24},(_,i)=>`<circle class="wx-star wx-motion" style="--wx-delay:-${i*.7}s" cx="${15+i*83%334}" cy="${9+i*19%106}" r="${i%3===0?1.1:.6}"/>`).join('')}</g>` : ''}
+      ${!night && ['clear','cloudy'].includes(kind) && phase !== 'unknown' ? `<g class="wx-sunbeams wx-motion" fill="${paint('ray')}"><path d="m260 40-112 178h49Zm0 0 4 183h42Zm0 0 70 160h59Z"/></g>` : ''}
       ${['clear','cloudy'].includes(kind) && phase !== 'unknown' ? `<circle class="wx-halo wx-motion" cx="260" cy="65" r="86" fill="${paint('glow')}"/>
       ${night ? '<g class="wx-moon"><path d="M270 29a34 34 0 1 0 16 58 32 32 0 0 1-16-58Z" fill="#e5edfa"/><path d="M247 55a23 23 0 0 0 11 24" fill="none" stroke="#b8cce1" stroke-width="3" stroke-linecap="round"/></g>' : `<g class="wx-orbit wx-motion" stroke="#ffe8b0" stroke-opacity=".35">${Array.from({length:12},(_,i)=>`<path d="M260 16v7" transform="rotate(${i*30} 260 65)"/>`).join('')}</g><circle cx="260" cy="65" r="30" fill="${paint('sun')}"/><path d="M244 51a21 21 0 0 1 22-7" stroke="#fffbed" stroke-width="1.5" fill="none" stroke-linecap="round"/>`}` : ''}
       <g fill="none" stroke="#e9f4f6" stroke-opacity=".18"><path d="M-15 110Q90 80 184 105T390 93"/><path d="M-10 115Q90 85 182 110T390 98"/></g>
@@ -239,7 +239,7 @@
       <div class="wx-chart-legend"><span><i></i>選択した指標の予報</span><span><i></i>夜の時間帯</span></div>
       <p id="wx-hour-detail" class="wx-hour-detail" aria-live="polite">${weatherHourDetail(hours)}</p>
       <div class="wx-timeline" tabindex="0" role="region" aria-label="時間別予報。横にスクロールできます"><div class="wx-timeline-inner" style="width:${Math.max(1,hours.length)*66}px"><div id="wx-chart-plot">${weatherChart(hours)}</div>
-      <div class="hourly-forecast">${hours.map((h,i)=>`<button data-action="weatherHour" data-value="${i}" aria-pressed="${i===weatherHour}" aria-label="${esc(h.time.replace('T',' '))} ${esc(weatherLabel(h.code))} ${number(h.temperature)}度 降水確率${wxPercent(h.rain)?number(h.rain):'不明'}パーセント"><span>${esc(h.time.slice(11,16))}</span>${weatherArt(h.code,h.night)}<strong>${number(h.temperature)}°</strong><small>${wxPercent(h.rain)?number(h.rain):'—'}%</small></button>`).join('')}</div></div></div><div class="wx-time-scrubber"><label for="wx-hour-range">時刻を移動</label><input id="wx-hour-range" type="range" min="0" max="${Math.max(0,hours.length-1)}" step="1" value="${weatherHour}" aria-valuetext="${esc(hours[weatherHour]?.time.replace('T',' ')||'データなし')}" ${hours.length?'':'disabled'}><button data-action="weatherFirstHour">先頭</button></div><p class="wx-scroll-hint">時刻を選択して確認 <span aria-hidden="true">← →</span></p></section>
+      <div class="hourly-forecast">${hours.map((h,i)=>`<button data-action="weatherHour" data-value="${i}" aria-pressed="${i===weatherHour}" aria-label="${esc(h.time.replace('T',' '))} ${esc(weatherLabel(h.code))} ${number(h.temperature)}度 降水確率${wxPercent(h.rain)?number(h.rain):'不明'}パーセント 風速${wxValid(h.wind)&&h.wind>=0?wxFixed(h.wind):'不明'}メートル毎秒"><span>${esc(h.time.slice(11,16))}</span>${weatherArt(h.code,h.night)}<strong>${number(h.temperature)}°</strong><small>${wxPercent(h.rain)?number(h.rain):'—'}%</small></button>`).join('')}</div></div></div><div class="wx-time-scrubber"><label for="wx-hour-range">時刻を移動</label><input id="wx-hour-range" type="range" min="0" max="${Math.max(0,hours.length-1)}" step="1" value="${weatherHour}" aria-valuetext="${esc(hours[weatherHour]?.time.replace('T',' ')||'データなし')}" ${hours.length?'':'disabled'}><button data-action="weatherFirstHour">先頭</button></div><div class="wx-sky-controls"><button data-action="weatherShowHourSky" ${hours.length?'':'disabled'}>この時刻の空へ</button></div><p class="wx-scroll-hint">時刻を選択して確認 <span aria-hidden="true">← →</span></p></section>
       <section class="weather-card wx-week"><div class="wx-card-heading"><h3>7日間の予報</h3><span>最低 / 最高</span></div>${daily.time.slice(0,7).map((t,i)=>{
         const r = ranges[i], valid = validRange(r), date = new Date(t+'T12:00:00Z'), day = Number.isFinite(date.getTime()) ? ['日','月','火','水','木','金','土'][date.getUTCDay()] : '';
         return `<details class="wx-daily"><summary class="live-forecast-row"><span class="wx-day">${esc(t.slice(5).replace('-','/'))}<small>${day}曜日</small></span>${weatherArt(daily.weather_code?.[i])}<span class="wx-week-condition">${esc(weatherLabel(daily.weather_code?.[i]))}</span><div class="wx-day-range"><span>${number(r[0])}°</span><div class="wx-range-track" aria-hidden="true">${valid?`<i style="left:${(r[0]-min)/span*100}%;width:${(r[1]-r[0])/span*100}%"></i>`:''}</div><strong>${number(r[1])}°</strong></div><span class="wx-day-chevron" aria-hidden="true">⌄</span></summary>${weatherDayDetail(d,i)}</details>`;
@@ -310,6 +310,14 @@
     el.textContent = weatherPreview ? '対象時刻の空に戻す' : '選んだ時刻の空を見る';
     updateWeatherSky();
   };
+  A.actions.weatherShowHourSky = () => {
+    weatherPreview=true;
+    const toggle=$('[data-action="weatherSkyPreview"]');
+    if(toggle){toggle.setAttribute('aria-pressed','true');toggle.textContent='対象時刻の空に戻す';}
+    updateWeatherSky();
+    const frame=$('#wx-sky');
+    if(frame){frame.setAttribute('tabindex','-1');frame.focus({preventScroll:true});frame.scrollIntoView({block:'center',behavior:'instant'});}
+  };
   A.actions.weatherVisualMode = el => {
     const mode = el.dataset.value;
     if (!['full','calm','still'].includes(mode)) return;
@@ -344,14 +352,13 @@
     stopWeatherMotion();
     const surfaces = [...root.querySelectorAll('.wx-motion-surface')], visible = new Set();
     const sync = () => {
-      const active = !document.hidden && A.current === 'weather' && !A.locked && $('#overlay').hidden && $('#modal').hidden;
+      const active = !document.hidden && A.current === 'weather' && !A.locked && $('#overlay').hidden;
       surfaces.forEach(el => {el.dataset.wxActive = String(active && visible.has(el));});
     };
     const observer = new IntersectionObserver(entries => {entries.forEach(e=>e.isIntersecting ? visible.add(e.target) : visible.delete(e.target));sync();}, {root:root.closest('.app-content'),threshold:0});
     surfaces.forEach(el => observer.observe(el));
     const cover = new MutationObserver(sync);
     cover.observe($('#overlay'),{attributes:true,attributeFilter:['hidden']});
-    cover.observe($('#modal'),{attributes:true,attributeFilter:['hidden']});
     document.addEventListener('visibilitychange',sync);
     stopWeatherMotion = () => {observer.disconnect();cover.disconnect();document.removeEventListener('visibilitychange',sync);surfaces.forEach(el=>{el.dataset.wxActive='false';});stopWeatherMotion=()=>{};};
     sync();
