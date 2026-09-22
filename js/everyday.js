@@ -205,37 +205,360 @@
   A.actions.evShoppingClear=()=>A.confirm('購入済みを削除？','このリストの購入済みだけを削除します。',()=>saveList('shopping',read('shopping').filter(x=>!((x.listId||'default')===shoppingList&&x.done)),shoppingApp));
   A.actions.evShoppingShare=()=>exportText((shoppingLists().find(x=>x.id===shoppingList)?.name||'買い物')+'.txt',read('shopping').filter(x=>(x.listId||'default')===shoppingList).map(x=>`${x.done?'☑':'☐'} ${x.name} ×${x.quantity}${x.price?' '+money(x.price*x.quantity):''}`).join('\n'));
 
-  // Journal editor saves text in place; search, tags and favorite filters use persisted records.
+  // Journal Atelier: existing records stay in aura.journal; failed writes stay in this tab.
   let journalMood='all',journalFavorites=false,journalQuery='',journalDraft=null;
-  journalApp=function(){const list=read('journal').sort((a,b)=>b.date.localeCompare(a.date));page('journal',`<div class="ev-mood-strip">${Array.from({length:7},(_,i)=>{const day=daysAgo(6-i),x=list.find(x=>x.date===day);return `<button data-action="evJournalDay" data-id="${day}"><span>${x?moodIcon[x.mood]:'·'}</span><small>${Number(day.slice(-2))}</small></button>`;}).join('')}</div><div class="ev-journal-filters"><select id="ev-journal-mood" aria-label="気分で絞り込み"><option value="all">すべての気分</option>${moods.map(([id,label])=>`<option value="${id}" ${id===journalMood?'selected':''}>${label}</option>`).join('')}</select><button data-action="evJournalFavorites" aria-pressed="${journalFavorites}">${journalFavorites?'★':'☆'}</button></div>${A.search('ev-journal-search','本文・タグを検索')}<div id="ev-journal-list"></div>`,btn('evJournalExport','日記を書き出す','download')+btn('evJournalEdit','日記を書く','plus'));const render=()=>{$('#ev-journal-list').innerHTML=list.filter(x=>(journalMood==='all'||x.mood===journalMood)&&(!journalFavorites||x.favorite)&&(x.title+' '+x.body+' '+(x.tags||'')).toLowerCase().includes(journalQuery.toLowerCase())).map(x=>`<button class="ev-card ev-journal-entry" data-action="evJournalEdit" data-id="${x.id}"><header><time>${esc(x.date)}${x.favorite?' · ★':''}</time><span>${moodIcon[x.mood]||'○'}</span></header><h3>${esc(x.title||'日記')}</h3><p>${esc(x.body.slice(0,320))}${x.body.length>320?'…':''}</p>${x.tags?`<div class="ev-tags">${x.tags.split(/[,、\s]+/).filter(Boolean).map(t=>`<span>#${esc(t.replace(/^#/,''))}</span>`).join('')}</div>`:''}</button>`).join('')||empty('＋で日記を書く');};render();$('#ev-journal-search').value=journalQuery;$('#ev-journal-search').oninput=e=>{journalQuery=e.target.value;render();};$('#ev-journal-mood').onchange=e=>{journalMood=e.target.value;render();};};
-  A.apps.journal.render=journalApp;
-  A.actions.evJournalFavorites=()=>{journalFavorites=!journalFavorites;journalApp();};
-  function journalEditor(entry){journalDraft=entry;page('journal',`<div class="ev-editor-meta"><input id="ev-journal-date" type="date" aria-label="日記の日付" value="${entry.date}"><select id="ev-journal-feeling" aria-label="気分">${moods.map(([id,name])=>`<option value="${id}" ${entry.mood===id?'selected':''}>${moodIcon[id]} ${name}</option>`).join('')}</select></div><input class="ev-editor-title" id="ev-journal-title" aria-label="タイトル" placeholder="タイトル" maxlength="100" value="${esc(entry.title)}"><div class="ev-editor-toolbar"><button data-action="evJournalInsert" data-id="• " aria-label="箇条書き">•</button><button data-action="evJournalInsert" data-id="☐ " aria-label="チェック項目">☐</button><button data-action="evJournalInsert" data-id="— " aria-label="区切り">—</button><span id="ev-journal-count">${entry.body.length}字</span></div><textarea class="ev-journal-body" id="ev-journal-body" aria-label="日記の本文" placeholder="今日のこと" maxlength="12000">${esc(entry.body)}</textarea><input class="text-input" id="ev-journal-tags" aria-label="タグ" placeholder="タグ（空白で区切る）" maxlength="120" value="${esc(entry.tags||'')}"><div class="ev-editor-footer"><span id="ev-journal-status" role="status">${read('journal').some(x=>x.id===entry.id)?'保存済み':''}</span><button class="ev-text-button" data-action="evJournalHome">一覧</button><button class="ev-danger" data-action="evJournalDelete" data-id="${entry.id}">削除</button></div>`,btn('evJournalFavorite','お気に入り','star'));
-    const save=()=>{const date=$('#ev-journal-date').value;if(!date)return;if(read('journal').some(x=>x.date===date&&x.id!==journalDraft.id)){$('#ev-journal-date').value=journalDraft.date;A.toast('この日の日記は作成済みです');return;}journalDraft={...journalDraft,date,mood:$('#ev-journal-feeling').value,title:$('#ev-journal-title').value,body:$('#ev-journal-body').value,tags:$('#ev-journal-tags').value};$('#ev-journal-count').textContent=journalDraft.body.length+'字';if(!journalDraft.title.trim()&&!journalDraft.body.trim()&&!read('journal').some(x=>x.id===journalDraft.id)){$('#ev-journal-status').textContent='本文かタイトルを入力';return;}$('#ev-journal-status').textContent=upsert('journal',journalDraft)?'保存済み':'保存できません';};for(const id of ['date','feeling','title','body','tags'])$('#ev-journal-'+id).oninput=save;const star=$('[data-action=evJournalFavorite]');star.setAttribute('aria-pressed',String(!!entry.favorite));star.classList.toggle('ev-starred',!!entry.favorite);
+  let journalMonth=dateKey().slice(0,7),journalTab='entries',journalTag='',journalSort='new',journalLimit=30;
+  let journalFocus=false,journalDeleted=null,journalBase=null,journalPrompt=0;
+  const journalPending=new Map();
+  const journalThemes=[['linen','リネン'],['rose','桜色'],['sage','セージ']];
+  let journalTheme=A.load('journalTheme','linen');
+  if(!journalThemes.some(([id])=>id===journalTheme))journalTheme='linen';
+  const journalPrompts=['今日、心に残った小さなことは？','自分に「ありがとう」と言いたいことは？','今日見つけた、きれいなものは？','明日の自分に、ひとこと残すなら？','最近、少し変わったと思うことは？','もう一度味わいたい瞬間は？'];
+  const journalTemplates={three:'今日のできごと\n\n心に残ったこと\n\n明日の自分へ\n',gratitude:'ありがとうと思ったこと\n1. \n2. \n3. \n',reflection:'できたこと\n\n気づいたこと\n\n次にやってみたいこと\n'};
+  const journalValidDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&value>='0001-01-01'&&value<='9999-12-31'&&dateKey(new Date(value+'T12:00:00')).padStart(10,'0')===value;
+  const journalRows=()=>read('journal').filter(x=>x&&typeof x.id==='string'&&journalValidDate(x.date)).map(x=>({...x,title:String(x.title||''),body:String(x.body||''),tags:String(x.tags||''),mood:['1','2','3','4','5'].includes(String(x.mood))?String(x.mood):'3'}));
+  const journalTags=x=>[...new Set(String(x.tags||'').split(/[,、\s]+/).map(t=>t.replace(/^#/,'' )).filter(Boolean))];
+  const journalNormalize=q=>String(q).normalize('NFKC').toLocaleLowerCase('ja').trim();
+  const journalLabel=m=>moods.find(([id])=>id===String(m))?.[1]||'ふつう';
+  const journalButton=(action,label,id='',extra='')=>`<button type="button" data-action="${action}" data-id="${esc(id)}" ${extra}>${label}</button>`;
+  const journalDateLabel=date=>new Date(date+'T12:00:00').toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'short'});
+  let journalSvgId=0;
+  function journalMoodSvg(mood) {
+    const m=String(mood),id='jr-mood-'+(++journalSvgId);
+    const colors={5:['#ffe7ab','#d9a255'],4:['#d8e8cb','#7fa994'],3:['#efe0d2','#bc9a86'],2:['#dfdff0','#9896b5'],1:['#d5e2ee','#7b9fbd']};
+    const [light,dark]=colors[m]||colors[3];
+    const shape=m==='5'?'<circle cx="24" cy="24" r="10"/><path d="M24 7v4m0 26v4M7 24h4m26 0h4M12 12l3 3m18 18 3 3M12 36l3-3m18-18 3-3"/>':m==='4'?'<path d="M24 34V17m0 12c-9 0-12-7-11-12 8 0 12 4 11 12Zm0-6c0-7 4-11 12-11 0 7-5 11-12 11Z"/>':m==='3'?'<path d="M31 12a14 14 0 1 0 5 24A17 17 0 0 1 31 12Z"/><path d="m16 13 1-3 1 3 3 1-3 1-1 3-1-3-3-1Z"/>':m==='2'?'<path d="M14 32h20a6 6 0 0 0 0-12 10 10 0 0 0-19-2 7 7 0 0 0-1 14Z"/>':'<path d="M14 27h20a5 5 0 0 0 0-10 9 9 0 0 0-17-1 6 6 0 0 0-3 11ZM17 32l-2 4m10-4-2 4m10-4-2 4"/>';
+    return `<svg class="jr-mood-art" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><defs><radialGradient id="${id}" cx=".3" cy=".2" r=".9"><stop stop-color="${light}"/><stop offset="1" stop-color="${dark}"/></radialGradient></defs><circle cx="24" cy="26" r="21" fill="#493b3520"/><circle cx="24" cy="23" r="21" fill="url(#${id})"/><circle cx="24" cy="23" r="19.5" fill="none" stroke="#ffffff70"/><g fill="none" stroke="#4f4a4a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${shape}</g><path d="M12 14a16 16 0 0 1 18-5" fill="none" stroke="#fff9" stroke-width="2" stroke-linecap="round"/></svg>`;
   }
-  A.actions.evJournalEdit=el=>{const list=read('journal'),x=list.find(x=>x.id===el.dataset.id)||(!el.dataset.id?list.find(x=>x.date===dateKey()):null);journalEditor(x?{...x}:{id:A.id(),date:dateKey(),title:'',body:'',mood:'3',tags:'',favorite:false});};
-  A.actions.evJournalDay=el=>{const x=read('journal').find(x=>x.date===el.dataset.id);journalEditor(x?{...x}:{id:A.id(),date:el.dataset.id,title:'',body:'',mood:'3',tags:'',favorite:false});};
+  function journalArtwork() {
+    const id='jr-book-'+(++journalSvgId);
+    return `<svg class="jr-book-art" viewBox="0 0 360 260" aria-hidden="true" focusable="false"><defs>
+      <linearGradient id="${id}-cloth" x2="1" y2="1"><stop stop-color="#b68e96"/><stop offset=".45" stop-color="#926975"/><stop offset="1" stop-color="#5a424f"/></linearGradient>
+      <linearGradient id="${id}-paper" x2=".8" y2="1"><stop stop-color="#fffdf0"/><stop offset=".6" stop-color="#e9dbc5"/><stop offset="1" stop-color="#bbab91"/></linearGradient>
+      <linearGradient id="${id}-gold" x2="1" y2=".8"><stop stop-color="#fff0bb"/><stop offset=".35" stop-color="#c49a56"/><stop offset=".55" stop-color="#ffdfa0"/><stop offset="1" stop-color="#a0713b"/></linearGradient>
+      <pattern id="${id}-weave" width="4" height="4" patternUnits="userSpaceOnUse"><path d="M0 1h4M1 0v4" stroke="#fce6dd" stroke-width=".35" opacity=".2"/></pattern></defs>
+      <circle cx="190" cy="122" r="102" fill="#dbc8b1" opacity=".22"/><circle cx="190" cy="122" r="89" fill="none" stroke="#f9f2e3"/><path d="M48 177C111 233 272 254 325 186" fill="none" stroke="#baa286" opacity=".2"/>
+      <ellipse class="jr-book-shadow" cx="182" cy="218" rx="104" ry="14" fill="#44302b" opacity=".16"/>
+      <g class="jr-book-object"><g transform="translate(90 28) rotate(-14 85 100)">
+      <rect x="6" y="13" width="153" height="192" rx="12" fill="#4d3c47"/><rect x="14" y="13" width="145" height="182" rx="9" fill="url(#${id}-paper)"/>
+      ${Array.from({length:7},(_,i)=>`<path d="M23 ${180+i*2}h126" stroke="#8a7464" stroke-width=".6" opacity=".4"/>`).join('')}
+      <path d="M127 169v47l-9-6-9 6v-47" fill="#62877e"/><path d="M120 174v32" stroke="#bdd3b0"/>
+      <rect x="0" y="0" width="157" height="183" rx="10" fill="url(#${id}-cloth)"/><rect width="157" height="183" rx="10" fill="url(#${id}-weave)"/>
+      <path d="M18 1v180" stroke="#48323f" stroke-width="4" opacity=".4"/><path d="M22 1v180" stroke="#e1bcbf" opacity=".4"/>
+      <rect x="28" y="10" width="118" height="163" rx="5" fill="none" stroke="#e0bda6" stroke-width=".8" stroke-dasharray="2 2.5"/>
+      <path d="M36 22h100m-100 137h100" stroke="url(#${id}-gold)" opacity=".6"/>
+      <rect x="42" y="47" width="91" height="77" rx="3" fill="#513946" opacity=".3"/><rect x="40" y="44" width="91" height="77" rx="3" fill="url(#${id}-paper)"/>
+      <rect x="46" y="50" width="79" height="65" rx="1" fill="none" stroke="#b8a084" stroke-width=".6"/>
+      <g stroke="#8d7659" fill="none" stroke-linecap="round"><path d="M83 77V59m0 12c-9 0-11-5-11-8 6 0 11 3 11 8Zm0-5c0-5 4-8 10-8 0 5-4 8-10 8Z"/><path d="M62 87h48m-41 7h34m-27 7h20" stroke-width="1.4"/></g>
+      <path d="M142 0v180" stroke="#372a35" stroke-width="6" opacity=".5"/><path d="M140 0v180" stroke="#c4a4ad" opacity=".5"/>
+      <path class="jr-book-glint" d="M29 11h108" stroke="#fff0d1" stroke-width="1.2"/>
+      </g><g transform="translate(264 99) rotate(24)"><ellipse cx="3" cy="124" rx="9" ry="5" fill="#574632" opacity=".15"/><rect x="-6" y="0" width="12" height="94" rx="5" fill="#344c48"/><path d="M-3 6v77" stroke="#9daea0" stroke-width="2"/><rect x="-6" y="23" width="12" height="5" fill="url(#${id}-gold)"/><path d="M-6 92h12l-6 23Z" fill="url(#${id}-gold)"/><path d="M0 97v18" stroke="#5c4937"/><circle cy="98" r="1.4" fill="#564434"/><path d="M5 4v20" stroke="url(#${id}-gold)" stroke-width="2"/></g></g>
+      <g class="jr-sprig" transform="translate(38 159) rotate(-20)" fill="#8fa491" stroke="#697f70" stroke-width=".7"><path d="M0 38C14 13 12-10 7-32" fill="none"/><path d="M10 12C-8 9-7-4-5-7 7-4 11 1 10 12ZM12 0c17-1 21-11 19-16C17-15 13-9 12 0ZM9-15C-4-17-7-26-4-31 6-28 10-23 9-15ZM7-29c8-5 7-15 2-20-5 9-5 13-2 20Z"/></g>
+      </svg>`;
+  }
+  function journalShell(content,actions='',editor=false) {
+    A.view(A.nav('日記',actions,editor?'evJournalHome':'',editor?'日記一覧に戻る':'')+`<div class="app-content everyday ev-journal jr-atelier ${editor?'jr-editor':''} ${editor&&journalFocus?'jr-focused':''}" data-journal-theme="${journalTheme}">${content}</div>`);
+  }
+  function journalStreak(list) {
+    const dates=new Set(list.map(x=>x.date));let n=0,offset=dates.has(dateKey())?0:1;
+    while(dates.has(daysAgo(offset+n)))n++;
+    return n;
+  }
+  function journalCards(list) {
+    return list.map((x,i)=>`<button class="ev-card ev-journal-entry jr-entry" data-action="evJournalEdit" data-id="${esc(x.id)}" style="--jr-order:${Math.min(i,7)}"><header><time datetime="${esc(x.date)}"><b>${Number(x.date.slice(-2))}</b><span>${esc(x.date.slice(0,7).replace('-',' / '))}</span></time><span class="jr-entry-mood" aria-label="気分：${journalLabel(x.mood)}">${journalMoodSvg(x.mood)}</span>${x.favorite?'<span class="jr-ribbon" aria-label="お気に入り">★</span>':''}</header><h3>${esc(x.title||'無題の日記')}</h3><p>${esc(x.body.slice(0,220))}${x.body.length>220?'…':''}</p><footer><div class="ev-tags">${journalTags(x).slice(0,4).map(t=>`<span>#${esc(t)}</span>`).join('')}</div><small>${Array.from(x.body).length.toLocaleString()}字 <span aria-hidden="true">↗</span></small></footer></button>`).join('');
+  }
+  function journalCalendar(list) {
+    const first=new Date(journalMonth+'-01T12:00:00'),count=new Date(first.getFullYear(),first.getMonth()+1,0).getDate();
+    const monthEntries=list.filter(x=>x.date.startsWith(journalMonth));
+    return `<section class="jr-calendar jr-panel"><header class="jr-section-head">${journalButton('evJournalMonth','‹','-1','aria-label="前の月"')}<label><span class="jr-eyebrow">YOUR DAYS</span><input id="jr-month" type="month" value="${journalMonth}" min="0001-01" max="9999-12" aria-label="表示する月"></label>${journalButton('evJournalMonth','›','1','aria-label="次の月"')}</header><div class="jr-calendar-grid">${['日','月','火','水','木','金','土'].map(d=>`<span class="jr-weekday">${d}</span>`).join('')}${'<span aria-hidden="true"></span>'.repeat(first.getDay())}${Array.from({length:count},(_,i)=>{const day=journalMonth+'-'+String(i+1).padStart(2,'0'),x=list.find(x=>x.date===day);return journalButton('evJournalDay',`<span>${i+1}</span>${x?journalMoodSvg(x.mood):'<i></i>'}`,day,`class="${x?'has-entry':''}" ${day===dateKey()?'aria-current="date"':''} aria-label="${esc(journalDateLabel(day))}、${x?journalLabel(x.mood)+'、日記を開く':'日記を書く'}"`);}).join('')}</div><footer><span>${monthEntries.length}日を記録</span>${journalButton('evJournalThisMonth','今月へ')}</footer></section>`;
+  }
+  function journalInsights(list) {
+    const entries=list.filter(x=>x.date.startsWith(journalMonth)),byDate=new Map(entries.map(x=>[x.date,x]));
+    const first=new Date(journalMonth+'-01T12:00:00'),count=new Date(first.getFullYear(),first.getMonth()+1,0).getDate();
+    const points=Array.from({length:count},(_,i)=>{const x=byDate.get(journalMonth+'-'+String(i+1).padStart(2,'0'));return x?{x:14+i*272/(count-1),y:106-(Number(x.mood)-1)*21,date:x.date,mood:x.mood}:null;});
+    let path='';points.forEach((p,i)=>{if(p)path+=`${i&&points[i-1]?'L':'M'}${p.x},${p.y} `;});
+    const chars=entries.reduce((n,x)=>n+Array.from(x.body).length,0);
+    return `<section class="jr-panel jr-insights"><div class="jr-section-head"><div><span class="jr-eyebrow">REFLECTION</span><h2>${esc(journalMonth.replace('-',' / '))} の心模様</h2></div>${journalButton('evJournalTab','月を選ぶ','calendar')}</div><div class="jr-mini-stats"><div><strong>${entries.length}<small>日</small></strong><span>書いた日</span></div><div><strong>${chars.toLocaleString()}</strong><span>本文の文字数</span></div><div><strong>${journalStreak(list)}<small>日</small></strong><span>現在の連続記録</span></div></div><svg class="jr-mood-chart" viewBox="0 0 300 132" role="img" aria-label="${esc(journalMonth)}の気分の推移。記録のない日は線をつなぎません。詳細は下の日別一覧。">${[22,43,64,85,106].map(y=>`<path d="M14 ${y}H286" stroke="currentColor" opacity=".12" stroke-dasharray="2 5"/>`).join('')}<path class="jr-chart-line" d="${path}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>${points.filter(Boolean).map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="currentColor"><title>${p.date} ${journalLabel(p.mood)}</title></circle>`).join('')}<g fill="currentColor" font-size="9"><text x="14" y="127">1日</text><text x="135" y="127">15日</text><text x="270" y="127">${count}日</text></g></svg>${!entries.length?'<p class="jr-muted">記録すると、ここに心模様が描かれます。</p>':''}<div class="jr-distribution">${[5,4,3,2,1].map(m=>{const n=entries.filter(x=>Number(x.mood)===m).length;return `<div>${journalMoodSvg(m)}<span>${journalLabel(m)}</span><meter min="0" max="${Math.max(entries.length,1)}" value="${n}">${n}日</meter><b>${n}</b></div>`;}).join('')}</div><details class="jr-details"><summary>日別の記録を見る</summary>${entries.sort((a,b)=>a.date.localeCompare(b.date)).map(x=>journalButton('evJournalEdit',`${esc(journalDateLabel(x.date))} · ${journalLabel(x.mood)}`,x.id)).join('')||'<p>まだ記録がありません。</p>'}</details><p class="jr-muted">気分に良し悪しはありません。あなた自身の記録です。</p></section>`;
+  }
+  journalApp=function(){
+    journalFocus=false;const list=journalRows().sort((a,b)=>b.date.localeCompare(a.date)),today=list.find(x=>x.date===dateKey());
+    const past=list.filter(x=>x.date<dateKey()&&x.date.slice(5)===dateKey().slice(5));
+    const tags=[...new Set(list.flatMap(journalTags))].sort((a,b)=>a.localeCompare(b,'ja'));
+    if(journalTag&&!tags.includes(journalTag))journalTag='';
+    journalShell(`<section class="jr-hero"><div class="jr-hero-copy"><span class="jr-eyebrow">THE QUIET PAGES</span><h1>なんでもない日も、<br>残しておこう。</h1><p>${esc(journalDateLabel(dateKey()))}</p>${journalButton('evJournalEdit',`${A.icon('edit')}<span>${today?'今日の続きを書く':'今日を書く'}</span>`,'','class="jr-primary"')}</div>${journalArtwork()}<div class="jr-hero-foot"><span>${list.length} PAGES</span><span>あなたのための、小さな余白。</span></div></section>
+      ${journalPending.size?`<div class="jr-recovery" role="status"><strong>未保存の下書き ${journalPending.size}件</strong><p>このタブ内に保持中。閉じる前に保存・書き出しを。</p>${[...journalPending.values()].map(({entry})=>journalButton('evJournalResume',`${esc(entry.date)} · ${esc(entry.title||'無題')}`,entry.id)).join('')}</div>`:''}
+      ${journalDeleted?`<div class="jr-recovery"><span>日記を削除しました</span>${journalButton('evJournalUndoDelete','元に戻す')}</div>`:''}
+      <div class="jr-week" aria-label="直近7日間">${Array.from({length:7},(_,i)=>{const day=daysAgo(6-i),x=list.find(x=>x.date===day);return journalButton('evJournalDay',`<small>${['日','月','火','水','木','金','土'][new Date(day+'T12:00:00').getDay()]}</small>${x?journalMoodSvg(x.mood):'<span class="jr-empty-day">＋</span>'}<b>${Number(day.slice(-2))}</b>`,day,`aria-label="${esc(journalDateLabel(day))} ${x?journalLabel(x.mood):'日記を書く'}" ${day===dateKey()?'aria-current="date"':''}`);}).join('')}</div>
+      <div class="jr-tabs" aria-label="日記の表示">${[['entries','日記帳'],['calendar','カレンダー'],['insights','振り返り']].map(([id,label])=>journalButton('evJournalTab',label,id,`aria-pressed="${journalTab===id}"`)).join('')}</div>
+      ${journalTab==='entries'?`${A.search('ev-journal-search','タイトル・本文・タグを検索')}<details class="jr-details jr-filters" ${journalMood!=='all'||journalFavorites||journalTag||journalSort!=='new'?'open':''}><summary>絞り込み・並べ替え</summary><div class="jr-filter-grid"><label>気分<select id="ev-journal-mood"><option value="all">すべて</option>${moods.map(([id,label])=>`<option value="${id}" ${journalMood===id?'selected':''}>${label}</option>`).join('')}</select></label><label>タグ<select id="jr-tag"><option value="">すべて</option>${tags.map(t=>`<option value="${esc(t)}" ${t===journalTag?'selected':''}>${esc(t)}</option>`).join('')}</select></label><label>並べ替え<select id="jr-sort">${[['new','新しい日付順'],['old','古い日付順'],['updated','更新順']].map(([id,label])=>`<option value="${id}" ${id===journalSort?'selected':''}>${label}</option>`).join('')}</select></label>${journalButton('evJournalFavorites','★ お気に入りのみ','',`aria-pressed="${journalFavorites}"`)}</div>${journalButton('evJournalResetFilters','条件をリセット')}</details><p class="jr-result-count" id="jr-result-count" role="status"></p><div id="ev-journal-list"></div>`:journalTab==='calendar'?journalCalendar(list):journalInsights(list)}
+      ${past.length?`<details class="jr-details"><summary>過去の今日 · ${past.length}件</summary>${journalCards(past)}</details>`:''}
+      <div class="jr-bottom-actions">${journalButton('evJournalRandom','過去の1ページを開く')}${journalButton('frJournal','月・タグで探す')}</div><p class="jr-privacy">このブラウザに保存 · 外部送信・クラウド同期なし</p>`,btn('evJournalTools','書き出し・読込・用紙','more')+btn('evJournalEdit','日記を書く','plus'));
+    if(journalTab==='entries'){
+      const render=()=>{const q=journalNormalize(journalQuery);const visible=list.filter(x=>(journalMood==='all'||x.mood===journalMood)&&(!journalFavorites||x.favorite)&&(!journalTag||journalTags(x).includes(journalTag))&&journalNormalize(x.title+' '+x.body+' '+x.tags).includes(q)).sort((a,b)=>journalSort==='old'?a.date.localeCompare(b.date):journalSort==='updated'?(Number(b.updated)||0)-(Number(a.updated)||0)||b.date.localeCompare(a.date):b.date.localeCompare(a.date));
+        $('#jr-result-count').textContent=visible.length+'件の記録';$('#ev-journal-list').innerHTML=visible.length?journalCards(visible.slice(0,journalLimit))+(visible.length>journalLimit?journalButton('evJournalMore','さらに30件表示','','class="jr-load-more"'):''):`<div class="jr-empty">${journalMoodSvg(4)}<h2>${list.length?'見つかりませんでした':'最初の1ページを。'}</h2><p>${list.length?'条件を変えて探してみましょう。':'ひとことから、はじめてみませんか。'}</p>${journalButton(list.length?'evJournalResetFilters':'evJournalEdit',list.length?'絞り込みを解除':'日記を書く')}</div>`;};
+      $('#ev-journal-search').value=journalQuery;$('#ev-journal-search').oninput=e=>{journalQuery=e.target.value;journalLimit=30;render();};
+      for(const [id,set] of [['ev-journal-mood',v=>journalMood=v],['jr-tag',v=>journalTag=v],['jr-sort',v=>journalSort=v]])$('#'+id).onchange=e=>{set(e.target.value);journalLimit=30;render();};
+      A.actions.evJournalMore=()=>{journalLimit+=30;render();};render();
+    }
+    const monthInput=$('#jr-month');if(monthInput)monthInput.onchange=e=>{if(journalValidDate(e.target.value+'-01')){journalMonth=e.target.value;journalApp();}};
+  };
+  A.apps.journal.render=journalApp;
   A.actions.evJournalHome=journalApp;
-  A.actions.evJournalInsert=el=>{const body=$('#ev-journal-body');const insertion=(body.selectionStart&&body.value[body.selectionStart-1]!=='\n'?'\n':'')+el.dataset.id;if(body.value.length-(body.selectionEnd-body.selectionStart)+insertion.length>body.maxLength)return A.toast('本文の上限に達しています');body.setRangeText(insertion,body.selectionStart,body.selectionEnd,'end');body.dispatchEvent(new Event('input'));body.focus();};
-  A.actions.evJournalFavorite=()=>{if(!journalDraft)return;journalDraft.favorite=!journalDraft.favorite;if(journalDraft.title.trim()||journalDraft.body.trim()){if(!upsert('journal',journalDraft)){journalDraft.favorite=!journalDraft.favorite;return;}}const star=$('[data-action=evJournalFavorite]');star.classList.toggle('ev-starred',!!journalDraft.favorite);star.setAttribute('aria-pressed',String(journalDraft.favorite));};
+  A.actions.evJournalTab=el=>{if(['entries','calendar','insights'].includes(el.dataset.id)){journalTab=el.dataset.id;journalApp();}};
+  A.actions.evJournalMonth=el=>{const d=new Date(journalMonth+'-01T12:00:00');d.setMonth(d.getMonth()+Number(el.dataset.id));if(d.getFullYear()>=1&&d.getFullYear()<=9999){journalMonth=dateKey(d).padStart(10,'0').slice(0,7);journalApp();}};
+  A.actions.evJournalThisMonth=()=>{journalMonth=dateKey().slice(0,7);journalApp();};
+  A.actions.evJournalFavorites=()=>{journalFavorites=!journalFavorites;journalLimit=30;journalApp();};
+  A.actions.evJournalResetFilters=()=>{journalMood='all';journalFavorites=false;journalQuery='';journalTag='';journalSort='new';journalLimit=30;journalApp();};
+  A.actions.evJournalRandom=()=>{const list=journalRows().filter(x=>x.date<dateKey());if(!list.length)return A.toast('過去の日記はまだありません');journalOpen(list[Math.floor(Math.random()*list.length)]);};
 
-  // Reading sessions, yearly goals, ratings and quotations enrich each book.
-  let activeBook=null;
+  function journalStatus(message,failed=false) {
+    const status=$('#ev-journal-status');if(status){status.textContent=message;status.classList.toggle('jr-save-error',failed);}
+    const retry=$('[data-action=evJournalRetry]');if(retry)retry.hidden=!failed;
+  }
+  function journalCapture() {
+    if(!journalDraft||!$('#ev-journal-body'))return;
+    journalDraft={...journalDraft,date:$('#ev-journal-date').value,title:$('#ev-journal-title').value,body:$('#ev-journal-body').value,tags:$('#ev-journal-tags').value};
+    $('#ev-journal-count').textContent=Array.from(journalDraft.body).length.toLocaleString()+'字';
+    const bar=$('#jr-writing-progress');if(bar)bar.value=Math.min(300,Array.from(journalDraft.body).length);
+  }
+  function journalSave() {
+    journalCapture();if(!journalDraft)return false;
+    const draft={...journalDraft},list=read('journal'),existing=list.find(x=>x.id===draft.id);
+    if(!draft.title.trim()&&!draft.body.trim()&&!existing){journalPending.delete(draft.id);journalStatus('本文かタイトルを入力すると自動保存');return true;}
+    journalPending.set(draft.id,{entry:draft,base:journalBase});
+    if(!journalValidDate(draft.date)){journalStatus('未保存：有効な日付を選んでください',true);return false;}
+    if(list.some(x=>x.date===draft.date&&x.id!==draft.id)){journalStatus('未保存：この日には別の日記があります',true);return false;}
+    // Do not silently overwrite changes made in another tab after this editor opened.
+    if(JSON.stringify(existing||null)!==journalBase){journalStatus('未保存：別画面で変更されました。下書きを書き出し、保存済みを開き直してください',true);return false;}
+    draft.updated=Date.now();const at=list.findIndex(x=>x.id===draft.id);if(at<0)list.unshift(draft);else list[at]=draft;
+    if(!A.save('journal',list)){journalStatus('未保存：容量不足など。再試行か下書きの書き出しを',true);return false;}
+    journalDraft=draft;journalBase=JSON.stringify(draft);journalPending.delete(draft.id);journalStatus('保存済み · '+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}));return true;
+  }
+  function journalOpen(entry) {
+    const pending=journalPending.get(entry.id);journalDraft={...entry,...pending?.entry};journalBase=pending?pending.base:JSON.stringify(read('journal').find(x=>x.id===entry.id)||null);journalFocus=false;journalEditor();
+  }
+  function journalEditor() {
+    const entry=journalDraft;if(!entry)return journalApp();
+    journalShell(`<div class="jr-editor-top"><span class="jr-eyebrow">A MOMENT, ON PAPER</span>${journalButton('evJournalFocus',journalFocus?'集中を終了':'集中して書く','',`aria-pressed="${journalFocus}"`)}</div>
+      <div class="ev-editor-meta"><label>日付<input id="ev-journal-date" type="date" min="0001-01-01" max="9999-12-31" aria-label="日記の日付" value="${esc(entry.date)}"></label><span class="jr-local-label">ブラウザに自動保存</span></div>
+      <section class="jr-mood-picker" aria-label="今日の気分"><span>今の気分は？</span><div>${moods.slice().reverse().map(([id,label])=>journalButton('evJournalMood',`${journalMoodSvg(id)}<span>${label}</span>`,id,`aria-pressed="${String(entry.mood)===id}"`)).join('')}</div></section>
+      <details class="jr-details jr-inspiration"><summary>書くきっかけ</summary><div class="jr-prompt"><p id="jr-prompt-text">${journalPrompts[journalPrompt]}</p>${journalButton('evJournalNextPrompt','別の問い')}${journalButton('evJournalUsePrompt','本文に追加')}</div><div class="jr-template-buttons">${[['three','3行日記'],['gratitude','ありがとう'],['reflection','振り返り']].map(([id,label])=>journalButton('evJournalTemplate',label,id)).join('')}</div></details>
+      <div class="jr-paper"><div class="jr-paper-heading"><span>DEAR DIARY</span>${journalButton('evJournalFavorite','★','',`aria-label="お気に入り" aria-pressed="${!!entry.favorite}"`)}</div><input class="ev-editor-title" id="ev-journal-title" aria-label="タイトル" placeholder="今日のタイトル" maxlength="100" value="${esc(entry.title)}"><div class="ev-editor-toolbar">${journalButton('evJournalInsert','箇条書き','• ')}${journalButton('evJournalInsert','時刻',new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})+' ')}<span id="ev-journal-count">${Array.from(entry.body).length.toLocaleString()}字</span></div><textarea class="ev-journal-body" id="ev-journal-body" aria-label="日記の本文" placeholder="うまく書かなくても、大丈夫。" maxlength="12000">${esc(entry.body)}</textarea><div class="jr-writing-goal"><span>小さな目安 · 300字</span><meter id="jr-writing-progress" min="0" max="300" value="${Math.min(300,Array.from(entry.body).length)}">300字までの進捗</meter></div></div>
+      <label class="jr-tags-label" for="ev-journal-tags">タグ</label><input class="text-input" id="ev-journal-tags" aria-label="タグ" placeholder="散歩 読書 ひとり時間" maxlength="120" value="${esc(entry.tags||'')}"><div class="jr-save-line"><span id="ev-journal-status" role="status">${journalPending.has(entry.id)?'未保存の下書き':journalBase!=='null'?'保存済み':'本文かタイトルを入力すると自動保存'}</span>${journalButton('evJournalRetry','保存を再試行','','hidden')}</div><div class="jr-editor-actions">${journalButton('evJournalDraftExport','この日記を書き出す')}${journalButton('evJournalDiscard','保存済みを開き直す')}${journalButton('evJournalDelete','削除',entry.id,'class="jr-danger"')}</div>`,btn('evJournalHome','日記一覧に戻る','journal'),true);
+    for(const name of ['title','body','tags'])$('#ev-journal-'+name).oninput=journalSave;
+    $('#ev-journal-date').onchange=journalSave;
+    if(journalPending.has(entry.id))journalStatus('未保存：再試行するか、下書きを書き出してください',true);
+  }
+  A.actions.evJournalEdit=el=>{const list=journalRows(),x=list.find(x=>x.id===el?.dataset.id)||(!el?.dataset.id?list.find(x=>x.date===dateKey()):null);if(el?.dataset.id&&!x&&!journalPending.has(el.dataset.id))return A.toast('日記が見つかりません');journalOpen(x||journalPending.get(el?.dataset.id)?.entry||{id:A.id(),date:dateKey(),title:'',body:'',mood:'3',tags:'',favorite:false});};
+  A.actions.evJournalDay=el=>{if(!journalValidDate(el.dataset.id))return;const x=journalRows().find(x=>x.date===el.dataset.id)||[...journalPending.values()].find(x=>x.entry.date===el.dataset.id)?.entry;journalOpen(x||{id:A.id(),date:el.dataset.id,title:'',body:'',mood:'3',tags:'',favorite:false});};
+  A.actions.evJournalResume=el=>{const x=journalPending.get(el.dataset.id);if(x)journalOpen(x.entry);};
+  A.actions.evJournalRetry=journalSave;
+  A.actions.evJournalFocus=()=>{journalCapture();journalFocus=!journalFocus;$('.jr-editor').classList.toggle('jr-focused',journalFocus);const b=$('[data-action=evJournalFocus]');b.textContent=journalFocus?'集中を終了':'集中して書く';b.setAttribute('aria-pressed',String(journalFocus));$('#ev-journal-body').focus({preventScroll:true});};
+  A.actions.evJournalMood=el=>{if(!journalDraft||!['1','2','3','4','5'].includes(el.dataset.id))return;journalDraft.mood=el.dataset.id;document.querySelectorAll('[data-action=evJournalMood]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===el.dataset.id)));journalSave();};
+  A.actions.evJournalFavorite=()=>{if(!journalDraft)return;journalDraft.favorite=!journalDraft.favorite;$('[data-action=evJournalFavorite]')?.setAttribute('aria-pressed',String(journalDraft.favorite));journalSave();};
+  function journalInsert(text) {const body=$('#ev-journal-body');if(!body)return;const insertion=(body.selectionStart&&body.value[body.selectionStart-1]!=='\n'?'\n':'')+text;if(body.value.length-(body.selectionEnd-body.selectionStart)+insertion.length>body.maxLength)return A.toast('本文は12,000文字までです');body.setRangeText(insertion,body.selectionStart,body.selectionEnd,'end');body.dispatchEvent(new Event('input'));body.focus();}
+  A.actions.evJournalInsert=el=>journalInsert(el.dataset.id);
+  A.actions.evJournalNextPrompt=()=>{journalPrompt=(journalPrompt+1)%journalPrompts.length;$('#jr-prompt-text').textContent=journalPrompts[journalPrompt];};
+  A.actions.evJournalUsePrompt=()=>journalInsert(journalPrompts[journalPrompt]+'\n');
+  A.actions.evJournalTemplate=el=>{if(journalTemplates[el.dataset.id]){const body=$('#ev-journal-body');body.setSelectionRange(body.value.length,body.value.length);journalInsert(journalTemplates[el.dataset.id]);}};
+  const journalText=x=>`${x.date} · ${journalLabel(x.mood)}${x.favorite?' · お気に入り':''}\n${x.title}\n\n${x.body}${x.tags?'\n\n'+journalTags(x).map(t=>'#'+t).join(' '):''}`;
+  A.actions.evJournalDraftExport=()=>{journalCapture();if(journalDraft)exportText('aura-journal-'+(journalValidDate(journalDraft.date)?journalDraft.date:'draft')+'.txt',journalText(journalDraft));};
+  A.actions.evJournalDiscard=()=>{if(!journalDraft)return;const id=journalDraft.id;A.confirm('保存済みを開き直す？','未保存の編集は破棄します。必要なら先に日記を書き出してください。',()=>{journalPending.delete(id);const x=journalRows().find(x=>x.id===id);if(x)journalOpen(x);else journalApp();});};
+  A.actions.evJournalDelete=el=>{const id=el.dataset.id;A.confirm('この日記を削除？','直後の一覧で元に戻せます。復元できるのはこのタブで最後に削除した1件です。',()=>{const list=read('journal'),existing=list.find(x=>x.id===id),pending=journalPending.get(id)?.entry;if(!A.save('journal',list.filter(x=>x.id!==id)))return;journalDeleted=pending||existing||null;journalPending.delete(id);journalDraft=null;journalApp();});};
+  A.actions.evJournalUndoDelete=()=>{if(!journalDeleted)return;const list=read('journal');if(!journalValidDate(journalDeleted.date)||list.some(x=>x.id===journalDeleted.id||x.date===journalDeleted.date)){journalOpen(journalDeleted);journalStatus('日付を変更して保存してください',true);return;}if(A.save('journal',[journalDeleted,...list])){journalDeleted=null;journalApp();}};
+  A.actions.evJournalExport=()=>exportText('aura-journal.txt',journalRows().sort((a,b)=>a.date.localeCompare(b.date)).map(journalText).join('\n\n────────\n\n'));
+  A.actions.evJournalBackup=()=>{exportText('aura-journal-'+dateKey()+'.json',JSON.stringify({format:'aura-journal',version:1,exportedAt:new Date().toISOString(),entries:journalRows()},null,2),'application/json');};
+  A.actions.evJournalTools=()=>{A.overlay(`<div class="modal-sheet jr-tool-sheet">${A.overlayTitle('日記の道具')}<h3>用紙の色</h3><div class="jr-theme-options">${journalThemes.map(([id,label])=>journalButton('evJournalTheme',`<i class="jr-theme-${id}"></i>${label}`,id,`aria-pressed="${id===journalTheme}"`)).join('')}</div><h3>バックアップ</h3><p>保存済みの日記を書き出します。未保存の下書きは、各編集画面からテキスト保存してください。</p><div class="jr-tool-actions">${journalButton('evJournalExport','すべてをテキストで保存')}${journalButton('evJournalBackup','JSONバックアップを保存')}</div><label class="jr-file-label">JSONから読み込む<input id="jr-import" type="file" accept=".json,application/json"></label><p>2MB・2,000件まで。同じ日付・IDの記録はスキップし、既存の日記は上書きしません。</p><p id="jr-import-status" role="status"></p></div>`,'sheet-overlay');$('#jr-import').onchange=journalImport;};
+  A.actions.evJournalTheme=el=>{if(!journalThemes.some(([id])=>id===el.dataset.id)||!A.save('journalTheme',el.dataset.id))return;journalTheme=el.dataset.id;$('.jr-atelier')?.setAttribute('data-journal-theme',journalTheme);document.querySelectorAll('[data-action=evJournalTheme]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===journalTheme)));};
+  async function journalImport(event) {
+    const input=event.target,file=input.files?.[0],status=$('#jr-import-status');if(!file)return;
+    try {
+      if(file.size>2*1024*1024)throw Error('2MB以下のJSONを選んでください');
+      const data=JSON.parse(await file.text());if(!input.isConnected)return;
+      if(data?.format!=='aura-journal'||data.version!==1||!Array.isArray(data.entries)||data.entries.length>2000)throw Error('対応する日記バックアップではありません');
+      const incoming=data.entries.map(x=>{
+        if(!x||typeof x.id!=='string'||!x.id.length||x.id.length>200||!journalValidDate(x.date)||typeof x.title!=='string'||x.title.length>100||typeof x.body!=='string'||x.body.length>12000||typeof x.tags!=='string'||x.tags.length>120||!['1','2','3','4','5'].includes(String(x.mood))||typeof x.favorite!=='boolean')throw Error('形式・文字数が不正な記録があります。読込を中止しました');
+        return {id:x.id,date:x.date,title:x.title,body:x.body,tags:x.tags,mood:String(x.mood),favorite:x.favorite,updated:Number.isFinite(x.updated)&&x.updated>=0?x.updated:0};
+      });
+      A.confirm(`${incoming.length}件を確認しました`,'重複を除いた日記を追加します。既存の記録は変更しません。',()=>{const list=read('journal'),ids=new Set(list.map(x=>x.id)),dates=new Set(list.map(x=>x.date));for(const {entry} of journalPending.values()){ids.add(entry.id);dates.add(entry.date);}const added=[];for(const x of incoming){if(ids.has(x.id)||dates.has(x.date))continue;ids.add(x.id);dates.add(x.date);added.push(x);}if(!added.length)return A.toast('追加できる日記はありません（すべて重複）');if(A.save('journal',[...list,...added])){journalApp();A.toast(`${added.length}件追加 · ${incoming.length-added.length}件スキップ`);}});
+    } catch(error){if(input.isConnected){status.textContent=error instanceof SyntaxError?'JSONを読み取れませんでした':error.message;input.value='';}}
+  }
+  window.addEventListener('beforeunload',e=>{if(journalPending.size){e.preventDefault();e.returnValue='';}});
+
+  // Reading Atelier: existing records stay canonical; all artwork is local SVG.
+  let activeBook=null,readingQuery='',readingSort='recent',readingCategory='',readingLimit=36;
+  let readingLayout=A.load('readingLayout','shelf')==='list'?'list':'shelf',readingSvgId=0;
   const bookSessions=id=>read('readingSessions').filter(x=>x.bookId===id);
   const bookQuotes=id=>read('readingQuotes').filter(x=>x.bookId===id);
-  readingApp=function(){const list=read('reading'),finished=list.filter(x=>x.page>=x.total).length,year=String(new Date().getFullYear()),goal=A.load('readingGoal',12),annual=list.filter(x=>x.page>=x.total&&x.finishedAt?.startsWith(year)).length;page('reading',`<div class="ev-hero sand"><span>本棚</span><strong>${list.length}<small>冊</small></strong><span>読了 ${finished}冊</span></div><button class="ev-budget" data-action="evReadingGoal"><span>${year}年の目標</span><strong>${annual} / ${goal}冊</strong></button>${progress(annual/goal*100,'年間読書目標')}${chips([['all','すべて'],['planned','未読'],['reading','読書中'],['finished','読了']],readingFilter,'evReadingFilter')}<div class="ev-book-list">${list.filter(x=>readingFilter==='all'||(readingFilter==='finished'?x.page>=x.total:readingFilter==='planned'?x.page===0:x.page>0&&x.page<x.total)).map((x,i)=>`<article class="ev-card ev-book"><button class="ev-book-cover tone-${i%3}" data-action="evBookOpen" data-id="${x.id}" aria-label="${esc(x.title)}を開く">${A.icon('reading')}</button><div class="ev-grow"><button class="ev-plain" data-action="evBookOpen" data-id="${x.id}"><strong>${esc(x.title)}</strong><small>${esc(x.author)}${x.rating?' · '+'★'.repeat(x.rating):''}</small></button>${progress(x.page/x.total*100,x.title)}<button class="ev-book-progress" data-action="evBookProgress" data-id="${x.id}">${x.page} / ${x.total} ページ <span>›</span></button></div></article>`).join('')||empty('＋で本を追加')}</div>`,btn('evBookEdit','本を追加','plus'));};
+  const readingThemes=[['forest','深緑'],['ink','藍墨'],['clay','赤土'],['plum','葡萄'],['sand','砂丘'],['slate','青磁']];
+  const readingMotifs=[['botanical','植物'],['orbit','星図'],['landscape','山並み']];
+  const readingNormalize=value=>String(value||'').normalize('NFKC').toLowerCase().trim();
+  const readingNumber=(value,min,max)=>Number.isInteger(Number(value))&&Number(value)>=min&&Number(value)<=max;
+  const readingDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&value>='0001-01-01'&&dateKey(new Date(value+'T12:00:00'))===value;
+  const readingSum=(list,fn)=>list.reduce((n,x)=>n+(Number(fn(x))||0),0);
+  const readingStatus=x=>x.page>=x.total?'finished':x.page>0?'reading':'planned';
+  const readingStatusName=x=>({finished:'読了',reading:'読書中',planned:'未読'}[readingStatus(x)]);
+  const readingPercent=x=>Math.max(0,Math.min(100,Math.round(x.page/x.total*100)||0));
+  const readingButton=(action,label,id='',extra='')=>`<button type="button" class="rd-button" data-action="${action}" data-id="${esc(id)}" ${extra}>${label}</button>`;
+  const readingView=(html,actions='',back=false)=>A.view(A.nav('読書',actions,back?'evReadingHome':'',back?'本棚':'')+`<div class="app-content everyday ev-reading rd-atelier">${html}</div>`);
+  function readingTheme(x){return readingThemes.some(t=>t[0]===x.coverTheme)?x.coverTheme:readingThemes[Array.from(String(x.id||x.title)).reduce((n,c)=>n+c.charCodeAt(0),0)%readingThemes.length][0];}
+  function readingCover(x){
+    const id='rd-art-'+(++readingSvgId),motif=readingMotifs.some(t=>t[0]===x.coverMotif)?x.coverMotif:'botanical';
+    const art={
+      botanical:`<circle cx="90" cy="90" r="40"/><circle cx="90" cy="90" r="44" opacity=".3"/><path d="M89 126c-7-28 16-41 4-72m-4 61c-25 0-27-18-25-25 17 0 24 10 25 25Zm5-21c21-1 27-17 23-24-17 2-25 12-23 24Zm-1-17C72 76 70 63 73 54c16 1 23 12 20 23Z"/><path d="m66 94 21 16m11-19 16-17M77 58l13 16" opacity=".5"/>`,
+      orbit:`<circle cx="90" cy="89" r="37"/><ellipse cx="90" cy="89" rx="52" ry="17" transform="rotate(-33 90 89)"/><circle cx="90" cy="89" r="19"/><path d="M90 36v9m0 88v9M38 89h9m86 0h9M63 61l54 55m-54 0 54-55" opacity=".5"/><circle cx="126" cy="63" r="5" fill="currentColor"/><path d="m59 41 2 5 5 2-5 2-2 5-2-5-5-2 5-2Z"/>`,
+      landscape:`<path d="M43 121V87a47 47 0 0 1 94 0v34ZM43 110l31-39 30 39m-16-19 22-24 27 43M63 84l11 8 9-10M98 81l12 7 8-9"/><circle cx="91" cy="55" r="9"/><path d="M48 117h84m-79 6h74m-65 6h56" opacity=".5"/>`
+    }[motif];
+    return `<span class="rd-book-object rd-theme-${readingTheme(x)}" aria-hidden="true"><span class="rd-pages"></span><span class="rd-cover-face"><svg viewBox="0 0 180 250" focusable="false" aria-hidden="true"><defs><linearGradient id="${id}" x2="1" y2="1"><stop stop-color="#fff1b8"/><stop offset=".45" stop-color="#bd9459"/><stop offset=".7" stop-color="#f4dfa5"/><stop offset="1" stop-color="#b99152"/></linearGradient></defs><rect x="18" y="12" width="148" height="226" rx="2" fill="none" stroke="url(#${id})" opacity=".6"/><path d="M25 23h12m-12 0v12m129-12h-12m12 0v12M25 227h12m-12 0v-12m129 12h-12m12 0v-12" fill="none" stroke="url(#${id})"/><g fill="none" stroke="url(#${id})" stroke-width="1.3" color="#edcd91">${art}</g><path d="M63 207h54m-40 5h26" stroke="url(#${id})"/><circle cx="90" cy="225" r="2" fill="#d9b579"/></svg><span class="rd-cover-title">${esc(x.title||'あなたの一冊')}</span><span class="rd-cover-author">${esc(x.author||'READING ATELIER')}</span><span class="rd-book-ribbon"></span></span></span>`;
+  }
+  function readingScene(){
+    const id='rd-scene-'+(++readingSvgId);
+    return `<svg class="rd-scene" viewBox="0 0 340 205" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="${id}-paper" x2="0" y2="1"><stop stop-color="#fffbed"/><stop offset="1" stop-color="#cbbb95"/></linearGradient><linearGradient id="${id}-cover" x2="1" y2="1"><stop stop-color="#607c68"/><stop offset="1" stop-color="#203f35"/></linearGradient></defs><circle cx="236" cy="76" r="61" fill="#dac599" opacity=".13"/><path d="M192 115V65a43 43 0 0 1 86 0v50m-43-91v87m-40-45h80" stroke="#bda578" opacity=".4"/><ellipse cx="170" cy="177" rx="133" ry="13" fill="#1b332c" opacity=".13"/><g class="rd-scene-stack"><path d="m54 160 171-23 48 22-171 25Z" fill="#9d654e"/><path d="m57 151 166-20 46 21-167 24Z" fill="url(#${id}-paper)"/><path d="m52 148 172-23 50 23-173 25Z" fill="#b88767"/><path d="m71 133 161-15 26 14-160 21Z" fill="#243e35"/><path d="m72 125 159-14 25 14-158 20Z" fill="url(#${id}-paper)"/><path d="m67 122 165-16 29 17-165 22Z" fill="url(#${id}-cover)"/></g><g class="rd-scene-open"><path d="m58 103 104 34 116-29-24-42-92 18-74-20Z" fill="#28463c"/><path d="m65 99 97 32 109-27-24-39c-29-5-62 3-85 15-27-17-48-23-72-19Z" fill="url(#${id}-paper)"/><path d="m162 80 0 51m-68-65 60 22m-64-14 63 23m-66-15 67 23m-69-16 66 24m21-25 67-17m-64 25 68-17m-65 26 69-17m-66 25 68-17" stroke="#927f5e" stroke-width="1" opacity=".45"/><path d="m190 77 11-3 11 45-7-3-5 7Z" fill="#af654c"/></g><path d="M298 149c-12-23 0-39-2-62m0 42c-22-3-28-14-26-24 16 0 26 12 26 24Zm0-19c22-3 27-16 23-25-16 3-25 13-23 25Z" stroke="#6e8870" stroke-width="2"/><path d="M282 141h30l-5 30h-20Z" fill="#b8b199"/><g class="rd-scene-dust" fill="#dac599"><circle cx="55" cy="57" r="2"/><circle cx="170" cy="40" r="1.5"/><circle cx="293" cy="41" r="2"/><path d="M131 35v12m-6-6h12" stroke="#dac599"/></g></svg>`;
+  }
+  function readingPlan(x){
+    if(x.page>=x.total)return '最後のページまで、読了。';
+    if(!x.deadline||!readingDate(x.deadline))return '読了日を決めて、少しずつ。';
+    const days=Math.floor((Date.parse(x.deadline+'T00:00:00Z')-Date.parse(dateKey()+'T00:00:00Z'))/86400000)+1;
+    return days>0?`${x.deadline}まで · 1日 ${Math.ceil((x.total-x.page)/days)}ページ`:`目標日を過ぎています · 残り ${x.total-x.page}ページ`;
+  }
+  function readingWeek(){
+    const sessions=read('readingSessions'),days=Array.from({length:7},(_,i)=>daysAgo(6-i));
+    const values=days.map(date=>readingSum(sessions.filter(s=>s.date===date),s=>Math.max(0,s.to-s.from))),max=Math.max(1,...values);
+    return `<section class="rd-week"><header><span>この7日間</span><strong>${values.reduce((a,b)=>a+b,0)} <small>ページ</small></strong></header><div class="rd-week-bars">${days.map((date,i)=>`<div aria-label="${date}：${values[i]}ページ"><b>${values[i]}</b><span><i style="--rd-height:${values[i]/max*100}%"></i></span><small>${date.slice(5).replace('-','/')}</small></div>`).join('')}</div><p>「読書を記録」で保存したページ数</p></section>`;
+  }
+  function readingResults(){
+    const query=readingNormalize(readingQuery);
+    const list=read('reading').filter(x=>(readingFilter==='all'||(readingFilter==='favorite'?x.favorite:readingStatus(x)===readingFilter))&&(!readingCategory||x.category===readingCategory)&&readingNormalize([x.title,x.author,x.note,x.category].join(' ')).includes(query));
+    list.sort((a,b)=>readingSort==='title'?String(a.title).localeCompare(String(b.title),'ja'):readingSort==='progress'?readingPercent(b)-readingPercent(a):readingSort==='rating'?(b.rating||0)-(a.rating||0):readingSort==='deadline'?String(a.deadline||'9999').localeCompare(String(b.deadline||'9999')):String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')));
+    const root=$('#rd-results');if(!root)return;
+    $('#rd-result-count').textContent=`${list.length}冊${list.length>readingLimit?` · ${readingLimit}冊を表示`:''}`;
+    root.className='rd-library rd-layout-'+readingLayout;
+    root.innerHTML=list.slice(0,readingLimit).map((x,i)=>`<article class="rd-book-card" style="--rd-order:${Math.min(i,8)}"><div class="rd-book-stage"><button class="rd-cover-button" data-action="evBookOpen" data-id="${esc(x.id)}" aria-label="${esc(x.title)}を開く">${readingCover(x)}</button><button class="rd-favorite" data-action="rdFavorite" data-id="${esc(x.id)}" aria-label="${esc(x.title)}のお気に入り" aria-pressed="${!!x.favorite}">${A.icon('heart')}</button></div><div class="rd-book-info"><span class="rd-state">${readingStatusName(x)}${x.category?' / '+esc(x.category):''}</span><button class="rd-title-button" data-action="evBookOpen" data-id="${esc(x.id)}"><strong>${esc(x.title)}</strong><small>${esc(x.author||'著者未設定')}</small></button>${progress(readingPercent(x),x.title)}<button class="rd-progress-button" data-action="evBookProgress" data-id="${esc(x.id)}"><span>${x.page} / ${x.total} p.</span><b>${readingPercent(x)}%</b></button></div></article>`).join('')||`<div class="rd-empty">${readingScene()}<h3>${read('reading').length?'見つかりませんでした':'一冊から、はじまる。'}</h3><p>${read('reading').length?'検索条件や分類を変えてみてください。':'読みたい本も、読みかけの本も。'}</p>${readingButton(read('reading').length?'rdClear':'evBookEdit',read('reading').length?'絞り込みを解除':'最初の本を追加')}</div>`;
+    $('#rd-more').hidden=list.length<=readingLimit;
+  }
+  readingApp=function(){
+    activeBook=null;
+    const list=read('reading'),year=String(new Date().getFullYear()),goal=Math.max(1,Number(A.load('readingGoal',12))||12),annual=list.filter(x=>x.page>=x.total&&x.finishedAt?.startsWith(year)).length;
+    const current=list.filter(x=>x.page>0&&x.page<x.total).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')))[0];
+    const categories=[...new Set(list.map(x=>x.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
+    if(readingCategory&&!categories.includes(readingCategory))readingCategory='';
+    readingView(`<header class="rd-hero"><span class="rd-eyebrow">THE READING ATELIER</span><h1>ページの先に、<br>新しい世界。</h1><p>${list.length}冊の本棚 · ${list.filter(x=>x.page>=x.total).length}冊の読了</p>${readingScene()}${readingButton('evBookEdit','本を追加 ＋')}</header>
+      <div class="rd-goal"><button data-action="evReadingGoal"><span>${year} READING GOAL</span><strong>${annual}<small> / ${goal} 冊</small></strong><span>目標を変更 ›</span></button><svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><circle class="rd-ring-track" cx="32" cy="32" r="26"/><circle class="rd-ring-fill" cx="32" cy="32" r="26" pathLength="100" stroke-dasharray="${Math.min(100,annual/goal*100)} 100"/><path d="m23 32 6 6 13-14"/></svg></div>
+      ${current?`<button class="rd-resume" data-action="evBookOpen" data-id="${esc(current.id)}">${readingCover(current)}<span><small>CONTINUE READING</small><strong>${esc(current.title)}</strong><span>${current.page}ページの続きから</span></span>${A.icon('arrow')}</button>`:''}
+      <div class="rd-section-heading"><h2>私の本棚</h2><div class="rd-layout-control" aria-label="本棚の表示">${readingButton('rdLayout','棚','shelf',`aria-pressed="${readingLayout==='shelf'}"`)}${readingButton('rdLayout','一覧','list',`aria-pressed="${readingLayout==='list'}"`)}</div></div>
+      <label class="rd-search">${A.icon('search')}<input id="rd-search" type="search" maxlength="160" placeholder="書名・著者・メモを探す" aria-label="本棚を検索" value="${esc(readingQuery)}"></label>
+      ${chips([['all','すべて'],['planned','未読'],['reading','読書中'],['finished','読了'],['favorite','お気に入り']],readingFilter,'evReadingFilter')}
+      <div class="rd-filters"><label>分類<select id="rd-category"><option value="">すべて</option>${categories.map(c=>`<option value="${esc(c)}" ${c===readingCategory?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label>並び順<select id="rd-sort">${[['recent','更新順'],['title','書名順'],['progress','進捗順'],['rating','評価順'],['deadline','目標日順']].map(([v,t])=>`<option value="${v}" ${v===readingSort?'selected':''}>${t}</option>`).join('')}</select></label></div>
+      <p id="rd-result-count" class="rd-count" role="status"></p><div id="rd-results"></div>${readingButton('rdMore','さらに36冊を表示','','id="rd-more" hidden')}
+      ${readingWeek()}<div class="rd-footer-actions">${readingButton('frReading','月の集計・引用検索')}${readingButton('rdShelfExport','本棚を書き出す')}</div><p class="rd-local-note">このブラウザに保存 · 本文の配信・クラウド同期はありません</p>`,btn('evBookEdit','本を追加','plus'));
+    $('#rd-search').oninput=e=>{readingQuery=e.target.value;readingLimit=36;readingResults();};
+    $('#rd-category').onchange=e=>{readingCategory=e.target.value;readingLimit=36;readingResults();};
+    $('#rd-sort').onchange=e=>{readingSort=e.target.value;readingResults();};readingResults();
+  };
   A.apps.reading.render=readingApp;
-  A.actions.evReadingGoal=()=>A.form('年間読書目標',field('冊数','goal',A.load('readingGoal',12),'number','required min="1" max="1000" step="1"'),v=>{if(!A.save('readingGoal',Number(v.goal)))return false;readingApp();});
-  A.actions.evBookEdit=el=>{const x=read('reading').find(x=>x.id===el.dataset.id);A.form(x?'本を編集':'本を追加',field('書名','title',x?.title||'','text','required maxlength="160"')+field('著者','author',x?.author||'','text','maxlength="80"')+field('ページ数','total',x?.total||300,'number','required min="1" max="100000" step="1"')+area('読書メモ','note',x?.note||'')+(x?`<button type="button" class="ev-danger" data-action="evBookDelete" data-id="${x.id}">削除</button>`:''),v=>{if(!v.title.trim())return false;const total=Number(v.total),page=Math.min(x?.page||0,total);return upsert('reading',{...x,...v,id:x?.id||A.id(),total,page,finishedAt:page>=total?(x?.finishedAt||dateKey()):null},readingApp);});};
-  function bookDetail(){const x=read('reading').find(x=>x.id===activeBook);if(!x)return readingApp();const sessions=bookSessions(x.id),quotes=bookQuotes(x.id);page('reading',`<div class="ev-book-detail"><div class="ev-book-cover">${A.icon('reading')}</div><h1>${esc(x.title)}</h1><p>${esc(x.author)}</p><div class="ev-rating">${[1,2,3,4,5].map(n=>`<button data-action="evBookRate" data-id="${n}" aria-label="${n}つ星" aria-pressed="${n<=Number(x.rating||0)}">${n<=Number(x.rating||0)?'★':'☆'}</button>`).join('')}</div></div>${progress(x.page/x.total*100,x.title)}<div class="ev-book-detail-stats"><span>${x.page} / ${x.total}ページ</span><span>${sessions.reduce((s,x)=>s+x.minutes,0)}分</span></div><button class="primary-button ev-full" data-action="evReadingSession">読書を記録</button>${section('読書メモ',btn('evBookEdit','本を編集','edit',x.id))}<div class="ev-card ev-note-copy">${esc(x.note||'メモはありません')}</div>${section('引用',btn('evQuoteAdd','引用を追加','plus'))}${quotes.map(q=>`<blockquote class="ev-card ev-quote"><p>${esc(q.text)}</p><footer><span>${q.page?'p. '+q.page:''}</span>${btn('evQuoteDelete','引用を削除','trash',q.id)}</footer></blockquote>`).join('')||empty('残しておきたい一節を追加')}${section('読書の履歴')}<div class="ev-card">${sessions.slice(0,20).map(s=>`<div class="ev-row"><span class="ev-grow"><strong>${esc(s.date)}</strong><small>${s.from} → ${s.to}ページ</small></span><strong>${s.minutes}分</strong></div>`).join('')||empty('記録なし')}</div><button class="ev-text-button" data-action="evReadingHome">本棚に戻る</button>`,btn('evBookExport','読書記録を書き出す','download'));}
-  A.actions.evBookOpen=el=>{activeBook=el.dataset.id;bookDetail();};A.actions.evReadingHome=readingApp;
-  A.actions.evBookRate=el=>{const x=read('reading').find(x=>x.id===activeBook);if(x)upsert('reading',{...x,rating:x.rating===Number(el.dataset.id)?0:Number(el.dataset.id)},bookDetail);};
-  A.actions.evBookProgress=el=>{const x=read('reading').find(x=>x.id===el.dataset.id);if(x)A.form('読書の進捗',field('読んだページ','page',x.page,'number',`required min="0" max="${x.total}" step="1"`),v=>{const page=Number(v.page);return upsert('reading',{...x,page,finishedAt:page>=x.total?(x.finishedAt||dateKey()):null},readingApp);});};
-  A.actions.evReadingSession=()=>{const x=read('reading').find(x=>x.id===activeBook);if(!x)return;A.form('読書を記録',field('読んだページ','page',x.page,'number',`required min="${x.page}" max="${x.total}" step="1"`)+field('読書時間（分）','minutes',15,'number','required min="1" max="1440" step="1"'),v=>{const to=Number(v.page),session={id:A.id(),bookId:x.id,date:dateKey(),from:x.page,to,minutes:Number(v.minutes)},books=read('reading'),at=books.findIndex(b=>b.id===x.id),next={...x,page:to,finishedAt:to>=x.total?(x.finishedAt||dateKey()):null};books[at]=next;if(!A.saveBatch({readingSessions:[session,...read('readingSessions')],reading:books}))return false;bookDetail();});};
-  A.actions.evQuoteAdd=()=>A.form('引用を追加',area('引用','text')+field('ページ','page','','number','min="1" max="100000" step="1"'),v=>{if(!v.text.trim())return false;return upsert('readingQuotes',{id:A.id(),bookId:activeBook,text:v.text.trim(),page:v.page?Number(v.page):null},bookDetail);});
+  A.actions.evReadingHome=readingApp;
+  A.actions.evReadingFilter=el=>{readingFilter=el.dataset.id;readingLimit=36;readingApp();};
+  A.actions.rdClear=()=>{readingQuery='';readingCategory='';readingFilter='all';readingLimit=36;readingApp();};
+  A.actions.rdMore=()=>{readingLimit+=36;readingResults();};
+  A.actions.rdLayout=el=>{const layout=el.dataset.id==='list'?'list':'shelf';if(!A.save('readingLayout',layout))return;readingLayout=layout;readingApp();};
+  A.actions.evReadingGoal=()=>A.form('年間読書目標',field('今年読み終えたい冊数','goal',A.load('readingGoal',12),'number','required min="1" max="1000" step="1"'),v=>{if(!readingNumber(v.goal,1,1000))return false;if(!A.save('readingGoal',Number(v.goal)))return false;readingApp();});
+  A.actions.evBookEdit=el=>{
+    const x=read('reading').find(x=>x.id===el.dataset.id),returnToDetail=!!x&&activeBook===x.id;
+    A.form(x?'本を編集':'本を追加',field('書名','title',x?.title||'','text','required maxlength="160"')+field('著者','author',x?.author||'','text','maxlength="80"')+field('ページ数','total',x?.total||300,'number','required min="1" max="100000" step="1"')+field('分類（小説、仕事など）','category',x?.category||'','text','maxlength="30"')+select('装丁の色','coverTheme',readingThemes,x?readingTheme(x):'forest')+select('箔押しの柄','coverMotif',readingMotifs,x?.coverMotif||'botanical')+`<div id="rd-cover-preview" class="rd-cover-preview"></div>`+area('読書メモ','note',x?.note||'')+(x?`<button type="button" class="ev-danger" data-action="evBookDelete" data-id="${esc(x.id)}">この本を削除</button>`:''),v=>{
+      if(!v.title.trim()||!readingNumber(v.total,1,100000))return false;
+      const latest=x?read('reading').find(b=>b.id===x.id):null;if(x&&!latest){A.toast('この本は削除されています');return false;}
+      const total=Number(v.total),page=Math.min(latest?.page||0,total);
+      return upsert('reading',{...latest,...v,title:v.title.trim(),author:v.author.trim(),category:v.category.trim(),id:x?.id||A.id(),total,page,createdAt:latest?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),finishedAt:page>=total?(latest?.finishedAt||dateKey()):null},returnToDetail?bookDetail:readingApp);
+    });
+    const preview=()=>{$('#rd-cover-preview').innerHTML=readingCover({id:x?.id||'preview',title:$('#ev-title').value,author:$('#ev-author').value,coverTheme:$('#ev-coverTheme').value,coverMotif:$('#ev-coverMotif').value});};
+    ['title','author','coverTheme','coverMotif'].forEach(k=>$('#ev-'+k).addEventListener('input',preview));preview();
+  };
+  function bookDetail(){
+    const x=read('reading').find(x=>x.id===activeBook);if(!x)return readingApp();
+    const sessions=bookSessions(x.id).sort((a,b)=>String(b.date).localeCompare(String(a.date))),quotes=bookQuotes(x.id),marks=Array.isArray(x.bookmarks)?x.bookmarks:[];
+    const minutes=readingSum(sessions,s=>s.minutes),pages=readingSum(sessions,s=>Math.max(0,s.to-s.from)),estimate=pages>0&&minutes>0?Math.ceil(Math.max(0,x.total-x.page)*minutes/pages):null;
+    readingView(`<section class="rd-detail-hero"><div class="rd-detail-stage">${readingCover(x)}<span class="rd-stage-pedestal"></span></div><span class="rd-eyebrow">${readingStatusName(x)}${x.category?' / '+esc(x.category):''}</span><h1>${esc(x.title)}</h1><p>${esc(x.author||'著者未設定')}</p><div class="ev-rating">${[1,2,3,4,5].map(n=>`<button data-action="evBookRate" data-id="${n}" aria-label="${n}つ星${Number(x.rating)===n?'を解除':''}" aria-pressed="${n===Number(x.rating||0)}">${n<=Number(x.rating||0)?'★':'☆'}</button>`).join('')}</div><div class="rd-detail-actions">${readingButton('rdFavorite',x.favorite?'お気に入り済み':'お気に入り',x.id,`aria-pressed="${!!x.favorite}"`)}${readingButton('evBookEdit','編集',x.id)}</div></section>
+      <section class="rd-progress-panel"><header><span>読書の進捗</span><strong>${readingPercent(x)}<small>%</small></strong></header>${progress(readingPercent(x),x.title)}<div class="rd-progress-caption"><span>${x.page} / ${x.total} ページ</span>${readingButton('evBookProgress','修正',x.id)}</div><div class="rd-detail-metrics"><span><strong>${Math.max(0,x.total-x.page)}</strong>残りページ</span><span><strong>${minutes}</strong>記録した分数</span><span><strong>${estimate===null?'—':estimate}</strong>残り分数の目安</span></div>${readingButton('evReadingSession',x.page>=x.total?'読書時間を記録':'読書を記録','','class-placeholder=""')}<p class="rd-small">残り時間は保存した読書ペースからの推定です。</p></section>
+      <button class="rd-plan" data-action="rdDeadline" data-id="${esc(x.id)}">${A.icon('calendar')}<span><small>読了のプラン</small><strong>${esc(readingPlan(x))}</strong></span>${A.icon('arrow')}</button>
+      ${section('しおり',btn('rdBookmarkAdd','しおりを追加','plus'))}<div class="rd-bookmarks">${marks.length?marks.map(m=>`<div class="rd-bookmark"><span><b>p. ${m.page}</b><span>${esc(m.text||'しおり')}</span></span>${btn('rdBookmarkDelete','しおりを削除','trash',m.id)}</div>`).join(''):'<p class="rd-small">気になるページを、ひとことと一緒に。</p>'}</div>
+      ${section('読書メモ',btn('evBookEdit','メモを編集','edit',x.id))}<div class="rd-paper-note">${esc(x.note||'読んで感じたことを残しましょう。')}</div>
+      ${section('心に残った一節',btn('evQuoteAdd','引用を追加','plus'))}${quotes.slice(0,50).map(q=>`<blockquote class="rd-quote"><span class="rd-quote-glyph" aria-hidden="true">“</span><p>${esc(q.text)}</p><footer><span>${q.page?'p. '+q.page:'ページ未指定'}</span><span>${btn('rdQuoteEdit','引用を編集','edit',q.id)}${btn('evQuoteDelete','引用を削除','trash',q.id)}</span></footer></blockquote>`).join('')||'<p class="rd-small">残しておきたい言葉を引用に。</p>'}${quotes.length>50?'<p class="rd-small">最新50件を表示。全件は書き出しに含まれます。</p>':''}
+      <details class="rd-history" open><summary>読書の履歴 <span>${sessions.length}回</span></summary>${sessions.slice(0,30).map(s=>`<article><span class="rd-history-dot"></span><div><strong>${esc(s.date)} <small>${s.minutes}分</small></strong><p>${s.from} → ${s.to}ページ · ${Math.max(0,s.to-s.from)}ページ</p>${s.note?`<p>${esc(s.note)}</p>`:''}</div>${btn('rdSessionEdit','記録の日付・時間・メモを編集','edit',s.id)}${btn('rdSessionDelete','記録を削除','trash',s.id)}</article>`).join('')||'<p class="rd-small">記録はまだありません。</p>'}${sessions.length>30?'<p class="rd-small">最新30件を表示。全件は書き出しに含まれます。</p>':''}</details>
+      <div class="rd-footer-actions">${readingButton('evBookExport','この本の記録を保存')}${readingButton('evReadingHome','本棚に戻る')}</div>`,btn('evBookExport','読書記録を書き出す','download'),true);
+  }
+  A.actions.evBookOpen=el=>{activeBook=el.dataset.id;bookDetail();};
+  A.actions.rdFavorite=el=>{const x=read('reading').find(x=>x.id===el.dataset.id);if(x)upsert('reading',{...x,favorite:!x.favorite},activeBook===x.id?bookDetail:readingResults);};
+  A.actions.evBookRate=el=>{const x=read('reading').find(x=>x.id===activeBook),n=Number(el.dataset.id);if(x&&readingNumber(n,1,5))upsert('reading',{...x,rating:x.rating===n?0:n},bookDetail);};
+  A.actions.evBookProgress=el=>{
+    const x=read('reading').find(x=>x.id===el.dataset.id);if(!x)return;
+    A.form('読書の進捗を修正',field('読み終えたページ','page',x.page,'number',`required min="0" max="${x.total}" step="1"`)+'<p class="rd-small">進捗のみ変更します。読書の履歴・週間集計には追加されません。</p>',v=>{
+      const latest=read('reading').find(b=>b.id===x.id);if(!latest||!readingNumber(v.page,0,latest.total))return false;
+      const page=Number(v.page);return upsert('reading',{...latest,page,updatedAt:new Date().toISOString(),finishedAt:page>=latest.total?(latest.finishedAt||dateKey()):null},activeBook===x.id?bookDetail:readingApp);
+    });
+  };
+  A.actions.rdDeadline=el=>{
+    const x=read('reading').find(b=>b.id===el.dataset.id);if(!x)return;
+    A.form('読了のプラン',field('読み終えたい日（空欄で解除）','deadline',x.deadline||'','date'),v=>{
+      if(v.deadline&&!readingDate(v.deadline))return false;
+      const latest=read('reading').find(b=>b.id===x.id);if(!latest)return false;
+      return upsert('reading',{...latest,deadline:v.deadline},bookDetail);
+    });
+  };
+  A.actions.evReadingSession=()=>{
+    const x=read('reading').find(b=>b.id===activeBook);if(!x)return;
+    A.form('読書を記録',field('読んだ日','date',dateKey(),'date',`required max="${dateKey()}"`)+field('読み終えたページ','page',x.page,'number',`required min="${x.page}" max="${x.total}" step="1"`)+`<div class="rd-page-presets">${[10,25,50].map(n=>readingButton('rdSessionPages','＋'+n+'ページ',String(n))).join('')}${readingButton('rdSessionPages','最後まで','end')}</div>`+field('読書時間（分）','minutes',15,'number','required min="1" max="1440" step="1"')+field('ひとこと','note','','text','maxlength="300"'),v=>{
+      const books=read('reading'),at=books.findIndex(b=>b.id===x.id),latest=books[at];
+      if(!latest)return false;
+      if(latest.page!==x.page){A.toast('進捗が変更されました。閉じて記録し直してください');return false;}
+      if(!readingNumber(v.page,latest.page,latest.total)||!readingNumber(v.minutes,1,1440)||!readingDate(v.date)||v.date>dateKey())return false;
+      const to=Number(v.page),finished=to>=latest.total&&latest.page<latest.total;
+      const session={id:A.id(),bookId:x.id,date:v.date,from:latest.page,to,minutes:Number(v.minutes),note:v.note.trim()};
+      books[at]={...latest,page:to,updatedAt:new Date().toISOString(),finishedAt:to>=latest.total?(latest.finishedAt||v.date):null};
+      if(!A.saveBatch({readingSessions:[session,...read('readingSessions')],reading:books}))return false;
+      bookDetail();if(finished){$('.rd-detail-hero')?.classList.add('rd-completed');A.toast('読了おめでとうございます');}else A.toast('読書を記録しました');
+    });
+  };
+  A.actions.rdSessionPages=el=>{const input=$('#ev-page');if(input)input.value=el.dataset.id==='end'?input.max:Math.min(Number(input.max),Number(input.value)+Number(el.dataset.id));};
+  A.actions.rdSessionEdit=el=>{
+    const s=read('readingSessions').find(s=>s.id===el.dataset.id&&s.bookId===activeBook);if(!s)return;
+    A.form('読書の記録を編集',field('読んだ日','date',s.date,'date',`required max="${dateKey()}"`)+field('時間（分）','minutes',s.minutes,'number','required min="1" max="1440" step="1"')+field('ひとこと','note',s.note||'','text','maxlength="300"')+'<p class="rd-small">記録のページ範囲と本の進捗・読了日は変更しません。</p>',v=>{
+      if(!readingDate(v.date)||v.date>dateKey()||!readingNumber(v.minutes,1,1440))return false;
+      const latest=read('readingSessions').find(r=>r.id===s.id);if(!latest)return false;
+      return upsert('readingSessions',{...latest,date:v.date,minutes:Number(v.minutes),note:v.note.trim()},bookDetail);
+    });
+  };
+  A.actions.rdSessionDelete=el=>A.confirm('この記録を削除？','集計から除外します。本の進捗・読了日は変わりません。',()=>saveList('readingSessions',read('readingSessions').filter(s=>s.id!==el.dataset.id||s.bookId!==activeBook),bookDetail));
+  function readingQuoteEditor(id){
+    const x=read('reading').find(b=>b.id===activeBook);if(!x)return;
+    const quote=bookQuotes(x.id).find(q=>q.id===id);
+    A.form(quote?'引用を編集':'引用を追加',area('引用','text',quote?.text||'')+field('ページ（省略可）','page',quote?.page||'','number','min="1" max="100000" step="1"'),v=>{
+      if(!v.text.trim()||(v.page&&!readingNumber(v.page,1,100000))||!read('reading').some(b=>b.id===x.id))return false;
+      if(quote&&!bookQuotes(x.id).some(q=>q.id===quote.id))return false;
+      return upsert('readingQuotes',{...quote,id:quote?.id||A.id(),bookId:x.id,text:v.text.trim(),page:v.page?Number(v.page):null},bookDetail);
+    });
+  }
+  A.actions.evQuoteAdd=()=>readingQuoteEditor();
+  A.actions.rdQuoteEdit=el=>readingQuoteEditor(el.dataset.id);
   A.actions.evQuoteDelete=el=>remove('readingQuotes',el.dataset.id,bookDetail);
-  A.actions.evBookDelete=el=>A.confirm('本を削除？','読書の履歴と引用も削除します。',()=>{const id=el.dataset.id;if(A.saveBatch({reading:read('reading').filter(x=>x.id!==id),readingSessions:read('readingSessions').filter(x=>x.bookId!==id),readingQuotes:read('readingQuotes').filter(x=>x.bookId!==id)}))readingApp();});
-  A.actions.evBookExport=()=>{const x=read('reading').find(x=>x.id===activeBook);if(!x)return;const sessions=bookSessions(x.id);exportText('読書記録.txt',[x.title,x.author,x.page+'/'+x.total+'ページ','★'.repeat(x.rating||0),'',x.note||'','','引用',...bookQuotes(x.id).map(q=>q.text+'\n'+(q.page?'p. '+q.page:'')),'','読書の履歴',...sessions.map(s=>s.date+' · '+s.from+' → '+s.to+'ページ · '+s.minutes+'分'),'合計 '+sessions.reduce((n,s)=>n+s.minutes,0)+'分'].join('\n'));};
+  A.actions.rdBookmarkAdd=()=>{
+    const x=read('reading').find(b=>b.id===activeBook);if(!x)return;
+    A.form('しおりを追加',field('ページ','page',Math.max(1,x.page),'number',`required min="1" max="${x.total}" step="1"`)+field('ひとこと','text','','text','maxlength="120"'),v=>{
+      const latest=read('reading').find(b=>b.id===x.id);if(!latest||!readingNumber(v.page,1,latest.total))return false;
+      const marks=Array.isArray(latest.bookmarks)?latest.bookmarks:[];
+      if(marks.length>=100){A.toast('しおりは1冊100件までです');return false;}
+      return upsert('reading',{...latest,bookmarks:[...marks,{id:A.id(),page:Number(v.page),text:v.text.trim()}].sort((a,b)=>a.page-b.page)},bookDetail);
+    });
+  };
+  A.actions.rdBookmarkDelete=el=>A.confirm('しおりを削除？','本の進捗は変わりません。',()=>{const x=read('reading').find(b=>b.id===activeBook);if(x)upsert('reading',{...x,bookmarks:(x.bookmarks||[]).filter(m=>m.id!==el.dataset.id)},bookDetail);});
+  A.actions.evBookDelete=el=>A.confirm('本を削除？','読書の履歴・引用・しおりも削除します。この操作は取り消せません。',()=>{
+    const id=el.dataset.id;if(A.saveBatch({reading:read('reading').filter(x=>x.id!==id),readingSessions:read('readingSessions').filter(x=>x.bookId!==id),readingQuotes:read('readingQuotes').filter(x=>x.bookId!==id)}))readingApp();
+  });
+  A.actions.evBookExport=()=>{
+    const x=read('reading').find(x=>x.id===activeBook);if(!x)return;
+    const sessions=bookSessions(x.id);
+    exportText('読書記録.txt',[x.title,x.author,x.category||'',x.page+'/'+x.total+'ページ','★'.repeat(Math.min(5,Math.max(0,x.rating||0))),x.deadline?'読了目標 '+x.deadline:'',x.finishedAt?'読了日 '+x.finishedAt:'','',x.note||'','','しおり',...(x.bookmarks||[]).map(m=>'p. '+m.page+' '+m.text),'','引用',...bookQuotes(x.id).map(q=>q.text+'\n'+(q.page?'p. '+q.page:'')),'','読書の履歴',...sessions.map(s=>s.date+' · '+s.from+' → '+s.to+'ページ · '+s.minutes+'分'+(s.note?'\n'+s.note:'')),'合計 '+readingSum(sessions,s=>s.minutes)+'分'].join('\n'));
+  };
+  A.actions.rdShelfExport=()=>exportText('reading_atelier_'+dateKey()+'.json',JSON.stringify({app:'aura-reading',version:1,exportedAt:new Date().toISOString(),reading:read('reading'),readingSessions:read('readingSessions'),readingQuotes:read('readingQuotes'),readingGoal:A.load('readingGoal',12)},null,2),'application/json');
 
   // Personal focus durations, a daily goal, and named session history.
   const focusPreferences = () => ({work:25,rest:5,goal:120,...A.load('focusPreferences',{})});

@@ -1,22 +1,215 @@
 'use strict';
 (() => {
 const A=window.Aura,$=A.$,esc=A.escape,icon=A.icon;
-// Photos and camera: samples are remote; imported/captured photos stay local.
-const samplePhotos=[['lake','静かな湖'],['coffee','午後のコーヒー'],['mountain','山の稜線'],['flower','季節の花'],['sea','波の音'],['forest','木漏れ日'],['city','夜の街'],['desert','砂のかたち'],['interior','穏やかな部屋']].map(([key,title],i)=>({id:'sample-'+key,url:A.images[key],title,date:Date.now()-i*86400000,sample:true}));
-let userPhotos=A.load('photos',[]),favorites=A.load('photoFavorites',[]),photoFilter='all',currentPhoto=null;
-const allPhotos=()=>[...userPhotos,...samplePhotos];
-const albumPhotos=()=>allPhotos().filter(p=>photoFilter==='favorites'?favorites.includes(p.id):photoFilter==='mine'?!p.sample:true);
-const photoTabs=()=>A.tabs([{id:'all',icon:'photos',name:'ライブラリ',action:'photoFilter',value:'all'},{id:'favorites',icon:'heart',name:'お気に入り',action:'photoFilter',value:'favorites'},{id:'mine',icon:'camera',name:'自分の写真',action:'photoFilter',value:'mine'}],photoFilter);
-function photos(){A.statusTheme(false);A.view(A.nav('写真',`<button data-action="photoImport" aria-label="写真を追加">${icon('plus')}</button>`)+`<div class="app-content"><h1 class="app-title">${photoFilter==='favorites'?'お気に入り':photoFilter==='mine'?'自分の写真':'写真'}</h1>${photoFilter==='all'?`<button class="photo-featured" data-action="photoOpen" data-id="sample-lake"><img src="${A.images.lake}" alt="山々に囲まれた湖"></button><p class="section-label">すべての写真 · ${allPhotos().length}枚</p>`:''}<div class="photo-grid">${albumPhotos().map(p=>`<button class="photo-tile" data-action="photoOpen" data-id="${p.id}" aria-label="${esc(p.title)}"><img src="${p.url}" alt="${esc(p.title)}" loading="lazy"></button>`).join('')}</div>${photoFilter==='mine'&&!userPhotos.length?A.empty('＋で写真を追加','camera'):photoFilter==='favorites'&&!favorites.length?A.empty('お気に入りなし','heart'):''}<p class="notes-footer">${photoFilter==='mine'?'写真は端末内に保存':'サンプル：Unsplash'}</p></div>`+photoTabs());}
-A.apps.photos.render=photos;A.actions.photosHome=photos;A.actions.photoFilter=el=>{photoFilter=el.dataset.value;photos();};
-function viewPhoto(id){const p=allPhotos().find(p=>p.id===id);if(!p)return;currentPhoto=id;A.statusTheme(true);A.view(A.nav(esc(p.title),'','photosHome','写真')+`<div class="photo-viewer"><img src="${p.url}" alt="${esc(p.title)}"></div><div class="photo-toolbar"><button data-action="photoPrevious" aria-label="前の写真">${icon('previous')}</button><button data-action="photoShare" aria-label="写真を共有">${icon('share')}</button><button data-action="photoDownload" aria-label="写真をダウンロード">${icon('download')}</button><button class="${favorites.includes(id)?'liked':''}" data-action="photoFavorite" aria-label="お気に入り" aria-pressed="${favorites.includes(id)}">${icon('heart',favorites.includes(id)?'style="fill:currentColor"':'')}</button><button data-action="photoNext" aria-label="次の写真">${icon('next')}</button>${!p.sample?`<button data-action="photoDelete" aria-label="削除">${icon('trash')}</button>`:''}</div>`);}
-A.actions.photoOpen=el=>viewPhoto(el.dataset.id);A.actions.photoFavorite=()=>{const next=favorites.includes(currentPhoto)?favorites.filter(x=>x!==currentPhoto):[...favorites,currentPhoto];if(!A.save('photoFavorites',next))return;favorites=next;viewPhoto(currentPhoto);};
-const movePhoto=step=>{const list=albumPhotos();if(!list.length)return photos();const index=list.findIndex(p=>p.id===currentPhoto),next=index<0?(step>0?0:list.length-1):(index+step+list.length)%list.length;viewPhoto(list[next].id);};A.actions.photoPrevious=()=>movePhoto(-1);A.actions.photoNext=()=>movePhoto(1);
-A.actions.photoDelete=()=>A.confirm('写真を削除','このブラウザに保存された写真を削除します。',()=>{const next=userPhotos.filter(p=>p.id!==currentPhoto),nextFavorites=favorites.filter(id=>id!==currentPhoto);if(!A.save('photoFavorites',nextFavorites))return;if(!A.save('photos',next)){A.save('photoFavorites',favorites);return;}userPhotos=next;favorites=nextFavorites;photos();});
-A.actions.photoShare=async()=>{const root=$('.photo-viewer'),p=allPhotos().find(p=>p.id===currentPhoto);if(!root||!p)return A.toast('先に共有する写真を開いてください');A.toast('共有する写真を準備中…');try{const response=await fetch(p.url,{signal:AbortSignal.timeout(15000),credentials:'omit'});if(!response.ok)throw Error();const blob=await response.blob();if(A.current==='photos'&&root.isConnected)A.network.offerFile(blob,`aura-${p.id}.jpg`);}catch{A.toast('写真を取得できません。通信を確認。');}};
-A.actions.photoDownload=async()=>{const p=allPhotos().find(p=>p.id===currentPhoto);try{const r=await fetch(p.url);if(!r.ok)throw Error();A.download(await r.blob(),`aura-${p.id}.jpg`);A.toast('写真のダウンロードを開始済み');}catch{A.toast('画像を取得できません。通信を確認。');}};
-A.storePhoto=(url,title)=>{const entry={id:A.id(),url,title,date:Date.now(),sample:false};const next=[entry,...userPhotos];if(A.save('photos',next)){userPhotos=next;return true;}return false;};
-A.actions.photoImport=()=>{const input=document.createElement('input');input.type='file';input.accept='image/*';input.onchange=()=>{const file=input.files[0];if(!file)return;if(file.size>25*1024*1024)return A.toast('25MB以下の写真を選択');const url=URL.createObjectURL(file),img=new Image();img.onload=()=>{const canvas=document.createElement('canvas'),scale=Math.min(1,1200/Math.max(img.width,img.height));canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);const ok=A.storePhoto(canvas.toDataURL('image/jpeg',.82),file.name.replace(/\.[^.]+$/,''));URL.revokeObjectURL(url);if(ok){if(A.current==='photos')photos();A.toast('写真を追加済み');}};img.onerror=()=>{URL.revokeObjectURL(url);A.toast('この画像形式は読み込めませんでした');};img.src=url;};input.click();};
+// Photo Atelier. Originals retain the existing localStorage schema; no cloud upload.
+const samplePhotos=[['lake','静かな湖'],['coffee','午後のコーヒー'],['mountain','山の稜線'],['flower','季節の花'],['sea','波の音'],['forest','木漏れ日'],['city','夜の街'],['desert','砂のかたち'],['interior','穏やかな部屋']].map(([key,title])=>({id:'sample-'+key,url:A.images[key],title,date:0,sample:true}));
+const photoArray=key=>{const v=A.load(key,[]);return Array.isArray(v)?v:[];};
+let userPhotos=photoArray('photos'),favorites=photoArray('photoFavorites');
+let photoFilter='all',currentPhoto=null,photoQuery='',photoSort='new',photoAlbum='',photoLayout='gallery';
+let photoSelecting=false,photoSelected=new Set(),photoPlaying=false,photoZoom=1,photoEditor=null,photoImporting=false;
+let photoDisposers=[],photoArtSerial=0;
+const photoValid=p=>p&&typeof p.id==='string'&&typeof p.url==='string'&&/^data:image\/(jpeg|jpg|png|webp|gif|avif);base64,/i.test(p.url);
+const refreshPhotos=()=>{userPhotos=photoArray('photos');favorites=photoArray('photoFavorites').filter(id=>typeof id==='string');};
+const localPhotos=()=>userPhotos.filter(photoValid);
+const allPhotos=()=>[...localPhotos().filter(p=>!p.deletedAt),...samplePhotos];
+const findPhoto=id=>[...localPhotos(),...samplePhotos].find(p=>p.id===id);
+const photoTitle=p=>String(p.title||'無題の写真');
+const photoDate=p=>p.sample?'サンプル':new Date(Number(p.date)||0).toLocaleDateString('ja-JP',{year:'numeric',month:'short',day:'numeric'});
+const photoAlbums=()=>[...new Set(localPhotos().filter(p=>!p.deletedAt&&p.album).map(p=>String(p.album)))].sort((a,b)=>a.localeCompare(b,'ja'));
+const albumPhotos=()=>{
+  const list=photoFilter==='trash'?localPhotos().filter(p=>p.deletedAt):allPhotos().filter(p=>photoFilter==='favorites'?favorites.includes(p.id):photoFilter==='mine'?!p.sample:true);
+  const q=photoQuery.trim().toLocaleLowerCase();
+  return list.filter(p=>(!photoAlbum||p.album===photoAlbum)&&(!q||[photoTitle(p),p.caption||'',p.album||'',p.sample?'サンプル':''].join(' ').toLocaleLowerCase().includes(q))).sort((a,b)=>photoSort==='name'?photoTitle(a).localeCompare(photoTitle(b),'ja'):photoSort==='old'?(a.date||0)-(b.date||0):(b.date||0)-(a.date||0));
+};
+const photoButton=(action,label,glyph,extra='')=>`<button data-action="${action}" aria-label="${label}" title="${label}" ${extra}>${icon(glyph)}<span>${label}</span></button>`;
+function photoArt(){
+  const id='pa-'+(++photoArtSerial);
+  return `<svg class="pa-art" viewBox="0 0 240 200" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="${id}-paper" x2="1" y2="1"><stop stop-color="#fffdf5"/><stop offset="1" stop-color="#cbc4b6"/></linearGradient><linearGradient id="${id}-sky" x2="0" y2="1"><stop stop-color="#88aab1"/><stop offset="1" stop-color="#e2c5a1"/></linearGradient><linearGradient id="${id}-lake" x2="1" y2="1"><stop stop-color="#688e84"/><stop offset="1" stop-color="#183f43"/></linearGradient><radialGradient id="${id}-lens"><stop stop-color="#acc6c6"/><stop offset=".4" stop-color="#375265"/><stop offset=".65" stop-color="#192b36"/><stop offset=".85" stop-color="#697e81"/><stop offset="1" stop-color="#20343e"/></radialGradient></defs><ellipse cx="126" cy="178" rx="89" ry="12" fill="#173730" opacity=".15"/><g class="pa-art-back" transform="rotate(-15 119 98)"><rect x="51" y="28" width="136" height="146" rx="7" fill="#c8a98e" stroke="#fff4d9"/><rect x="59" y="36" width="120" height="104" rx="2" fill="#8eaaa1"/><path d="m59 110 39-53 35 53 21-26 25 31v25H59Z" fill="#526e66"/></g><g class="pa-art-front" transform="rotate(8 130 107)"><rect x="69" y="37" width="133" height="144" rx="6" fill="url(#${id}-paper)" stroke="#fffdf0"/><path d="M78 46h115v102H78Z" fill="url(#${id}-sky)"/><circle cx="165" cy="69" r="14" fill="#fce4b6"/><path d="m78 112 34-44 38 40 20-20 23 34v26H78Z" fill="#647e7d"/><path d="m112 68 15 37-16-9-14 10Z" fill="#d7ded4"/><path d="M78 121c40-26 63 20 115-8v35H78Z" fill="url(#${id}-lake)"/><path d="M91 131h33m19 7h32m-56 5h19" stroke="#e1e4c5" opacity=".6"/><path d="M81 160h42m7 0h12" stroke="#a49b89" stroke-width="2" stroke-linecap="round"/><circle cx="182" cy="163" r="5" stroke="#bdab85"/></g><g class="pa-art-lens"><circle cx="64" cy="141" r="30" fill="#b8c2b9" stroke="#e8e8d4" stroke-width="3"/><circle cx="64" cy="141" r="24" fill="url(#${id}-lens)"/><path d="m64 121 17 10v20l-17 10-17-10v-20Z" stroke="#b7d3cf" opacity=".6"/><path d="m64 121-6 19 23-9m0 20-20-6 3 16m-17-10 14-6-14-14" stroke="#b7d3cf" opacity=".4"/><circle cx="70" cy="132" r="5" fill="#fff" opacity=".32"/></g><g stroke="#c6ad78" stroke-linecap="round"><path d="M34 55v12m-6-6h12M210 114v10m-5-5h10"/><circle cx="204" cy="34" r="3"/></g></svg>`;
+}
+function photoDispose(){photoDisposers.splice(0).forEach(fn=>fn());}
+function photoExit(){photoDispose();photoPlaying=false;photoEditor=null;photoSelected.clear();photoSelecting=false;}
+function photoMount(html,mode){
+  photoDispose();A.view(html);$('#app-screen').dataset.photoMode=mode;
+  if(!A.cleanups.includes(photoExit))A.cleanups.push(photoExit);
+  const key=e=>{
+    if(A.current!=='photos'||!$('#overlay').hidden||e.isComposing||e.ctrlKey||e.metaKey||e.altKey||e.target.closest('input,select,textarea,[contenteditable]')||A.settings.keyboardShortcuts===false)return;
+    if(mode==='viewer'&&['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();movePhoto(e.key==='ArrowLeft'?-1:1);}
+  };
+  document.addEventListener('keydown',key);photoDisposers.push(()=>document.removeEventListener('keydown',key));
+  photoImageFallback($('#app-screen'));
+}
+function photoImageFallback(root){
+  root.querySelectorAll('img').forEach(img=>{img.addEventListener('error',()=>{img.hidden=true;img.parentElement.classList.add('pa-image-failed');img.parentElement.title='画像を読み込めません。通信状態を確認してください';});});
+}
+const photoTabs=()=>A.tabs([{id:'all',icon:'photos',name:'ライブラリ',action:'photoFilter',value:'all'},{id:'mine',icon:'camera',name:'自分の写真',action:'photoFilter',value:'mine'},{id:'favorites',icon:'heart',name:'お気に入り',action:'photoFilter',value:'favorites'},{id:'trash',icon:'trash',name:'ゴミ箱',action:'photoFilter',value:'trash'}],photoFilter);
+function photos(){
+  refreshPhotos();photoPlaying=false;photoEditor=null;currentPhoto=null;A.statusTheme(false);
+  const albums=photoAlbums();if(photoAlbum&&!albums.includes(photoAlbum))photoAlbum='';
+  const own=localPhotos().filter(p=>!p.deletedAt),hero=own[0]||samplePhotos[0];
+  photoMount(A.nav('Photo Atelier',`<button data-action="photoImport" aria-label="写真を追加">${icon('plus')}</button>`)+`<div class="app-content pa-library"><header class="pa-heading"><div><span class="pa-eyebrow">AURA / PHOTO ATELIER</span><h1>光を、集める。</h1><p>何気ない一瞬を、あなたの一枚に。</p></div>${photoArt()}</header><div class="pa-collection"><button class="pa-cover" data-action="photoOpen" data-id="${esc(hero.id)}"><img src="${esc(hero.url)}" alt="${esc(photoTitle(hero))}"><span class="pa-cover-copy"><small>${hero.sample?'SAMPLE COLLECTION':'YOUR COLLECTION'}</small><strong>${hero.sample?'光と余白':esc(photoTitle(hero))}</strong><span>${hero.sample?'Unsplash のサンプル':'自分の写真 '+own.length+'枚'} ${icon('arrow')}</span></span><span class="pa-cover-stamp">a / 01</span></button></div><div class="pa-stats"><span><b>${own.length}</b> 自分の写真</span><span><b>${allPhotos().filter(p=>favorites.includes(p.id)).length}</b> お気に入り</span><span><b>${albums.length}</b> アルバム</span></div>${A.search('pa-search','写真名・メモ・アルバムで検索')}<div class="pa-controls"><label><span class="pa-sr">並べ替え</span><select id="pa-sort"><option value="new" ${photoSort==='new'?'selected':''}>新しい順</option><option value="old" ${photoSort==='old'?'selected':''}>古い順</option><option value="name" ${photoSort==='name'?'selected':''}>名前順</option></select></label><button data-action="photoLayout" aria-label="グリッド表示を切り替え" aria-pressed="${photoLayout==='compact'}">${icon('grid')}</button><button data-action="photoSelectMode" aria-pressed="${photoSelecting}">${photoSelecting?'完了':'選択'}</button><button data-action="photoSlideshow" aria-label="表示中の写真でスライドショー">${icon('play')}</button></div><label class="pa-album-filter">${icon('folder')}<select id="pa-album" aria-label="アルバムで絞り込む"><option value="">すべてのアルバム</option>${albums.map(name=>`<option value="${esc(name)}" ${photoAlbum===name?'selected':''}>${esc(name)}</option>`).join('')}</select></label><div class="pa-section-head"><h2>${{all:'ライブラリ',mine:'自分の写真',favorites:'お気に入り',trash:'ゴミ箱'}[photoFilter]}</h2><span id="pa-count" role="status"></span></div>${photoFilter==='trash'?'<p class="pa-note">自動消去はしません。完全削除するまで保存容量に含まれます。</p>':''}<div id="pa-selection"></div><div id="pa-grid" class="pa-grid"></div><p class="pa-note pa-footer">端末内に保存 · クラウド同期なし<br>サンプルは通信が必要です。撮影日・位置の推測はしません。</p><div id="pa-import-status" class="pa-note" role="status">${photoImporting?'写真を読み込み中…':''}</div></div>`+photoTabs(),'library');
+  const input=$('#pa-search');input.value=photoQuery;input.oninput=()=>{photoQuery=input.value;photoSelected.clear();renderPhotoGrid();};
+  $('#pa-sort').onchange=e=>{photoSort=e.target.value;renderPhotoGrid();};
+  $('#pa-album').onchange=e=>{photoAlbum=e.target.value;photoSelected.clear();renderPhotoGrid();};renderPhotoGrid();
+}
+function renderPhotoGrid(){
+  const grid=$('#pa-grid');if(!grid)return;const list=albumPhotos(),ids=new Set(list.map(p=>p.id));photoSelected=new Set([...photoSelected].filter(id=>ids.has(id)));
+  grid.className='pa-grid '+(photoLayout==='compact'?'pa-compact':'');$('#pa-count').textContent=list.length+'枚';
+  grid.innerHTML=list.length?list.map((p,i)=>`<button class="pa-tile ${photoSelected.has(p.id)?'is-selected':''}" data-action="${photoSelecting?'photoToggleSelect':'photoOpen'}" data-id="${esc(p.id)}" aria-label="${esc(photoTitle(p))}${photoSelecting?'を選択':''}" ${photoSelecting?`aria-pressed="${photoSelected.has(p.id)}"`:''} style="--pa-delay:${Math.min(i,10)*25}ms"><span class="pa-tile-image"><img src="${esc(p.url)}" alt="" loading="lazy" decoding="async">${p.sample?'<small class="pa-sample">SAMPLE</small>':''}${favorites.includes(p.id)?`<span class="pa-heart">${icon('heart')}</span>`:''}${photoSelecting?`<span class="pa-check">${photoSelected.has(p.id)?icon('check'):''}</span>`:''}</span><span class="pa-tile-copy"><strong>${esc(photoTitle(p))}</strong><small>${esc(p.album||photoDate(p))}</small></span></button>`).join(''):`<div class="pa-empty">${photoArt()}<h3>${photoQuery||photoAlbum?'見つかりませんでした':photoFilter==='trash'?'ゴミ箱は空です':'ここから、あなたのアルバム。'}</h3><p>${photoQuery||photoAlbum?'検索語やアルバムを変えてみてください。':'＋から写真を追加できます。'}</p>${photoButton('photoImport','写真を追加','plus')}</div>`;
+  const selection=$('#pa-selection');selection.innerHTML=photoSelecting?`<div class="pa-selection"><strong>${photoSelected.size}枚選択</strong><button data-action="photoSelectAll">${photoSelected.size===list.length&&list.length?'選択解除':'すべて選択'}</button><div>${photoFilter==='trash'?photoButton('photoBatchRestore','復元','refresh')+photoButton('photoBatchPurge','完全削除','trash'):photoButton('photoBatchFavorite','お気に入りに追加','heart')+photoButton('photoBatchAlbum','アルバムに分類','folder')+photoButton('photoBatchTrash','ゴミ箱へ','trash')}</div></div>`:'';
+  photoImageFallback(grid);
+}
+A.apps.photos.render=photos;
+A.actions.photosHome=()=>{photoSelected.clear();photoSelecting=false;photos();};
+A.actions.photoFilter=el=>{photoFilter=el.dataset.value;photoAlbum='';photoSelected.clear();photos();};
+A.actions.photoLayout=()=>{photoLayout=photoLayout==='gallery'?'compact':'gallery';photos();};
+A.actions.photoSelectMode=()=>{photoSelecting=!photoSelecting;photoSelected.clear();photos();};
+A.actions.photoToggleSelect=el=>{const id=el.dataset.id;photoSelected.has(id)?photoSelected.delete(id):photoSelected.add(id);renderPhotoGrid();};
+A.actions.photoSelectAll=()=>{const list=albumPhotos();photoSelected=photoSelected.size===list.length?new Set():new Set(list.map(p=>p.id));renderPhotoGrid();};
+function savePhotoList(next){if(!A.save('photos',next))return false;userPhotos=next;return true;}
+function selectedLocal(){const ids=[...photoSelected].filter(id=>localPhotos().some(p=>p.id===id));if(!ids.length)A.toast('自分の写真を選択してください。サンプルは対象外です');return ids;}
+function changePhotoTrash(ids,operation){
+  if(!ids.length)return;
+  const text=operation==='purge'?['完全に削除',`${ids.length}枚を完全に削除します。この操作は取り消せません。`]:operation==='restore'?['写真を復元',`${ids.length}枚をライブラリに戻します。`]:['ゴミ箱へ移動',`${ids.length}枚をゴミ箱に移動します。あとで復元できます。`];
+  A.confirm(...text,()=>{
+    refreshPhotos();const set=new Set(ids);
+    const next=operation==='purge'?userPhotos.filter(p=>!set.has(p?.id)):userPhotos.map(p=>set.has(p?.id)?{...p,deletedAt:operation==='restore'?null:Date.now()}:p);
+    if(!savePhotoList(next))return;
+    if(operation==='purge'){const fav=favorites.filter(id=>!set.has(id));if(A.save('photoFavorites',fav))favorites=fav;}
+    photoSelected.clear();photos();A.toast(operation==='restore'?'写真を復元しました':operation==='purge'?'完全に削除しました':'ゴミ箱へ移動しました');
+  });
+}
+A.actions.photoBatchTrash=()=>changePhotoTrash(selectedLocal(),'trash');
+A.actions.photoBatchRestore=()=>changePhotoTrash(selectedLocal(),'restore');
+A.actions.photoBatchPurge=()=>changePhotoTrash(selectedLocal(),'purge');
+A.actions.photoBatchFavorite=()=>{if(!photoSelected.size)return A.toast('写真を選択してください');const next=[...new Set([...favorites,...photoSelected])];if(A.save('photoFavorites',next)){favorites=next;renderPhotoGrid();A.toast('お気に入りに追加しました');}};
+A.actions.photoBatchAlbum=()=>{
+  const ids=selectedLocal();if(!ids.length)return;
+  A.form('アルバムに分類',`<label>アルバム名<input name="album" maxlength="60" placeholder="旅、日常、作品…" list="pa-album-names"></label>${photoAlbumOptions()}<p class="pa-note">空欄で分類を解除。写真は複製しません。</p>`,v=>{refreshPhotos();if(!savePhotoList(userPhotos.map(p=>ids.includes(p?.id)?{...p,album:v.album.trim()}:p)))return false;photos();});
+};
+function photoAlbumOptions(){return `<datalist id="pa-album-names">${photoAlbums().map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`;}
+function viewPhoto(id){
+  const p=findPhoto(id);if(!p)return photos();currentPhoto=id;photoZoom=1;A.statusTheme(true);
+  const list=albumPhotos(),index=list.findIndex(x=>x.id===id),liked=favorites.includes(id);
+  photoMount(A.nav(esc(photoTitle(p)),`<button data-action="photoInfo" aria-label="写真の情報">${icon('info')}</button>`,'photosHome','写真')+`<div class="pa-viewer-shell"><div class="pa-viewer-meta"><span>${p.sample?'UNSPLASH / SAMPLE':p.deletedAt?'ゴミ箱':'LOCAL / ORIGINAL'}</span><span>${index>=0?index+1:1} / ${Math.max(1,list.length)}</span></div><div class="photo-viewer pa-viewer" id="pa-viewport" tabindex="0" aria-label="写真。左右スワイプで移動、ダブルクリックで拡大"><div class="pa-image-stage"><img id="pa-main-image" src="${esc(p.url)}" alt="${esc(photoTitle(p))}" draggable="false"></div></div><div class="pa-view-tools">${photoButton('photoPrevious','前へ','previous')}${photoButton('photoZoom','拡大','search','id="pa-zoom"')}${photoButton('photoPlay',photoPlaying?'停止':'再生',photoPlaying?'pause':'play',`aria-pressed="${photoPlaying}"`)}${photoButton('photoNext','次へ','next')}</div><div class="pa-filmstrip" aria-label="写真一覧">${list.map(item=>`<button data-action="photoOpen" data-id="${esc(item.id)}" aria-label="${esc(photoTitle(item))}" aria-current="${item.id===id?'true':'false'}"><img src="${esc(item.url)}" alt="" loading="lazy"></button>`).join('')}</div><p class="pa-view-caption">${esc(p.caption||photoDate(p))}</p></div><div class="photo-toolbar pa-toolbar">${p.deletedAt?photoButton('photoRestore','復元','refresh')+photoButton('photoPurge','完全削除','trash'):photoButton('photoShare','共有','share')+photoButton('photoDownload','保存','download')+photoButton('photoFavorite','お気に入り','heart',`class="${liked?'liked':''}" aria-pressed="${liked}"`)+photoButton('photoEdit','編集','edit')+(!p.sample?photoButton('photoDelete','ゴミ箱','trash'):'')}</div>`,'viewer');
+  const port=$('#pa-viewport'),strip=$('.pa-filmstrip'),thumb=strip.querySelector('[aria-current="true"]');if(thumb)strip.scrollLeft=thumb.offsetLeft-strip.offsetLeft-strip.clientWidth/2+thumb.clientWidth/2;
+  let start=null,multiTouch=false;
+  port.ondblclick=()=>A.actions.photoZoom();
+  port.onpointerdown=e=>{if(e.pointerType==='mouse'&&e.button!==0)return;if(start){multiTouch=true;return;}multiTouch=false;start={id:e.pointerId,x:e.clientX,y:e.clientY,l:port.scrollLeft,t:port.scrollTop};if(photoZoom>1)port.setPointerCapture(e.pointerId);};
+  port.onpointermove=e=>{if(start&&start.id===e.pointerId&&photoZoom>1&&!multiTouch){port.scrollLeft=start.l+start.x-e.clientX;port.scrollTop=start.t+start.y-e.clientY;}};
+  port.onpointerup=e=>{if(!start||start.id!==e.pointerId)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(!multiTouch&&photoZoom===1&&Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*1.5)movePhoto(dx<0?1:-1);start=null;};port.onpointercancel=()=>{start=null;};
+  if(photoPlaying){const timer=setInterval(()=>{if(document.hidden||!$('#overlay').hidden||photoZoom!==1)return;movePhoto(1);},4500);photoDisposers.push(()=>clearInterval(timer));}
+}
+A.actions.photoOpen=el=>{photoPlaying=false;viewPhoto(el.dataset.id);};
+const movePhoto=step=>{const list=albumPhotos();if(!list.length)return photos();const i=list.findIndex(p=>p.id===currentPhoto);viewPhoto(list[(Math.max(0,i)+step+list.length)%list.length].id);};
+A.actions.photoPrevious=()=>movePhoto(-1);A.actions.photoNext=()=>movePhoto(1);
+A.actions.photoSlideshow=()=>{const list=albumPhotos();if(!list.length)return A.toast('表示する写真がありません');photoPlaying=true;viewPhoto(list[0].id);};
+A.actions.photoPlay=()=>{photoPlaying=!photoPlaying;viewPhoto(currentPhoto);};
+A.actions.photoZoom=()=>{
+  photoZoom=photoZoom===1?2:photoZoom===2?3:1;const port=$('#pa-viewport'),stage=port?.querySelector('.pa-image-stage');if(!stage)return;
+  stage.style.width=photoZoom*100+'%';stage.style.height=photoZoom*100+'%';port.classList.toggle('is-zoomed',photoZoom>1);port.scrollLeft=(port.scrollWidth-port.clientWidth)/2;port.scrollTop=(port.scrollHeight-port.clientHeight)/2;
+  $('#pa-zoom span').textContent=photoZoom===1?'拡大':photoZoom+'×';$('#pa-zoom').setAttribute('aria-label',photoZoom+'倍表示。次の倍率へ');
+};
+A.actions.photoFavorite=()=>{const next=favorites.includes(currentPhoto)?favorites.filter(x=>x!==currentPhoto):[...favorites,currentPhoto];if(!A.save('photoFavorites',next))return;favorites=next;viewPhoto(currentPhoto);};
+A.actions.photoDelete=()=>{const p=findPhoto(currentPhoto);if(p&&!p.sample)changePhotoTrash([p.id],'trash');};
+A.actions.photoRestore=()=>changePhotoTrash([currentPhoto],'restore');A.actions.photoPurge=()=>changePhotoTrash([currentPhoto],'purge');
+A.actions.photoInfo=()=>{
+  const p=findPhoto(currentPhoto);if(!p)return;
+  const img=$('#pa-main-image'),dimensions=img?.naturalWidth?`${img.naturalWidth} × ${img.naturalHeight} px`:'読み込み待ち';
+  if(p.sample)return A.overlay(`<div class="modal-sheet pa-info">${A.overlayTitle('写真の情報')}<h3>${esc(photoTitle(p))}</h3><p>${dimensions}</p><p>Unsplash のサンプル写真。撮影日・撮影場所の情報はありません。編集結果は自分の写真としてコピー保存できます。</p></div>`,'sheet-overlay');
+  A.form('写真の情報',`<p class="pa-note">${dimensions} · 追加日 ${esc(photoDate(p))}<br>撮影日時・位置情報（EXIF）は保持しません。</p><label>写真名<input name="title" maxlength="100" required value="${esc(photoTitle(p))}"></label><label>メモ<textarea name="caption" maxlength="1000" rows="3">${esc(p.caption||'')}</textarea></label><label>アルバム<input name="album" maxlength="60" value="${esc(p.album||'')}" list="pa-album-names"></label>${photoAlbumOptions()}`,v=>{
+    if(!v.title.trim()){A.toast('写真名を入力してください');return false;}refreshPhotos();if(!savePhotoList(userPhotos.map(item=>item?.id===p.id?{...item,title:v.title.trim(),caption:v.caption.trim(),album:v.album.trim()}:item)))return false;viewPhoto(p.id);
+  });
+};
+async function exportPhoto(share){
+  const p=findPhoto(currentPhoto),root=$('.pa-viewer');if(!p||!root)return A.toast('先に写真を開いてください');A.toast('写真を準備中…');
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);photoDisposers.push(()=>controller.abort());
+  try{const response=await fetch(p.url,{signal:controller.signal,credentials:'omit'});if(!response.ok)throw Error();const blob=await response.blob();if(!root.isConnected||A.current!=='photos')return;
+    const ext=({'image/png':'png','image/webp':'webp','image/gif':'gif','image/avif':'avif'})[blob.type]||'jpg',name='aura-'+p.id+'.'+ext;
+    if(share)A.network.offerFile(blob,name);else{A.download(blob,name);A.toast('写真のダウンロードを開始しました');}
+  }catch(e){if(e.name!=='AbortError'||root.isConnected)A.toast('画像を取得できません。通信を確認してください');}finally{clearTimeout(timer);}
+}
+A.actions.photoShare=()=>exportPhoto(true);A.actions.photoDownload=()=>exportPhoto(false);
+A.storePhoto=(url,title,metadata={})=>{
+  refreshPhotos();if(!photoValid({id:'new',url}))return false;
+  const entry={id:A.id(),url,title:String(title||'無題の写真').slice(0,100),date:Date.now(),sample:false,album:String(metadata.album||'').slice(0,60),caption:String(metadata.caption||'').slice(0,1000)};
+  return savePhotoList([entry,...userPhotos]);
+};
+function importPhotoFile(file){
+  return new Promise(resolve=>{
+    if(file.size>25*1024*1024||!file.type.startsWith('image/'))return resolve('skip');
+    const url=URL.createObjectURL(file),img=new Image();let finished=false;
+    const finish=result=>{if(finished)return;finished=true;clearTimeout(timer);URL.revokeObjectURL(url);img.onload=img.onerror=null;resolve(result);};
+    const timer=setTimeout(()=>finish('skip'),20000);
+    img.onload=()=>{try{
+      if(!img.naturalWidth||!img.naturalHeight||img.naturalWidth*img.naturalHeight>60000000)return finish('skip');
+      const c=document.createElement('canvas'),scale=Math.min(1,1200/Math.max(img.naturalWidth,img.naturalHeight));c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);
+      finish(A.storePhoto(c.toDataURL('image/jpeg',.85),file.name.replace(/\.[^.]+$/,''))?'ok':'full');
+    }catch{finish('skip');}};img.onerror=()=>finish('skip');img.src=url;
+  });
+}
+A.actions.photoImport=()=>{
+  if(photoImporting)return A.toast('読み込みが終わるまでお待ちください');
+  const input=document.createElement('input');input.type='file';input.accept='image/*';input.multiple=true;
+  input.onchange=async()=>{
+    const files=[...input.files];if(!files.length)return;if(files.length>30)return A.toast('1回に30枚まで選択してください');photoImporting=true;let added=0,skipped=0,full=false;
+    try{for(let i=0;i<files.length;i++){const status=$('#pa-import-status');if(status)status.textContent=`読み込み中 ${i+1} / ${files.length}`;const result=await importPhotoFile(files[i]);if(result==='ok')added++;else if(result==='full'){full=true;break;}else skipped++;}}
+    finally{photoImporting=false;if(A.current==='photos'&&$('#app-screen').dataset.photoMode==='library')photos();A.toast(`${added}枚追加${skipped?' / '+skipped+'枚は形式・サイズ等で読込不可':''}${full?' / 容量不足で中断':''}`);}
+  };input.click();
+};
+// Canvas-based adjustments also work in browsers without CanvasRenderingContext2D.filter.
+const photoPresets=[{id:'original',name:'オリジナル',b:0,c:0,s:0,w:0},{id:'daylight',name:'光',b:8,c:5,s:8,w:3},{id:'film',name:'フィルム',b:3,c:-12,s:-20,w:16},{id:'forest',name:'森',b:-3,c:13,s:-12,w:-8},{id:'sunset',name:'夕映え',b:4,c:8,s:14,w:25},{id:'mono',name:'モノクロ',b:0,c:18,s:-100,w:0}];
+const defaultPhotoEdit=()=>({preset:'original',b:0,c:0,s:0,w:0,rotation:0,flip:false,ratio:'free',cropX:50,cropY:50});
+function renderEditedPhoto(img,state,maxEdge,original=false){
+  const work=document.createElement('canvas'),iw=img.naturalWidth,ih=img.naturalHeight,scale=Math.min(1,maxEdge/Math.max(iw,ih));
+  const w=Math.max(1,Math.round(iw*scale)),h=Math.max(1,Math.round(ih*scale)),rot=original?0:state.rotation,quarter=rot%180!==0;
+  work.width=quarter?h:w;work.height=quarter?w:h;const ctx=work.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#fff';ctx.fillRect(0,0,work.width,work.height);ctx.translate(work.width/2,work.height/2);ctx.rotate(rot*Math.PI/180);ctx.scale(!original&&state.flip?-1:1,1);ctx.drawImage(img,-w/2,-h/2,w,h);ctx.setTransform(1,0,0,1,0,0);
+  if(original)return work;
+  const ratio=({square:1,portrait:4/5,wide:16/9})[state.ratio];let cw=work.width,ch=work.height;
+  if(ratio){if(cw/ch>ratio)cw=ch*ratio;else ch=cw/ratio;}
+  const out=document.createElement('canvas');out.width=Math.max(1,Math.round(cw));out.height=Math.max(1,Math.round(ch));const outctx=out.getContext('2d',{willReadFrequently:true});outctx.drawImage(work,(work.width-cw)*state.cropX/100,(work.height-ch)*state.cropY/100,cw,ch,0,0,out.width,out.height);
+  if(state.b||state.c||state.s||state.w){const data=outctx.getImageData(0,0,out.width,out.height),d=data.data,contrast=(100+state.c)/100,sat=(100+state.s)/100,bright=state.b*2.55,warm=state.w*.75;
+    for(let i=0;i<d.length;i+=4){let r=(d[i]-128)*contrast+128+bright+warm,g=(d[i+1]-128)*contrast+128+bright,b=(d[i+2]-128)*contrast+128+bright-warm;const l=.2126*r+.7152*g+.0722*b;d[i]=l+(r-l)*sat;d[i+1]=l+(g-l)*sat;d[i+2]=l+(b-l)*sat;}outctx.putImageData(data,0,0);
+  }return out;
+}
+A.actions.photoEdit=()=>{
+  const p=findPhoto(currentPhoto);if(!p||p.deletedAt)return;photoPlaying=false;
+  photoEditor={id:p.id,source:p,state:defaultPhotoEdit(),undo:[],redo:[],image:null,original:false};showPhotoEditor();
+};
+function showPhotoEditor(){
+  const ed=photoEditor;if(!ed)return;A.statusTheme(true);
+  photoMount(A.nav('編集スタジオ',`<button data-action="photoEditSave" id="pa-edit-save" disabled>コピー保存</button>`,'photoEditClose','編集を閉じる')+`<div class="app-content pa-editor"><div class="pa-editor-heading"><span class="pa-eyebrow">THE DIGITAL DARKROOM</span><p>光も、色も。自分らしい一枚へ。</p></div><div class="pa-edit-stage"><canvas id="pa-edit-canvas" aria-label="編集結果のプレビュー"></canvas><span id="pa-edit-status" role="status">写真を読み込み中…</span><div class="pa-crop-guides" hidden></div></div><div class="pa-edit-actions">${photoButton('photoEditUndo','戻す','previous','id="pa-undo" disabled')}${photoButton('photoEditRedo','やり直す','next','id="pa-redo" disabled')}${photoButton('photoEditCompare','元画像','photos','id="pa-compare" aria-pressed="false"')}${photoButton('photoEditReset','リセット','refresh')}</div><div class="pa-presets" aria-label="色のプリセット">${photoPresets.map(p=>`<button data-action="photoPreset" data-id="${p.id}" aria-pressed="${p.id==='original'}"><span class="pa-preset-swatch pa-preset-${p.id}"><i></i></span>${p.name}</button>`).join('')}</div><section class="pa-edit-panel"><h3>光と色</h3>${[['b','明るさ',-60,60],['c','コントラスト',-60,60],['s','彩度',-100,100],['w','色温度',-50,50]].map(([key,label,min,max])=>`<label class="pa-slider"><span>${label}</span><input type="range" data-photo-adjust="${key}" min="${min}" max="${max}" value="0" aria-label="${label}"><output data-photo-output="${key}">0</output></label>`).join('')}</section><section class="pa-edit-panel"><h3>構図</h3><div class="pa-transform">${photoButton('photoEditRotate','90°回転','refresh')}${photoButton('photoEditFlip','左右反転','switch','id="pa-flip" aria-pressed="false"')}<label><span class="pa-sr">トリミング比率</span><select id="pa-crop"><option value="free">元の比率</option><option value="square">正方形 1:1</option><option value="portrait">縦 4:5</option><option value="wide">横 16:9</option></select></label></div><div id="pa-crop-position" hidden>${[['cropX','左右位置'],['cropY','上下位置']].map(([key,label])=>`<label class="pa-slider"><span>${label}</span><input type="range" data-photo-adjust="${key}" min="0" max="100" value="50" aria-label="切り抜きの${label}"><output data-photo-output="${key}">50</output></label>`).join('')}</div></section><p class="pa-note">元写真は変更せず、最大辺1200pxのJPEGコピーを保存します。調整履歴は編集中のみ。余白のない方向の切り抜き位置は変化しません。</p></div>`,'editor');
+  let frame=0;const queue=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>updatePhotoEditor());};photoDisposers.push(()=>cancelAnimationFrame(frame));
+  document.querySelectorAll('[data-photo-adjust]').forEach(input=>{let start=null;input.oninput=()=>{if(!ed.image)return;if(!start)start={...ed.state};ed.state[input.dataset.photoAdjust]=Number(input.value);if(['b','c','s','w'].includes(input.dataset.photoAdjust))ed.state.preset='custom';ed.original=false;queue();};input.onchange=()=>{if(start){pushPhotoUndo(ed,start);start=null;updatePhotoEditor();}};});
+  $('#pa-crop').onchange=e=>editPhotoState({ratio:e.target.value,cropX:50,cropY:50});
+  const root=$('#pa-edit-canvas'),img=new Image();let cancelled=false;const timer=setTimeout(()=>{cancelled=true;img.onload=img.onerror=null;if(root.isConnected)$('#pa-edit-status').textContent='読み込みがタイムアウトしました。戻って再試行してください。';},15000);
+  photoDisposers.push(()=>{cancelled=true;clearTimeout(timer);img.onload=img.onerror=null;});
+  if(ed.source.sample)img.crossOrigin='anonymous';
+  img.onload=()=>{clearTimeout(timer);if(cancelled||photoEditor!==ed||!root.isConnected)return;ed.image=img;try{updatePhotoEditor();$('#pa-edit-save').disabled=false;$('#pa-edit-status').textContent='';}catch{ed.image=null;$('#pa-edit-status').textContent='この写真は編集できません。端末に保存してから追加してください。';}};
+  img.onerror=()=>{clearTimeout(timer);if(!cancelled&&root.isConnected)$('#pa-edit-status').textContent='写真を読み込めません。通信や画像形式を確認してください。';};img.src=ed.source.url;
+}
+function pushPhotoUndo(ed,state){ed.undo.push({...state});if(ed.undo.length>25)ed.undo.shift();ed.redo=[];}
+function editPhotoState(change){const ed=photoEditor;if(!ed?.image)return;pushPhotoUndo(ed,ed.state);ed.state={...ed.state,...change};ed.original=false;updatePhotoEditor();}
+function updatePhotoEditor(){
+  const ed=photoEditor,canvas=$('#pa-edit-canvas');if(!ed?.image||!canvas)return;
+  const result=renderEditedPhoto(ed.image,ed.state,720,ed.original);canvas.width=result.width;canvas.height=result.height;canvas.getContext('2d').drawImage(result,0,0);
+  document.querySelectorAll('[data-photo-adjust]').forEach(input=>{input.value=ed.state[input.dataset.photoAdjust];});document.querySelectorAll('[data-photo-output]').forEach(o=>{o.textContent=ed.state[o.dataset.photoOutput];});
+  document.querySelectorAll('[data-action="photoPreset"]').forEach(btn=>btn.setAttribute('aria-pressed',String(btn.dataset.id===ed.state.preset)));
+  $('#pa-undo').disabled=!ed.undo.length;$('#pa-redo').disabled=!ed.redo.length;$('#pa-crop').value=ed.state.ratio;$('#pa-flip').setAttribute('aria-pressed',String(ed.state.flip));$('#pa-compare').setAttribute('aria-pressed',String(ed.original));$('#pa-compare span').textContent=ed.original?'編集中へ':'元画像';$('#pa-crop-position').hidden=ed.state.ratio==='free';$('.pa-crop-guides').hidden=ed.original||ed.state.ratio==='free';
+}
+A.actions.photoPreset=el=>{const p=photoPresets.find(p=>p.id===el.dataset.id);if(p)editPhotoState({preset:p.id,b:p.b,c:p.c,s:p.s,w:p.w});};
+A.actions.photoEditRotate=()=>{if(photoEditor)editPhotoState({rotation:(photoEditor.state.rotation+90)%360});};
+A.actions.photoEditFlip=()=>{if(photoEditor)editPhotoState({flip:!photoEditor.state.flip});};
+A.actions.photoEditReset=()=>editPhotoState(defaultPhotoEdit());
+A.actions.photoEditUndo=()=>{const ed=photoEditor;if(!ed?.undo.length)return;ed.redo.push({...ed.state});ed.state=ed.undo.pop();ed.original=false;updatePhotoEditor();};
+A.actions.photoEditRedo=()=>{const ed=photoEditor;if(!ed?.redo.length)return;ed.undo.push({...ed.state});ed.state=ed.redo.pop();ed.original=false;updatePhotoEditor();};
+A.actions.photoEditCompare=()=>{if(photoEditor){photoEditor.original=!photoEditor.original;updatePhotoEditor();}};
+A.actions.photoEditClose=()=>{const ed=photoEditor;if(!ed)return photos();const leave=()=>{photoEditor=null;viewPhoto(ed.id);};if(ed.undo.length||JSON.stringify(ed.state)!==JSON.stringify(defaultPhotoEdit()))A.confirm('編集を終了','未保存の調整を破棄して戻りますか？',leave);else leave();};
+A.actions.photoEditSave=()=>{
+  const ed=photoEditor;if(!ed?.image)return;
+  try{const canvas=renderEditedPhoto(ed.image,ed.state,1200),url=canvas.toDataURL('image/jpeg',.9);if(!A.storePhoto(url,photoTitle(ed.source)+' · 編集',{album:ed.source.album,caption:ed.source.caption}))return;
+    const saved=userPhotos[0];photoEditor=null;photoQuery='';photoAlbum='';photoFilter='mine';viewPhoto(saved.id);A.toast('元写真を残してコピーを保存しました');
+  }catch{A.toast('編集結果を保存できませんでした。元写真は変更していません');}
+};
 let cameraStream=null,cameraFacing='environment',cameraGrid=true,cameraSession=0;
 function stopCamera(){cameraSession++;if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null;}}
 function camera(){A.statusTheme(true);A.view(A.nav('カメラ',`<button data-action="cameraGrid" aria-label="グリッド切り替え">${icon('grid')}</button>`)+`<div class="camera-preview" id="camera-preview"><video id="camera-video" playsinline autoplay muted></video><div class="camera-grid" id="camera-grid"></div><div class="camera-placeholder" id="camera-placeholder">${icon('camera')}<button class="primary-button" data-action="cameraStart">カメラを使う</button><button class="secondary-button" data-action="photoImport" style="background:#ffffff12;color:#c3c8d1;font-size:11px">端末の写真から追加</button><p style="font-size:9px;margin-top:24px">auraの写真に保存。HTTPS・カメラ許可が必要</p></div></div><div class="camera-bottom"><div class="camera-modes"><span class="active">写真</span><span>1×</span></div><div class="camera-actions"><button class="camera-small" data-app="photos" aria-label="写真を開く">${icon('photos')}</button><button class="shutter" data-action="cameraCapture" aria-label="写真を撮影"></button><button class="camera-small" data-action="cameraFlip" aria-label="カメラ切り替え">${icon('refresh')}</button></div></div>`);$('#camera-grid').hidden=!cameraGrid;A.cleanups.push(stopCamera);}
