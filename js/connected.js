@@ -76,7 +76,7 @@
   if (!weatherCache || !validWeather(weatherCache.data) || !validPlace(weatherCache.place) || !Number.isFinite(weatherCache.savedAt)) weatherCache = null;
   const placeKey = p => `${p.latitude.toFixed(3)},${p.longitude.toFixed(3)}`;
   const currentWeather = () => weatherCache && placeKey(weatherCache.place) === placeKey(weatherPlace) ? weatherCache : null;
-  const weatherLabel = code => !Number.isFinite(code) ? '不明' : code === 0 ? '快晴' : code <= 2 ? '晴れ時々くもり' : code === 3 ? 'くもり' : code <= 48 ? '霧' : code <= 57 ? '霧雨' : code <= 67 ? '雨' : code <= 77 ? '雪' : code <= 82 ? 'にわか雨' : code <= 86 ? 'にわか雪' : code >= 95 ? '雷雨' : '不明';
+  const weatherLabel = code => ({clear:'快晴',cloudy:'晴れ時々くもり',overcast:'くもり',fog:'霧',rain:[51,53,55,56,57].includes(code)?'霧雨':[80,81,82].includes(code)?'にわか雨':'雨',snow:[85,86].includes(code)?'にわか雪':'雪',thunder:'雷雨'}[A.weatherScene(code)] || '不明');
   A.weatherSnapshot = () => {
     const cache = currentWeather();
     if (!cache) return {name: weatherPlace.name, temp: '—', high: '—', low: '—', condition: '', desc: weatherBusy ? '取得中' : '天気を開いて取得', source: weatherError ? '取得できません' : '未取得'};
@@ -94,43 +94,174 @@
     if ([95,96,99].includes(code)) return 'thunder';
     return '';
   };
-  const weatherArt = code => A.scene(A.weatherScene(code));
-  // Decorative vector hero; unknown conditions never receive invented sunny art.
+  let weatherArtSerial = 0, weatherMetric = 'temperature', weatherHour = 0;
+  let stopWeatherMotion = () => {};
+  const wxClamp = (n, min, max) => Math.max(min, Math.min(max, n));
+  const wxValid = n => typeof n === 'number' && Number.isFinite(n);
+  const wxPercent = n => wxValid(n) && n >= 0 && n <= 100;
+  const wxSVG = (body, cls = '', box = '0 0 100 70') => `<svg class="${cls}" viewBox="${box}" aria-hidden="true" focusable="false">${body}</svg>`;
+
+  // Compact symbols share a visual language, not IDs or external image assets.
+  function weatherArt(code, night = false) {
+    const kind = A.weatherScene(code);
+    if (!kind) return wxSVG('<path d="M40 34h20" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>', 'wx-symbol');
+    const id = `wx-symbol-${++weatherArtSerial}`, sun = ['clear','cloudy'].includes(kind);
+    return wxSVG(`<defs><linearGradient id="${id}" x2="0" y2="1"><stop stop-color="#fff"/><stop offset="1" stop-color="#9cbed8"/></linearGradient></defs>
+      ${sun ? night ? '<path d="M63 9a22 22 0 1 0 20 31A23 23 0 0 1 63 9Z" fill="#e6edff"/><circle cx="31" cy="15" r="1.5" fill="#fff"/>' : '<g stroke="#ffdc88" stroke-width="2" stroke-linecap="round"><path d="M60 3v5m0 42v5M34 29h5m42 0h5M41 10l4 4m30 30 4 4m0-38-4 4M45 44l-4 4"/><circle cx="60" cy="29" r="17" fill="#ffd27b"/></g>' : ''}
+      ${kind !== 'clear' ? `<path d="M24 49C8 48 9 27 24 26c2-19 29-24 39-7 15-5 28 6 26 19 14 4 10 17-2 17H28Z" fill="url(#${id})" stroke="#fff" stroke-opacity=".4"/><path d="M29 25c3-9 14-12 21-7" fill="none" stroke="#fff" stroke-width="2" opacity=".65"/>` : ''}
+      ${['rain','thunder'].includes(kind) ? '<path d="m31 59-3 7m18-7-3 7m33-7-3 7" stroke="#83dcff" stroke-width="3" stroke-linecap="round"/>' : ''}
+      ${kind === 'thunder' ? '<path d="m61 45-11 15h10l-4 10 20-20H64l5-5Z" fill="#ffdc85"/>' : ''}
+      ${kind === 'snow' ? '<g stroke="#e6faff" stroke-width="1.5"><path d="M32 57v12m-5-9 10 6m0-6-10 6M65 57v12m-5-9 10 6m0-6-10 6"/></g>' : ''}
+      ${kind === 'fog' ? '<path d="M20 57h65m-57 7h48" stroke="#e0eef4" stroke-width="2" stroke-linecap="round"/>' : ''}`, 'wx-symbol');
+  }
+
+  // A stylized landscape, not a map, radar, astronomical simulation or observation.
   function weatherLandscape(code, night) {
     const kind = A.weatherScene(code);
     if (!kind) return '';
-    const sun = !night && ['clear','cloudy'].includes(kind), moon = night && ['clear','cloudy'].includes(kind);
-    return `<svg class="weather-landscape scene-${kind}" viewBox="0 0 360 180" aria-hidden="true" focusable="false"><defs>
-      <radialGradient id="wx-glow"><stop stop-color="${night?'#cdd9ff':'#ffe3ad'}" stop-opacity=".5"/><stop offset="1" stop-color="${night?'#cdd9ff':'#ffe3ad'}" stop-opacity="0"/></radialGradient>
-      <radialGradient id="wx-sun" cx=".35" cy=".25"><stop stop-color="#fffbe1"/><stop offset=".6" stop-color="#ffda87"/><stop offset="1" stop-color="#e6a34f"/></radialGradient>
-      <linearGradient id="wx-cloud" x2=".2" y2="1"><stop stop-color="${night?'#d1dcf1':'#ffffff'}"/><stop offset=".55" stop-color="${night?'#a6b9d6':'#edf3f6'}"/><stop offset="1" stop-color="${night?'#667f9e':'#acbfd1'}"/></linearGradient>
-      <linearGradient id="wx-hill" x2="0" y2="1"><stop stop-color="${night?'#526282':'#b4d0d4'}"/><stop offset="1" stop-color="${night?'#253854':'#4c7f92'}"/></linearGradient>
-    </defs>
-    ${night?'<g fill="#f4f3e3" opacity=".8"><circle cx="54" cy="27" r="1.4"/><circle cx="92" cy="65" r="1"/><circle cx="171" cy="21" r="1.5"/><circle cx="294" cy="42" r="1.4"/><circle cx="320" cy="92" r="1"/></g>':''}
-    ${sun||moon?'<ellipse cx="206" cy="70" rx="116" ry="89" fill="url(#wx-glow)"/>':''}
-    ${sun?'<circle cx="206" cy="67" r="39" fill="url(#wx-sun)"/><circle cx="206" cy="67" r="48" fill="none" stroke="#ffe9b5" stroke-opacity=".25"/><path d="M183 50a28 28 0 0 1 26-12" fill="none" stroke="#fffce8" stroke-width="2" stroke-linecap="round"/>':''}
-    ${moon?'<path class="wx-moon" d="M228 32a39 39 0 1 0 20 65 35 35 0 0 1-20-65Z" fill="#e6e8e0" stroke="#fff9df"/><path d="M204 67a24 24 0 0 0 14 25" fill="none" stroke="#bbc8d6" stroke-width="3" stroke-linecap="round"/>':''}
-    <path d="M0 149 65 110l42 16 51-23 65 40 52-30 85 39v28H0Z" fill="url(#wx-hill)" opacity=".5"/><path d="M0 169c78-48 94 17 180-9s125-6 180 0v20H0Z" fill="url(#wx-hill)" opacity=".75"/>
-    ${kind!=='clear'?'<g class="wx-cloud"><ellipse cx="176" cy="126" rx="77" ry="5" fill="#223e63" opacity=".12"/><path d="M104 111c-30 0-34-41-4-48 2-35 49-44 66-17 25-20 61-3 61 25 33-4 43 43 8 43Z" fill="url(#wx-cloud)" stroke="#f2f7ff" stroke-opacity=".5"/><path d="M103 108h119" stroke="#728baa" stroke-opacity=".15" stroke-width="3" stroke-linecap="round"/><path d="M111 61c4-18 28-25 40-12" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/></g>':''}
-    ${kind==='rain'?'<g class="wx-precip" stroke="#a6def7" stroke-width="3" stroke-linecap="round"><path d="m123 128-7 12m39-10-7 12m42-14-7 12m37-11-7 12"/></g>':''}
-    ${kind==='snow'?'<g class="wx-precip" fill="#f0fbff"><circle cx="122" cy="139" r="3"/><circle cx="152" cy="153" r="2.5"/><circle cx="188" cy="134" r="3"/><circle cx="215" cy="149" r="2.5"/></g>':''}
-    ${kind==='thunder'?'<path d="m182 114-19 24h16l-8 22 34-33h-20l9-13Z" fill="url(#wx-sun)"/>':''}
-    ${kind==='fog'?'<path d="M89 130h173m-157 12h137m-150 12h169" fill="none" stroke="#dce8ef" stroke-opacity=".65" stroke-width="3" stroke-linecap="round"/>':''}</svg>`;
+    const id = `wx-land-${++weatherArtSerial}`, paint = name => `url(#${id}-${name})`;
+    const storm = ['rain','thunder','overcast'].includes(kind), snow = kind === 'snow';
+    const sky = night ? ['#102039','#35496d','#b095a3'] : storm ? ['#263e59','#667f96','#abbfc8'] : snow ? ['#577d9e','#a9c5d7','#e2ebeb'] : ['#286f9f','#79b7ca','#f3d6ac'];
+    const clouds = `<path d="M-57 20c-26 0-28-31-7-38 0-28 39-35 51-12C5-43 29-32 31-12c27-5 37 33 9 34Z" fill="${paint('cloud')}" stroke="#f0f8ff" stroke-opacity=".32"/><path d="M-55-16c2-13 20-18 28-8" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="1.5" stroke-linecap="round"/>`;
+    const particles = Array.from({length:snow?23:30}, (_, i) => {
+      const x = 12 + (i * 47) % 342, y = 20 + (i * 31) % 144;
+      return snow ? `<g transform="translate(${x} ${y})"><g class="wx-flake wx-motion" style="--wx-delay:-${i*.43}s;--wx-duration:${5+i%4}s"><path d="M0-3v6m-2.6-4.5 5.2 3m0-3-5.2 3" stroke="#f1fbff" stroke-width="${i%3 ? .8 : 1.4}"/></g></g>` : `<path class="wx-rain wx-motion" style="--wx-delay:-${i*.19}s;--wx-duration:${1.2+i%3*.3}s" d="m${x} ${y}-6 17" stroke="#bdeaff" stroke-width="${i%3 ? .8 : 1.5}" stroke-linecap="round"/>`;
+    }).join('');
+    return wxSVG(`<defs>
+      <linearGradient id="${id}-sky" x2="0" y2="1">${sky.map((c,i)=>`<stop offset="${i/2}" stop-color="${c}"/>`).join('')}</linearGradient>
+      <radialGradient id="${id}-glow"><stop stop-color="${night?'#c2d7ff':'#fff0c5'}" stop-opacity=".64"/><stop offset="1" stop-color="#ffe8bb" stop-opacity="0"/></radialGradient>
+      <radialGradient id="${id}-sun" cx=".32" cy=".25"><stop stop-color="#fffbea"/><stop offset=".6" stop-color="#ffdc92"/><stop offset="1" stop-color="#f5ae5c"/></radialGradient>
+      <linearGradient id="${id}-cloud" x2=".15" y2="1"><stop stop-color="${storm?'#c7d7e4':night?'#d3e0f3':'#fffef8'}"/><stop offset=".5" stop-color="${storm?'#91a9bf':'#dae8ef'}"/><stop offset="1" stop-color="${storm?'#496985':'#8da9c2'}"/></linearGradient>
+      <linearGradient id="${id}-lake" x2="0" y2="1"><stop stop-color="${night?'#7f8fab':'#b4cdd2'}"/><stop offset="1" stop-color="${night?'#1c334e':'#3b7c98'}"/></linearGradient>
+      <linearGradient id="${id}-land" x2="0" y2="1"><stop stop-color="${snow?'#d8e9eb':night?'#203d53':'#377787'}"/><stop offset="1" stop-color="${snow?'#83aabd':'#163e54'}"/></linearGradient>
+      <clipPath id="${id}-clip"><rect width="360" height="240" rx="22"/></clipPath>
+    </defs><g clip-path="${paint('clip')}">
+      <rect width="360" height="240" fill="${paint('sky')}"/>
+      ${night && !storm ? `<g fill="#eef6ff">${Array.from({length:24},(_,i)=>`<circle class="wx-star wx-motion" style="--wx-delay:-${i*.7}s" cx="${15+i*83%334}" cy="${9+i*19%106}" r="${i%3===0?1.1:.6}"/>`).join('')}</g>` : ''}
+      ${['clear','cloudy'].includes(kind) ? `<circle class="wx-halo wx-motion" cx="260" cy="65" r="86" fill="${paint('glow')}"/>
+      ${night ? '<g class="wx-moon"><path d="M270 29a34 34 0 1 0 16 58 32 32 0 0 1-16-58Z" fill="#e5edfa"/><path d="M247 55a23 23 0 0 0 11 24" fill="none" stroke="#b8cce1" stroke-width="3" stroke-linecap="round"/></g>' : `<g class="wx-orbit wx-motion" stroke="#ffe8b0" stroke-opacity=".35">${Array.from({length:12},(_,i)=>`<path d="M260 16v7" transform="rotate(${i*30} 260 65)"/>`).join('')}</g><circle cx="260" cy="65" r="30" fill="${paint('sun')}"/><path d="M244 51a21 21 0 0 1 22-7" stroke="#fffbed" stroke-width="1.5" fill="none" stroke-linecap="round"/>`}` : ''}
+      <g fill="none" stroke="#e9f4f6" stroke-opacity=".18"><path d="M-15 110Q90 80 184 105T390 93"/><path d="M-10 115Q90 85 182 110T390 98"/></g>
+      <path d="M-20 167 45 109l27 30 43-57 63 73 46-40 50 38 37-39 69 70Z" fill="${night?'#536883':'#87adb9'}"/>
+      <path d="m70 140 45-58 44 50-35-16-10-15-16 28Z" fill="${snow?'#f5fafb':'#dce6e6'}" opacity="${snow?'.92':'.5'}"/>
+      <path d="M-20 183 59 133l55 41 69-53 76 47 67-38 58 49v62H0Z" fill="${night?'#314d65':'#57899a'}"/>
+      <path d="m153 145 30-24 29 21-26-7-13 9Z" fill="#e8f3f2" opacity="${snow?'.9':'.28'}"/>
+      <path d="M0 183q80-14 173-3t187-1v61H0Z" fill="${paint('lake')}"/>
+      <g class="wx-water wx-motion" fill="none" stroke="${night?'#d0dbec':'#ffebcb'}" stroke-linecap="round" opacity=".4"><path d="M232 187h42m-54 6h67m-85 7h79m-68 8h94m-107 9h69"/><path d="M80 191h39m-72 12h28m49 8h46m-88 16h32" stroke-opacity=".55"/></g>
+      ${kind!=='clear' ? `<g transform="translate(294 97) scale(.73)"><g class="wx-cloud-back wx-motion" opacity=".72">${clouds}</g></g><g transform="translate(134 81) scale(1.25)"><g class="wx-cloud-front wx-motion">${clouds}</g></g>` : `<g transform="translate(53 89) scale(.55)"><g class="wx-cloud-back wx-motion" opacity=".48">${clouds}</g></g>`}
+      ${kind==='fog'?'<g class="wx-mist wx-motion" fill="none" stroke="#e6f2f5" stroke-linecap="round"><path d="M-20 130h275m-212 15h330M-30 161h276" stroke-width="12" opacity=".22"/><path d="M18 133h221m-173 16h264" stroke-width="1" opacity=".5"/></g>':''}
+      ${['rain','snow','thunder'].includes(kind)?particles:''}
+      ${kind==='thunder'?`<path class="wx-lightning wx-motion" d="m160 102-19 31h17l-9 25 35-40h-20l10-16Z" fill="${paint('sun')}" stroke="#fff3c0"/>`:''}
+      <path d="M0 189q39-9 74 15t83 36H0Zm360-11q-37 6-66 29t-59 33h125Z" fill="${paint('land')}"/>
+      <g fill="${night?'#122d43':snow?'#4e7c8e':'#245568'}">${[[19,185,1],[40,197,.7],[326,184,1.2],[307,203,.7],[343,204,.85]].map(([x,y,k])=>`<path transform="translate(${x} ${y}) scale(${k})" d="M0-40-9-21h5l-10 15h10L-17 7H-2v9h4V7h15L4-6h10L4-21h5Z"/>`).join('')}</g>
+      <path d="M0 228q55-9 96 12H0Zm360-9-70 21h70Z" fill="${snow?'#c2dce3':'#15394c'}"/>
+    </g>`, `weather-landscape scene-${kind} wx-motion-surface`, '0 0 360 240');
   }
+
+  function weatherHours(d) {
+    // Compare provider-local timestamps; never parse them in the device timezone.
+    const start = d.hourly.time.findIndex(t => t >= d.current.time.slice(0, 13) + ':00');
+    if (start < 0) return [];
+    return d.hourly.time.slice(start, start + 24).map((time, i) => ({time,
+      temperature:d.hourly.temperature_2m?.[start+i], rain:d.hourly.precipitation_probability?.[start+i], code:d.hourly.weather_code?.[start+i],
+      night:d.hourly.is_day?.[start+i] === 0
+    }));
+  }
+  function weatherChart(hours) {
+    const rain = weatherMetric === 'rain', values = hours.map(h => rain ? h.rain : h.temperature);
+    const valid = v => rain ? wxPercent(v) : wxValid(v), finite = values.filter(valid);
+    if (!finite.length) return '<p class="wx-chart-empty">この時間帯のデータはありません</p>';
+    const lo = rain ? 0 : Math.floor(Math.min(...finite)-2), hi = rain ? 100 : Math.ceil(Math.max(...finite)+2);
+    const width = hours.length*66, y = v => 104-(v-lo)/(hi-lo)*76;
+    const id = `wx-chart-${++weatherArtSerial}`;
+    // Separate paths at missing samples: no interpolated invented data across gaps.
+    let path = '', connected = false;
+    values.forEach((v,i) => {if (!valid(v)) {connected=false;return;}path += `${connected?'L':'M'}${33+i*66} ${y(v)} `;connected=true;});
+    return wxSVG(`<defs><linearGradient id="${id}" x2="0" y2="1"><stop stop-color="${rain?'#8ee3ff':'#ffe0a0'}" stop-opacity=".6"/><stop offset="1" stop-color="${rain?'#8ee3ff':'#ffe0a0'}" stop-opacity=".05"/></linearGradient></defs>
+      ${[lo,(lo+hi)/2,hi].map(v=>`<path d="M0 ${y(v)}h${width}" stroke="#e0f2ff" stroke-opacity=".1" stroke-dasharray="3 6"/>`).join('')}
+      ${rain ? values.map((v,i)=>valid(v)?`<rect x="${21+i*66}" y="${y(v)}" width="24" height="${104-y(v)}" rx="5" fill="url(#${id})"/>`:'').join('') : `<path d="${path}" fill="none" stroke="#ffdc93" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`}
+      ${values.map((v,i)=>valid(v)?`<g><circle cx="${33+i*66}" cy="${y(v)}" r="${i===weatherHour?5:3}" fill="${rain?'#a6eaff':'#ffe4ad'}"/><text x="${33+i*66}" y="${y(v)-11}" text-anchor="middle" fill="#f3f8ff" font-size="10">${number(v)}${rain?'%':'°'}</text></g>`:'').join('')}
+      <path class="wx-chart-cursor" d="M${33+weatherHour*66} 12V115" stroke="#fff" stroke-opacity=".3" stroke-dasharray="2 4"/>`, 'wx-chart', `0 0 ${width} 120`);
+  }
+  function weatherHourDetail(hours) {
+    const h = hours[weatherHour];
+    return h ? `${esc(h.time.slice(5).replace('T',' '))} · ${esc(weatherLabel(h.code))} · ${number(h.temperature)}° · 降水 ${wxPercent(h.rain)?number(h.rain):'—'}%` : '時間別予報はありません';
+  }
+  function weatherForecast(d) {
+    const hours = weatherHours(d), daily = d.daily;
+    weatherHour = wxClamp(weatherHour, 0, Math.max(0,hours.length-1));
+    const ranges = daily.time.slice(0,7).map((_,i) => [daily.temperature_2m_min?.[i],daily.temperature_2m_max?.[i]]);
+    const validRange = r => r.every(wxValid) && r[0] <= r[1];
+    const extrema = ranges.filter(validRange).flat(), min = extrema.length ? Math.min(...extrema) : 0, span = extrema.length ? Math.max(1,Math.max(...extrema)-min) : 1;
+    return `<section class="weather-card wx-hour-card"><div class="wx-card-heading"><h3>時間別予報</h3><span>現地時間 · 最大24時間</span></div>
+      <div class="wx-chart-tabs" role="group" aria-label="グラフの表示">${[['temperature','気温'],['rain','降水確率']].map(([key,label])=>`<button data-action="weatherChartMode" data-value="${key}" aria-pressed="${weatherMetric===key}">${label}</button>`).join('')}</div>
+      <p id="wx-hour-detail" class="wx-hour-detail" aria-live="polite">${weatherHourDetail(hours)}</p>
+      <div class="wx-timeline" tabindex="0" role="region" aria-label="時間別予報。横にスクロールできます"><div class="wx-timeline-inner" style="width:${Math.max(1,hours.length)*66}px"><div id="wx-chart-plot">${weatherChart(hours)}</div>
+      <div class="hourly-forecast">${hours.map((h,i)=>`<button data-action="weatherHour" data-value="${i}" aria-pressed="${i===weatherHour}" aria-label="${esc(h.time.replace('T',' '))} ${esc(weatherLabel(h.code))} ${number(h.temperature)}度 降水確率${wxPercent(h.rain)?number(h.rain):'不明'}パーセント"><span>${esc(h.time.slice(11,16))}</span>${weatherArt(h.code,h.night)}<strong>${number(h.temperature)}°</strong><small>${wxPercent(h.rain)?number(h.rain):'—'}%</small></button>`).join('')}</div></div></div><p class="wx-scroll-hint">時刻を選択して確認 <span aria-hidden="true">← →</span></p></section>
+      <section class="weather-card wx-week"><div class="wx-card-heading"><h3>7日間の予報</h3><span>最低 / 最高</span></div>${daily.time.slice(0,7).map((t,i)=>{
+        const r = ranges[i], valid = validRange(r), date = new Date(t+'T12:00:00Z'), day = Number.isFinite(date.getTime()) ? ['日','月','火','水','木','金','土'][date.getUTCDay()] : '';
+        return `<div class="live-forecast-row"><span class="wx-day">${esc(t.slice(5).replace('-','/'))}<small>${day}曜日</small></span>${weatherArt(daily.weather_code?.[i])}<span class="wx-week-condition">${esc(weatherLabel(daily.weather_code?.[i]))}</span><div class="wx-day-range"><span>${number(r[0])}°</span><div class="wx-range-track" aria-hidden="true">${valid?`<i style="left:${(r[0]-min)/span*100}%;width:${(r[1]-r[0])/span*100}%"></i>`:''}</div><strong>${number(r[1])}°</strong></div></div>`;
+      }).join('')}<p class="wx-range-note">バーは7日間共通の気温スケール</p></section>`;
+  }
+  function weatherMetrics(d) {
+    const humidity = d.current.relative_humidity_2m, wind = d.current.wind_speed_10m, uv = d.daily.uv_index_max?.[0];
+    const uvOK = wxValid(uv) && uv >= 0, uvLabel = !uvOK ? 'データなし' : uv < 3 ? '弱い' : uv < 6 ? '中程度' : uv < 8 ? '強い' : uv < 11 ? '非常に強い' : '極端に強い';
+    const sunrise = d.daily.sunrise?.[0], sunset = d.daily.sunset?.[0];
+    const minutes = t => typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(t) ? Number(t.slice(11,13))*60+Number(t.slice(14,16)) : NaN;
+    const rise = minutes(sunrise), set = minutes(sunset), now = minutes(d.current.time), solarOK = Number.isFinite(rise+set+now) && set > rise && sunrise.slice(0,10) === d.current.time.slice(0,10) && sunset.slice(0,10) === d.current.time.slice(0,10);
+    const progress = solarOK ? wxClamp((now-rise)/(set-rise),0,1) : 0, angle = Math.PI*(1-progress);
+    const ring = wxSVG(`<circle cx="50" cy="43" r="29" fill="none" stroke="#ffffff16" stroke-width="5"/>${wxPercent(humidity)?`<circle cx="50" cy="43" r="29" fill="none" stroke="#9fe4ee" stroke-width="5" pathLength="100" stroke-dasharray="${humidity} 100" transform="rotate(-90 50 43)"/>`:''}<path d="M50 24s-11 13-11 20a11 11 0 0 0 22 0c0-7-11-20-11-20Z" fill="#a7e9f5" fill-opacity=".3" stroke="#c7f5ff"/><path d="M44 44q0 6 6 6" stroke="#e9fdff" stroke-linecap="round" fill="none"/>`, 'wx-metric-art', '0 0 100 80');
+    const windArt = wxSVG('<g fill="none" stroke="#c3e4f6" stroke-linecap="round"><path d="M14 27h44c16 0 16-20 5-20-6 0-9 4-9 7"/><path d="M8 39h71c17 0 17 23 3 23-6 0-9-5-8-9" stroke-width="2"/><path d="M22 51h26c12 0 12 15 3 15"/><path d="M16 64h14" opacity=".4"/></g>', 'wx-metric-art');
+    const sunArt = wxSVG(`<path d="M12 68a48 48 0 0 1 96 0" fill="none" stroke="#ffffff28" stroke-width="2" stroke-dasharray="3 4"/><path d="M7 68h106" stroke="#ffffff40"/>${solarOK?`<path d="M12 68a48 48 0 0 1 96 0" fill="none" stroke="#ffd994" stroke-width="2" pathLength="100" stroke-dasharray="${progress*100} 100"/><circle cx="${60+48*Math.cos(angle)}" cy="${68-48*Math.sin(angle)}" r="6" fill="#ffe2a8" stroke="#fff5d9"/>`:''}`, 'wx-solar-art', '0 0 120 80');
+    return `<div class="weather-stats"><section class="weather-card weather-stat"><h3>湿度</h3>${ring}<strong>${wxPercent(humidity)?number(humidity):'—'}<small>%</small></strong><p>相対湿度</p></section>
+      <section class="weather-card weather-stat"><h3>風速</h3>${windArt}<strong>${wxValid(wind)&&wind>=0?esc(wind):'—'}<small>m/s</small></strong><p>地上10mの予報</p></section>
+      <section class="weather-card weather-stat wx-uv"><h3>UV指数</h3><strong>${uvOK?esc(uv):'—'}</strong><p>${uvLabel} · 今日の最大</p><div class="wx-uv-scale" aria-hidden="true">${uvOK?`<i style="left:${wxClamp(uv/11*100,0,100)}%"></i>`:''}</div><div class="wx-scale-labels"><span>0</span><span>11+</span></div></section>
+      <section class="weather-card weather-stat wx-solar"><h3>日の出・日の入り</h3>${sunArt}<div class="wx-sun-times"><span>出 <b>${Number.isFinite(rise)?esc(sunrise.slice(11,16)):'—'}</b></span><span>入 <b>${Number.isFinite(set)?esc(sunset.slice(11,16)):'—'}</b></span></div><p>${solarOK?'対象時刻の日中の進み具合':'日照の進行データなし'} · 現地</p></section></div>`;
+  }
+
+  // CSS does the drawing. Observers only gate animation; no per-frame JS work.
+  function watchWeatherMotion(root) {
+    stopWeatherMotion();
+    const surfaces = [...root.querySelectorAll('.wx-motion-surface')], visible = new Set();
+    const sync = () => {
+      const active = !document.hidden && A.current === 'weather' && !A.locked && $('#overlay').hidden;
+      surfaces.forEach(el => {el.dataset.wxActive = String(active && visible.has(el));});
+    };
+    const observer = new IntersectionObserver(entries => {entries.forEach(e=>e.isIntersecting ? visible.add(e.target) : visible.delete(e.target));sync();}, {root:root.closest('.app-content'),threshold:0});
+    surfaces.forEach(el => observer.observe(el));
+    const cover = new MutationObserver(sync);
+    cover.observe($('#overlay'),{attributes:true,attributeFilter:['hidden']});
+    document.addEventListener('visibilitychange',sync);
+    stopWeatherMotion = () => {observer.disconnect();cover.disconnect();document.removeEventListener('visibilitychange',sync);surfaces.forEach(el=>{el.dataset.wxActive='false';});stopWeatherMotion=()=>{};};
+    sync();
+  }
+  function updateWeatherChart() {
+    const cache = currentWeather();
+    if (!cache || !$('#wx-chart-plot')) return;
+    const hours = weatherHours(cache.data);
+    $('#wx-chart-plot').innerHTML = weatherChart(hours);
+    $('#wx-hour-detail').innerHTML = weatherHourDetail(hours);
+    document.querySelectorAll('[data-action="weatherChartMode"]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.value===weatherMetric)));
+    document.querySelectorAll('[data-action="weatherHour"]').forEach(el=>el.setAttribute('aria-pressed',String(Number(el.dataset.value)===weatherHour)));
+  }
+  A.actions.weatherChartMode = el => {if (!['temperature','rain'].includes(el.dataset.value)) return;weatherMetric=el.dataset.value;updateWeatherChart();};
+  A.actions.weatherHour = el => {
+    const n = Number(el.dataset.value), hours = currentWeather() ? weatherHours(currentWeather().data) : [];
+    if (!Number.isInteger(n) || n < 0 || n >= hours.length) return;
+    weatherHour=n;updateWeatherChart();
+  };
   function weatherPanel() {
     const root = $('#live-weather');
     if (!root) return;
-    const cache = currentWeather(), snapshot = A.weatherSnapshot();
-    $('#app-screen').dataset.weatherScene = A.weatherScene(cache?.data.current.weather_code);
-    $('#app-screen').dataset.weatherNight = String(cache?.data.current.is_day === 0);
-    root.innerHTML = `<section class="weather-summary"><span class="connection-badge">OPEN-METEO</span><h2>${esc(weatherPlace.name)}</h2>${cache ? weatherLandscape(cache.data.current.weather_code, cache.data.current.is_day === 0) : ''}<div class="big-temperature">${snapshot.temp}°</div><p>${esc(snapshot.desc)}</p><small>最高 ${snapshot.high}°　最低 ${snapshot.low}°</small></section>${weatherBusy ? stateBox('天気を取得しています…') : ''}${weatherError ? stateBox(weatherError + (cache ? ' 最後に取得したデータを表示しています。' : ''), 'weatherRefresh') : ''}`;
-    if (cache) {
-      const d = cache.data, h = d.hourly, daily = d.daily;
-      // Both timestamps are in the provider's location timezone, not the device timezone.
-      const start = Math.max(0, h.time.findIndex(t => t >= d.current.time.slice(0, 13) + ':00'));
-      root.innerHTML += `<p class="connected-caption">取得 ${stamp(cache.savedAt)} · 対象時刻 ${esc(d.current.time.replace('T', ' '))}<br>${esc(d.timezone)} · 予報（観測実況ではありません）</p><div class="weather-card"><h3>時間別予報 · 現地時間</h3><div class="hourly-forecast">${h.time.slice(start, start + 24).map((t, i) => `<div><span>${esc(t.slice(11, 16))}</span>${weatherArt(h.weather_code?.[start + i])}<strong>${number(h.temperature_2m?.[start + i])}°</strong><small>${esc(weatherLabel(h.weather_code?.[start + i]))}</small><small>降水 ${number(h.precipitation_probability?.[start + i])}%</small></div>`).join('')}</div></div><div class="weather-card"><h3>7日間</h3>${daily.time.map((t, i) => `<div class="live-forecast-row"><span>${esc(t.slice(5).replace('-', '/'))}</span>${weatherArt(daily.weather_code?.[i])}<span>${esc(weatherLabel(daily.weather_code?.[i]))}</span><span>${number(daily.temperature_2m_min?.[i])}° / ${number(daily.temperature_2m_max?.[i])}°</span></div>`).join('')}</div><div class="weather-stats">${[['湿度', `${number(d.current.relative_humidity_2m)}%`], ['風速', `${d.current.wind_speed_10m ?? '—'} m/s`], ['UV指数（今日の最大）', daily.uv_index_max?.[0] ?? '—'], ['日の入り（現地）', daily.sunset?.[0]?.slice(11, 16) || '—']].map(([label, value]) => `<div class="weather-card weather-stat"><h3>${label}</h3><strong>${esc(value)}</strong></div>`).join('')}</div>`;
-    }
-    root.innerHTML += `<p class="connected-caption">${N.link('https://open-meteo.com/', '天気データ：Open-Meteo（CC BY 4.0）')}<br>位置情報は許可時のみ取得。予報の取得先に座標を送信。防災情報は ${N.link('https://www.jma.go.jp/bosai/', '気象庁')}</p>`;
+    const cache = currentWeather(), snapshot = A.weatherSnapshot(), d = cache?.data;
+    $('#app-screen').dataset.weatherScene = A.weatherScene(d?.current.weather_code);
+    $('#app-screen').dataset.weatherNight = String(d?.current.is_day === 0);
+    root.innerHTML = `<section class="weather-summary"><div class="wx-hero-heading"><span class="connection-badge">ATMOSPHERE / 天気</span><h2>${esc(weatherPlace.name)}</h2><span class="wx-source-pill">${cache ? (weatherError || Date.now()-cache.savedAt>900000 ? '保存データ' : '予報データ') : '未取得'}</span></div>
+      <div class="wx-hero-reading"><div class="big-temperature">${snapshot.temp}<span>°</span></div><div><p>${esc(snapshot.desc)}</p><small>最高 ${snapshot.high}°<br>最低 ${snapshot.low}°</small></div></div>
+      ${cache ? weatherLandscape(d.current.weather_code,d.current.is_day===0) : '<div class="wx-awaiting">空のデータを待っています</div>'}<p class="wx-scene-note">${cache&&A.weatherScene(d.current.weather_code)?'天候に合わせたイラスト · 実景ではありません':'天候イラストのデータなし'}</p></section>
+      ${weatherBusy ? stateBox('天気を取得しています…') : ''}${weatherError ? stateBox(weatherError+(cache?' 最後に取得したデータを表示しています。':''),'weatherRefresh') : ''}`;
+    if (cache) root.innerHTML += `<p class="connected-caption wx-data-stamp">取得 ${stamp(cache.savedAt)} · 対象 ${esc(d.current.time.replace('T',' '))}<br>${esc(d.timezone)} · 予報（観測実況ではありません）</p>${weatherForecast(d)}${weatherMetrics(d)}`;
+    root.innerHTML += `<p class="connected-caption wx-attribution">${N.link('https://open-meteo.com/','天気データ：Open-Meteo（CC BY 4.0）')}<br>位置情報は許可時のみ取得。予報の取得先に座標を送信。<br>防災情報は ${N.link('https://www.jma.go.jp/bosai/','気象庁')}</p>`;
+    watchWeatherMotion(root);
     A.updateWidgets();
   }
   async function refreshWeather(force = false) {
@@ -139,7 +270,7 @@
     if (!force && cached && Date.now() - cached.savedAt < 900000) { weatherBusy = false; weatherError = ''; weatherPanel(); return; }
     const controller = weatherController = new AbortController(), place = {...weatherPlace};
     weatherBusy = true; weatherError = ''; weatherPanel();
-    const params = new URLSearchParams({latitude: place.latitude, longitude: place.longitude, current: 'temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day', hourly: 'temperature_2m,weather_code,precipitation_probability', daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max', timezone: 'auto', wind_speed_unit: 'ms', forecast_days: '7'});
+    const params = new URLSearchParams({latitude: place.latitude, longitude: place.longitude, current: 'temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day', hourly: 'temperature_2m,weather_code,precipitation_probability,is_day', daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max', timezone: 'auto', wind_speed_unit: 'ms', forecast_days: '7'});
     try {
       const data = await N.request(`https://api.open-meteo.com/v1/forecast?${params}`, {signal: controller.signal});
       if (controller !== weatherController || controller.signal.aborted) return;
@@ -152,9 +283,9 @@
     A.statusTheme(true); $('#app-screen').classList.add('weather-app');
     A.view(A.nav('天気', button('weatherCities', '都市')) + `<div class="app-content"><div class="connection-toolbar">${button('weatherLocate', '現在地を使う')}${button('weatherRefresh', '更新')}</div><div id="live-weather" aria-live="polite"></div></div>`);
     weatherPanel(); refreshWeather();
-    A.cleanups.push(() => { weatherController?.abort(); cityController?.abort(); weatherBusy = false; });
+    A.cleanups.push(() => { stopWeatherMotion(); weatherController?.abort(); cityController?.abort(); weatherBusy = false; });
   }
-  function selectWeather(place) { if (!validPlace(place)) return; weatherPlace = place; A.save('weatherLocation', place); weatherError = ''; A.closeOverlay(); weather(); }
+  function selectWeather(place) { if (!validPlace(place)) return; A.cleanup(); weatherHour = 0; weatherPlace = place; A.save('weatherLocation', place); weatherError = ''; A.closeOverlay(); weather(); }
   A.apps.weather.render = weather;
   A.actions.weatherSaveCity = () => { const saved=A.load('weatherFavorites',[]); if(!saved.some(p=>placeKey(p)===placeKey(weatherPlace))) { if(!A.save('weatherFavorites',[{...weatherPlace},...saved].slice(0,20)))return; } A.actions.weatherCities(); A.toast('都市を保存済み'); };
   A.actions.weatherSavedCity = el => { const p=A.load('weatherFavorites',[]).find(p=>placeKey(p)===el.dataset.id);if(p)selectWeather(p); };
