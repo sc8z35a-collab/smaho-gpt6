@@ -719,3 +719,101 @@ a.primary-button{text-decoration:none;text-align:center;display:inline-flex;just
 [data-reduce-motion=true] .mori-card-sheen{display:none}
 [data-reduce-motion=true] .mori-actions button,[data-reduce-motion=true] .mori-actions .mori-object{transform:none!important}
 @media(prefers-reduced-motion:reduce){.mori-card{transform:rotateZ(-2deg)!important}.mori-card-sheen{display:none}.mori-actions button,.mori-actions .mori-object{transform:none!important}}
+
+/* Weather Atmosphere: all artwork is local SVG, all numeric graphics use forecast values. */
+.app-screen.weather-app{background:radial-gradient(ellipse at 95% 0,#91c7d322,transparent 55%),linear-gradient(155deg,#203e56,#142a40 68%,#112436);color:#f0f6fb}
+.app-screen.weather-app[data-weather-scene=rain],.app-screen.weather-app[data-weather-scene=thunder],.app-screen.weather-app[data-weather-scene=overcast]{background:radial-gradient(ellipse at 90% 0,#8596b52b,transparent 60%),linear-gradient(155deg,#2a394f,#182a3e 70%)}
+.app-screen.weather-app[data-weather-night=true]{background:radial-gradient(ellipse at 90% 0,#9290c422,transparent 55%),linear-gradient(155deg,#1c2742,#111e33 70%)}
+.weather-app .app-content{padding:0 16px 30px;scrollbar-color:#7c9dbc60 transparent}
+.weather-app .app-nav{background:transparent;border:0}
+.weather-app .connection-toolbar{margin:0 0 15px;justify-content:space-between;gap:10px}
+.weather-app .connection-toolbar .connection-link{min-height:38px;padding:8px 14px;border-radius:24px;font-size:11px;color:#e5f3ff;background:#d4e9ff09;border:1px solid #d4e9ff20}
+.weather-app .connection-toolbar .connection-link:last-child::before{content:'↻';font-size:15px;margin-right:6px}
+.weather-app .weather-summary{padding:20px 12px 8px;text-align:left;border-radius:27px;background:linear-gradient(135deg,#bfe5f214,#719cc305);border:1px solid #c6e7f42b;box-shadow:inset 0 1px 0 #effcff16,0 16px 28px -20px #0009}
+.wx-hero-heading{position:relative;padding:0 8px}
+.weather-summary .connection-badge{display:block;color:#b9d9e7;letter-spacing:2.2px;font-size:8px;margin:0 0 10px}
+.weather-summary .wx-hero-heading h2{font-size:23px;letter-spacing:.07em;font-weight:500;max-width:72%;overflow-wrap:anywhere;line-height:1.5}
+.wx-source-pill{position:absolute;right:6px;bottom:5px;font-size:9px;padding:5px 8px;border:1px solid #c9e7ee2b;border-radius:20px;color:#c8e6e9;background:#9ed9e20b;white-space:nowrap}
+.wx-source-pill::before{content:'';display:inline-block;width:4px;height:4px;background:#b7e5e3;border-radius:50%;margin-right:5px;vertical-align:2px}
+.wx-hero-reading{display:flex;gap:22px;align-items:center;padding:12px 8px 18px}
+.weather-summary .wx-hero-reading .big-temperature{font-size:80px;font-weight:300;letter-spacing:-5px;line-height:1;color:#f7f8f4;text-shadow:0 6px 20px #0002;font-variant-numeric:tabular-nums}
+.big-temperature>span{font-size:.65em;vertical-align:top;display:inline-block;margin-top:4px;letter-spacing:0}
+.weather-summary .wx-hero-reading p{font-size:13px;letter-spacing:.05em;margin:0 0 8px;color:#f2f6fa}
+.weather-summary .wx-hero-reading small{font-size:10px;line-height:1.9;color:#bed2e0;letter-spacing:.05em}
+.weather-app .weather-summary .weather-landscape{width:100%;height:auto;max-height:none;aspect-ratio:3/2;display:block;margin:0;filter:none;border-radius:22px;box-shadow:0 2px 12px #07162230}
+.weather-summary .wx-scene-note{font-size:8px;text-align:center;color:#b7ccda;letter-spacing:.06em;margin:9px 0 2px}
+.wx-awaiting{height:140px;display:grid;place-items:center;font-size:12px;color:#b9ccdc;background:linear-gradient(150deg,#48708c26,#1b2e4122);border-radius:22px}
+.weather-app .wx-data-stamp{text-align:center;font-size:9px;line-height:1.8;color:#b5c9da;margin:13px 0 22px}
+.weather-app .weather-card{min-width:0;padding:17px 14px;border-radius:22px;border:1px solid #d0e4f321;background:linear-gradient(145deg,#c2deee0e,#091d341f);box-shadow:inset 0 1px 0 #ffffff08,0 9px 20px -15px #020e25aa;backdrop-filter:none;margin-bottom:14px}
+.weather-app .weather-card h3{font-size:11px;font-weight:500;letter-spacing:.08em;color:#e1edf4;margin:0 0 13px}
+.wx-card-heading{display:flex;align-items:center;justify-content:space-between;gap:5px;margin-bottom:16px}
+.weather-app .wx-card-heading h3{margin:0}
+.wx-card-heading>span{color:#aebfd0;font-size:8px;white-space:nowrap}
+.wx-chart-tabs{display:grid;grid-template-columns:1fr 1fr;background:#091e354d;border-radius:12px;padding:3px;gap:3px}
+.wx-chart-tabs button{min-height:37px;border-radius:9px;font-size:11px;color:#b9cede;transition:background .22s,color .22s}
+.wx-chart-tabs button[aria-pressed=true]{background:#a7cbd92b;box-shadow:inset 0 1px 0 #def0fa28,0 3px 6px #0002;color:#fff2d6}
+.wx-hour-detail{font-size:10px;color:#dcebf4;line-height:1.7;min-height:34px;margin:13px 0 6px;font-variant-numeric:tabular-nums}
+.wx-timeline{overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:#9ecadb55 transparent;padding:5px 0 8px;max-width:100%;border-radius:8px}
+.wx-timeline:focus-visible{outline:2px solid #d7ecff;outline-offset:3px}
+.wx-timeline-inner{min-width:100%}
+.wx-chart{width:100%;height:120px;overflow:visible}
+.wx-chart text{font-family:inherit;font-variant-numeric:tabular-nums}
+.wx-chart-empty{height:120px;margin:0;font-size:11px;color:#becfde;padding-top:45px;width:240px;max-width:100%;text-align:center}
+.weather-app .hourly-forecast{display:flex;gap:0;overflow:visible;justify-content:flex-start;padding:0;margin:0;scroll-snap-type:none}
+.weather-app .hourly-forecast>button{display:flex;flex-direction:column;align-items:center;flex:0 0 66px;width:66px;gap:7px;padding:10px 3px;border:1px solid transparent;border-radius:13px;min-height:130px;font-size:10px;transition:background .22s,border-color .22s}
+.weather-app .hourly-forecast>button[aria-pressed=true]{background:linear-gradient(#b9e4f01d,#b9e4f008);border-color:#b9e4f045}
+.weather-app .hourly-forecast>button>span{color:#c7d9e5;font-variant-numeric:tabular-nums}
+.weather-app .hourly-forecast strong{font-size:17px;font-weight:500}
+.weather-app .hourly-forecast small{font-size:9px;color:#a9daf0}
+.weather-app .wx-symbol{display:block;width:40px;height:32px;overflow:visible;flex-shrink:0;margin:0;filter:drop-shadow(0 3px 3px #05142530)}
+.wx-scroll-hint,.wx-range-note{font-size:9px;color:#aebfd0;text-align:center;margin:11px 0 0}
+.wx-scroll-hint span{letter-spacing:4px;margin-left:8px}
+.weather-app .live-forecast-row{display:grid;grid-template-columns:39px 34px minmax(0,1fr);align-items:center;gap:2px 8px;position:relative;min-height:70px;border-top:1px solid #d8e8f312;padding:10px 0;font-size:11px}
+.weather-app .live-forecast-row>span{width:auto;min-width:0}
+.weather-app .live-forecast-row .wx-symbol{width:34px;height:29px;grid-column:2;grid-row:1/3}
+.weather-app .live-forecast-row .wx-day{grid-row:1/3;color:#e2edf5;font-variant-numeric:tabular-nums;font-size:10px;line-height:1.6}
+.wx-day small{display:block;font-size:8px;color:#a7bed1}
+.weather-app .live-forecast-row .wx-week-condition{grid-column:3;grid-row:1;color:#c4d5e2;font-size:9px;white-space:normal;text-align:left;line-height:1.5}
+.wx-day-range{grid-column:3;display:grid;grid-template-columns:28px 1fr 28px;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
+.wx-day-range>span{color:#a8c9e2}.wx-day-range>strong{text-align:right;font-weight:500;color:#ffe3b4}
+.wx-range-track{position:relative;height:5px;border-radius:8px;background:#081c344d;overflow:hidden}
+.wx-range-track>i{position:absolute;top:0;height:100%;min-width:2px;border-radius:8px;background:linear-gradient(90deg,#89cdda,#cbe2c2,#f4d78f,#eca579);box-shadow:0 0 8px #bad5de20}
+.weather-app .weather-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.weather-app .weather-stat{position:relative;overflow:hidden;min-height:183px;padding:16px 12px;margin:0}
+.weather-app .weather-stat h3{position:relative;z-index:1;font-size:10px;letter-spacing:.05em}
+.weather-app .weather-stat>strong{font-size:30px;line-height:1.1;letter-spacing:-.6px;font-weight:400;position:relative;margin:68px 0 7px;font-variant-numeric:tabular-nums}
+.weather-stat>strong small{font-size:11px;color:#c0d6e5;letter-spacing:0;margin-left:4px}
+.weather-app .weather-stat p{font-size:9px;line-height:1.65;color:#b2c9d9;margin:0}
+.wx-metric-art{position:absolute;top:28px;right:13px;width:83px;height:72px;opacity:.9}
+.weather-app .wx-uv>strong{margin-top:25px;font-size:37px}
+.wx-uv-scale{position:relative;height:5px;margin:21px 4px 8px;border-radius:8px;background:linear-gradient(90deg,#94cfa1 0 20%,#e7d87d 20% 40%,#eda570 40% 60%,#dc817c 60% 80%,#aa92bb 80%)}
+.wx-uv-scale>i{position:absolute;top:-3px;width:5px;height:11px;border-radius:5px;background:#fff;box-shadow:0 1px 6px #0008;transform:translateX(-50%)}
+.wx-scale-labels{display:flex;justify-content:space-between;font-size:8px;color:#b5c7d5}
+.wx-solar-art{width:100%;height:79px;margin-top:18px}
+.wx-sun-times{display:flex;justify-content:space-between;gap:4px;font-size:8px;color:#becfdd;margin:4px 0 9px}
+.wx-sun-times b{display:block;font-size:14px;font-weight:400;color:#f1ddb7;margin-top:3px;font-variant-numeric:tabular-nums}
+.weather-app .wx-attribution{text-align:center;font-size:9px;color:#acc3d7;margin:22px 4px 10px;line-height:1.9}
+.weather-app .wx-attribution a{padding:0;background:none;border:0;color:#bfd9e8;font-size:9px}
+/* Animate only transforms and opacity. No full-screen flashes or expensive blur filters. */
+.wx-motion-surface{--wx-play:paused}.wx-motion-surface[data-wx-active=true]{--wx-play:running}
+.weather-app .wx-motion{animation-play-state:var(--wx-play,paused);animation-delay:var(--wx-delay,0s)}
+.wx-cloud-front{animation:wxCloud 13s ease-in-out infinite alternate}.wx-cloud-back{animation:wxCloud 22s ease-in-out infinite alternate-reverse}
+.wx-water{animation:wxWater 7s ease-in-out infinite alternate}.wx-halo{animation:wxHalo 10s ease-in-out infinite alternate;transform-origin:260px 65px}
+.wx-orbit{animation:wxOrbit 100s linear infinite;transform-origin:260px 65px}
+.wx-star{animation:wxStar 5s ease-in-out infinite alternate}.wx-rain{animation:wxRain var(--wx-duration,1.5s) linear infinite;opacity:.55}
+.wx-flake{animation:wxSnow var(--wx-duration,7s) linear infinite}.wx-mist{animation:wxMist 16s ease-in-out infinite alternate}
+.wx-lightning{animation:wxLightning 9s ease-in-out infinite;opacity:.7}
+@keyframes wxCloud{from{transform:translateX(-7px)}to{transform:translateX(9px)}}
+@keyframes wxWater{from{transform:translateX(-3px);opacity:.28}to{transform:translateX(4px);opacity:.52}}
+@keyframes wxHalo{from{transform:scale(.94);opacity:.65}to{transform:scale(1.07);opacity:.9}}
+@keyframes wxOrbit{to{transform:rotate(360deg)}}
+@keyframes wxStar{from{opacity:.25}to{opacity:.95}}
+@keyframes wxRain{0%{transform:translate(8px,-23px);opacity:0}15%,75%{opacity:.55}100%{transform:translate(-10px,36px);opacity:0}}
+@keyframes wxSnow{0%{transform:translate(-4px,-15px);opacity:0}15%,80%{opacity:.85}100%{transform:translate(11px,38px);opacity:0}}
+@keyframes wxMist{from{transform:translateX(-14px);opacity:.6}to{transform:translateX(14px);opacity:1}}
+@keyframes wxLightning{0%,100%{opacity:.45}50%{opacity:1}}
+[data-reduce-motion=true] .weather-app .wx-motion{animation:none!important}
+[data-high-contrast=true] .weather-app .weather-card{border-color:#b6d4e7}
+@media(prefers-reduced-motion:reduce){.weather-app .wx-motion{animation:none!important}.weather-app button{transition:none!important}}
+@media(hover:hover){.wx-chart-tabs button:hover,.weather-app .hourly-forecast>button:hover{background:#bedfed20}}
+@media(max-width:350px){.weather-app .app-content{padding-left:12px;padding-right:12px}.weather-app .weather-summary{padding:16px 9px 7px}.weather-summary .wx-hero-reading .big-temperature{font-size:70px}.wx-hero-reading{gap:17px}.weather-app .weather-card{padding:15px 11px}.wx-card-heading>span{font-size:7px}.weather-app .live-forecast-row{column-gap:6px}.weather-app .weather-stat>strong{font-size:28px}.wx-sun-times b{font-size:12px}.wx-source-pill{font-size:8px}.weather-summary .wx-scene-note{font-size:7px}}
