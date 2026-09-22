@@ -452,7 +452,7 @@
 @media(max-width:360px){#app-screen .ev-sketch .sk-layer canvas{width:28px;height:28px}#app-screen .ev-sketch .sk-layer>button:first-child{padding-left:4px;gap:5px}}
 
 /* Journal Atelier — woven covers, pressed botanicals and layered writing paper. */
-#app-screen .jr-atelier{--jr-ink:#51453f;--jr-muted:#80726a;--jr-accent:#84616d;--jr-paper:#fffcf5;--jr-base:#f3eee5;--jr-soft:#e9ded2;--jr-line:#aa917329;--ev-muted:var(--jr-muted);--ev-surface:var(--jr-paper);--ev-border:var(--jr-line);color:var(--jr-ink);background:radial-gradient(ellipse at 100% 0,#c5b29916,transparent 50%),var(--jr-base);padding:18px 20px 65px;min-height:100%;font-variant-numeric:tabular-nums}
+#app-screen .jr-atelier{--jr-ink:#51453f;--jr-muted:#80726a;--jr-accent:#84616d;--jr-paper:#fffcf5;--jr-base:#f3eee5;--jr-soft:#e9ded2;--jr-line:#aa917329;--ev-muted:var(--jr-muted);--ev-surface:var(--jr-paper);--ev-border:var(--jr-line);color:var(--jr-ink);background:radial-gradient(ellipse at 100% 0,#c5b29916,transparent 50%),var(--jr-base);padding:18px 20px 65px;min-height:0;font-variant-numeric:tabular-nums}
 #app-screen .jr-atelier[data-journal-theme=rose]{--jr-paper:#fff8f7;--jr-base:#f4e9e8;--jr-soft:#ecdadc;--jr-accent:#895d70;--jr-line:#ac738b29}
 #app-screen .jr-atelier[data-journal-theme=sage]{--jr-paper:#fafcf5;--jr-base:#eaf0e7;--jr-soft:#dbe5d7;--jr-accent:#567365;--jr-line:#728b6929}
 #app-screen .jr-atelier button{font-family:inherit;color:inherit;transition:background .2s,box-shadow .2s,transform .22s;touch-action:manipulation}
@@ -497,7 +497,7 @@
 #app-screen .jr-filter-grid select{width:100%;padding:9px 6px;background:var(--jr-paper);border:1px solid var(--jr-line);border-radius:8px;font-size:12px;min-height:40px}
 #app-screen .jr-filter-grid button[aria-pressed=true]{color:var(--jr-accent);background:var(--jr-soft);box-shadow:inset 0 0 0 1px var(--jr-accent)}
 #app-screen .jr-result-count{font-size:10px;color:var(--jr-muted);letter-spacing:.08em;margin:18px 2px 12px}
-#app-screen .jr-atelier .jr-entry{position:relative;border:1px solid var(--jr-line);border-left:3px solid var(--jr-accent);border-radius:4px 17px 17px 4px;padding:19px 20px 15px;margin:0 0 19px;background:linear-gradient(90deg,#9b856608,transparent 12%),var(--jr-paper);box-shadow:0 3px 0 -1px var(--jr-paper),0 4px 0 -1px var(--jr-line),0 8px 18px -10px #60402b35;overflow:hidden;animation:jr-page-arrive .45s both;animation-delay:calc(var(--jr-order,0)*35ms);transform-origin:left center}
+#app-screen .jr-atelier .jr-entry{position:relative;border:1px solid var(--jr-line);border-left:3px solid var(--jr-accent);border-radius:4px 17px 17px 4px;padding:19px 20px 15px;margin:0 0 19px;background:linear-gradient(90deg,#9b856608,transparent 12%),var(--jr-paper);box-shadow:0 3px 0 -1px var(--jr-paper),0 4px 0 -1px var(--jr-line),0 8px 18px -10px #60402b35;overflow:hidden;animation:jr-page-arrive .45s backwards;animation-delay:calc(var(--jr-order,0)*35ms);transform-origin:left center}
 #app-screen .jr-entry header{justify-content:flex-start;gap:12px}
 #app-screen .jr-entry time{display:flex;align-items:center;gap:10px;color:var(--jr-muted)}
 #app-screen .jr-entry time b{font-family:Georgia,serif;font-size:31px;line-height:1;color:var(--jr-ink);font-weight:400}
@@ -760,3 +760,55 @@
 [data-reduce-motion=true] .rd-cover-button:hover .rd-book-object,[data-reduce-motion=true] .rd-cover-button:focus-visible .rd-book-object{transform:perspective(650px) rotateY(-16deg) rotateZ(-2deg)}
 [data-reduce-motion=true] .rd-completed .rd-detail-stage:after{display:none}[data-reduce-motion=true] .rd-button:active{transform:none}
 @media(forced-colors:active){.rd-book-object .rd-cover-face{border:1px solid CanvasText;background:Canvas;box-shadow:none}.rd-cover-title,.rd-cover-author{color:CanvasText;text-shadow:none}.rd-hero,.rd-goal,.rd-progress-panel,.rd-paper-note,.rd-quote,.rd-week{border:1px solid CanvasText}.rd-book-stage:after,.rd-stage-pedestal,.rd-hero:after{display:none}.rd-week-bars i{background:Highlight;forced-color-adjust:none}}
+
+/* Journal Reading Room: full-length reading leaves and personal typesetting. */
+#app-screen .jr-atelier{--jr-body-size:16px;--jr-leading:34px;--jr-body-font:'Noto Sans JP',sans-serif}
+#app-screen .jr-atelier[data-journal-font=serif]{--jr-body-font:'Yu Mincho','Hiragino Mincho ProN',serif}
+#app-screen .jr-atelier[data-journal-size=small]{--jr-body-size:14px;--jr-leading:30px}
+#app-screen .jr-atelier[data-journal-size=large]{--jr-body-size:19px;--jr-leading:40px}
+#app-screen .jr-editor .ev-journal-body,#app-screen .jr-reading-body{font-family:var(--jr-body-font);font-size:var(--jr-body-size);line-height:var(--jr-leading);background:repeating-linear-gradient(transparent 0 calc(var(--jr-leading) - 1px),var(--jr-line) calc(var(--jr-leading) - 1px) var(--jr-leading));background-origin:content-box}
+#app-screen .jr-atelier[data-journal-paper=dots] .ev-journal-body,#app-screen .jr-atelier[data-journal-paper=dots] .jr-reading-body{background:radial-gradient(circle,var(--jr-line) 1px,transparent 1.2px) 0 0/18px var(--jr-leading);background-origin:content-box}
+#app-screen .jr-atelier[data-journal-paper=plain] .ev-journal-body,#app-screen .jr-atelier[data-journal-paper=plain] .jr-reading-body{background:none}
+#app-screen .jr-atelier[data-journal-layout=compact] .jr-entry{padding:12px 16px;margin-bottom:12px}
+#app-screen .jr-atelier[data-journal-layout=compact] .jr-entry time b{font-size:24px}
+#app-screen .jr-atelier[data-journal-layout=compact] .jr-entry h3{margin:8px 0 0;font-size:15px}
+#app-screen .jr-atelier[data-journal-layout=compact] .jr-entry p,#app-screen .jr-atelier[data-journal-layout=compact] .jr-entry footer{display:none}
+#app-screen .jr-reader-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:1px 0 22px;font-size:10px;color:var(--jr-muted)}
+#app-screen .jr-reading-leaf{position:relative;padding:22px 24px 28px;background:linear-gradient(90deg,#82623d0d,transparent 22px),var(--jr-paper);border:1px solid var(--jr-line);border-radius:4px 18px 18px 4px;box-shadow:3px 3px 0 -1px var(--jr-paper),4px 4px 0 -1px var(--jr-line),7px 7px 0 -2px var(--jr-paper),8px 8px 0 -2px var(--jr-line),0 16px 27px -17px #4a382f40;transform-origin:0 50%;animation:jr-leaf-turn .6s cubic-bezier(.2,.7,.3,1) backwards;isolation:isolate}
+#app-screen .jr-reading-leaf:before{content:'';position:absolute;inset:19px auto 19px 10px;width:1px;background:var(--jr-line);pointer-events:none}
+#app-screen .jr-reading-leaf.jr-turn-back{animation-name:jr-leaf-return;transform-origin:100% 50%}
+#app-screen .jr-reading-stamp{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:20px}
+#app-screen .jr-reading-stamp time{display:grid;grid-template-columns:auto auto;gap:5px 10px;align-items:center}
+#app-screen .jr-reading-stamp time>span{grid-column:1/-1;font-size:10px;letter-spacing:2px;color:var(--jr-muted)}
+#app-screen .jr-reading-stamp strong{font-family:Georgia,serif;font-size:51px;line-height:1.2;font-weight:400}
+#app-screen .jr-reading-stamp small{font-size:10px;color:var(--jr-muted)}
+#app-screen .jr-reading-stamp>div{display:flex;flex-direction:column;align-items:center;gap:7px;font-size:10px;color:var(--jr-muted)}
+#app-screen .jr-reading-stamp .jr-mood-art{width:45px;height:45px}
+#app-screen .jr-vignette{display:block;width:100%;height:auto;margin:0 0 27px;box-shadow:0 5px 9px #4d59421a;border-radius:9px;filter:saturate(.85)}
+#app-screen .jr-reading-leaf h1{font-family:var(--jr-body-font);font-size:24px;line-height:1.8;overflow-wrap:anywhere;margin:0 0 20px;font-weight:500;letter-spacing:.02em}
+#app-screen .jr-reading-leaf h1:focus{outline:none}
+#app-screen .jr-reading-body{white-space:pre-wrap;overflow-wrap:anywhere;min-height:140px;padding-top:6px;user-select:text}
+#app-screen .jr-reading-leaf footer{border-top:1px solid var(--jr-line);margin-top:28px;padding-top:16px}
+#app-screen .jr-reading-leaf .ev-tags{margin:0 0 12px;gap:7px}
+#app-screen .jr-reading-leaf .ev-tags span{background:var(--jr-base);color:var(--jr-accent);overflow-wrap:anywhere;max-width:100%;font-size:10px}
+#app-screen .jr-reading-leaf footer>small{font-size:9px;color:var(--jr-muted)}
+#app-screen .jr-reader-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:28px 0 21px}
+#app-screen .jr-reader-actions button{display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;min-height:44px;border:1px solid var(--jr-line);border-radius:10px;background:var(--jr-paper);padding:9px 6px}
+#app-screen .jr-reader-actions button[aria-pressed=true]{background:var(--jr-soft);color:var(--jr-accent);box-shadow:inset 0 0 0 1px var(--jr-accent)}
+#app-screen .jr-reader-actions svg{width:16px;height:16px}
+#app-screen .jr-page-navigation{display:grid;grid-template-columns:1fr 1fr;gap:12px;border-block:1px solid var(--jr-line);padding:14px 0}
+#app-screen .jr-page-navigation button{display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-height:53px;color:var(--jr-accent);padding:5px 4px;font-size:12px}
+#app-screen .jr-page-navigation button:last-child{align-items:flex-end;text-align:right}
+#app-screen .jr-page-navigation small{font-size:10px;color:var(--jr-muted)}
+#app-screen .jr-page-navigation button:disabled{opacity:.45;cursor:default}
+#app-screen .jr-tag-suggestions{display:flex;gap:7px;flex-wrap:wrap;padding:9px 0}
+#app-screen .jr-tag-suggestions button{font-size:10px;min-height:36px;max-width:100%;overflow-wrap:anywhere;padding:7px 9px;color:var(--jr-accent);background:var(--jr-paper);border:1px solid var(--jr-line);border-radius:8px}
+#app-screen .jr-focused .jr-tag-suggestions{display:none}
+.jr-preference{border:0;padding:0;margin:23px 0}.jr-preference legend{font-size:12px;margin:0 0 10px}.jr-preference>div{display:flex;gap:8px;flex-wrap:wrap}.jr-preference button{min-height:42px;flex:1;padding:8px 10px;border:1px solid #a4877229;border-radius:9px;font:inherit;font-size:12px;color:inherit;background:#98775108;white-space:nowrap}.jr-preference button[aria-pressed=true]{border-color:var(--jr-accent);color:var(--jr-accent);box-shadow:inset 0 0 0 1px var(--jr-accent)}.jr-appearance-link{display:block;width:100%;padding:12px;font:inherit;min-height:44px;color:inherit;background:#9877510c;border:1px solid #a4877229;border-radius:10px;margin:15px 0}.jr-card-notice{font-size:11px;line-height:1.9;color:var(--muted,#80726a)}
+.screen-dark-mode #app-screen .jr-vignette{filter:brightness(.77) saturate(.7)}
+@keyframes jr-leaf-turn{from{opacity:0;transform:perspective(950px) rotateY(9deg) translateX(10px)}to{opacity:1;transform:none}}
+@keyframes jr-leaf-return{from{opacity:0;transform:perspective(950px) rotateY(-9deg) translateX(-10px)}to{opacity:1;transform:none}}
+@media(max-width:360px){#app-screen .jr-reading-leaf{padding:19px 18px 24px}#app-screen .jr-reading-leaf h1{font-size:21px}#app-screen .jr-reader-actions button{font-size:10px}#app-screen .jr-reading-stamp strong{font-size:44px}}
+@media(prefers-reduced-motion:reduce){#app-screen .jr-reading-leaf{animation:none;transform:none}}
+[data-reduce-motion=true] #app-screen .jr-reading-leaf{animation:none;transform:none}
+@media(forced-colors:active){#app-screen .jr-vignette{display:none}#app-screen .jr-reading-leaf{border:1px solid CanvasText;box-shadow:none}.jr-preference button[aria-pressed=true]{outline:2px solid Highlight}}
