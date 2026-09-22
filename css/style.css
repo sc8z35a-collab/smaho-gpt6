@@ -1203,3 +1203,17 @@ a.primary-button{text-decoration:none;text-align:center;display:inline-flex;just
 @media(min-width:650px){.pa-album-shelf{grid-template-columns:repeat(3,minmax(0,1fr));gap:32px}.pa-book-title strong{font-size:17px}.pa-book-title small{font-size:8px}.pa-albums,.pa-compare{padding-left:36px;padding-right:36px}.pa-workspace-links{max-width:560px;margin-left:auto;margin-right:auto}.pa-workspace-links button{flex-direction:row;gap:10px;font-size:11px}.pa-comparison-tabs{max-width:520px}.pa-collage-table{padding:35px}}
 @media(max-width:350px){.pa-albums,.pa-collage,.pa-compare{padding-left:15px;padding-right:15px}.pa-album-shelf{gap:20px 14px}.pa-book-cover{padding:9px 7px 0 16px}.pa-book-title{margin-top:8px}.pa-book-title strong{font-size:11px}.pa-book-title small{font-size:5px}.pa-collage-settings,.pa-collage-framing{padding:13px}.pa-workspace-links{gap:5px}.pa-workspace-links button{font-size:8px}.pa-comparison-tabs button{padding:8px}.pa-compare-details{gap:8px}.pa-compare-details>div{padding:10px}.pa-compare-details button{font-size:8px}.pa-collage-table{padding:20px}}
 [data-reduce-motion=true] :is(.pa-book-cover,.pa-workspace-links button,#pa-collage-canvas,.pa-layout-choices button){transform:none!important}@media(prefers-reduced-motion:reduce){.pa-book-cover,.pa-workspace-links button,#pa-collage-canvas,.pa-layout-choices button{transform:none!important}}
+
+/* Real-image swatches replace the decorative fallback once decoding completes. */
+.pa-preset-swatch.has-photo{filter:none;background:#273d32}
+.pa-preset-swatch.has-photo:before,.pa-preset-swatch.has-photo:after{display:none}
+.pa-preset-swatch.has-photo canvas{display:block;width:100%;height:100%;object-fit:cover;border-radius:7px}
+.pa-recipes{border:1px solid #d2dfc526;border-radius:14px;padding:14px;margin-top:7px;background:linear-gradient(125deg,#c8d6b50a,#18261c0a);box-shadow:inset 0 1px 0 #fff06}
+.pa-recipe-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#e2e7d6;font-size:11px;margin-bottom:11px}
+.pa-recipe-heading small{font-size:8px;color:#a3b4a4}
+.pa-recipes select{width:100%;min-height:42px;font-size:11px;padding:7px 10px;border:1px solid #c8d9bf2c;border-radius:9px;background:#24332b;color:#e5eadb}
+.pa-recipe-tools{display:flex;gap:7px;margin-top:10px}
+.pa-recipe-tools button{display:flex;align-items:center;justify-content:center;gap:5px;font-size:9px;min-height:42px;padding:8px;border:1px solid #c8d9bf22;border-radius:9px;color:#c3d7b9;background:#abc79b09}
+.pa-recipe-tools button:nth-child(2){flex:1;background:#c1d4b312;border-color:#c8d9bf3c}
+.pa-recipe-tools svg{width:15px;height:15px;flex-shrink:0}
+@media(max-width:350px){.pa-recipes{padding:11px}.pa-recipe-tools{gap:5px}.pa-recipe-tools button{font-size:8px;padding:6px}}
