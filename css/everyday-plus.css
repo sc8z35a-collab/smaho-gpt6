@@ -427,3 +427,20 @@
 @media(min-width:650px){#app-screen .ev-sketch .sk-viewport{max-height:60vh}.sk-quick-tools button{flex-direction:row;gap:8px}.sk-quick-tools span{font-size:11px}}
 @media(prefers-reduced-motion:reduce){#app-screen .ev-sketch button{transition:none}}
 [data-reduce-motion=true] #app-screen .ev-sketch button{transition:none}
+
+/* Contextual batch editing, saved palettes and session history. */
+#app-screen .ev-sketch .sk-command-bar .sk-active-tool{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;padding-inline:2px;max-width:125px}
+#sk-current-color{display:grid;place-items:center;flex-shrink:0}
+#sk-current-color i{width:20px;height:20px;border-radius:50%;border:3px solid var(--ev-surface);box-shadow:0 0 0 1px var(--ev-border)}
+.sk-selection-head{display:flex;align-items:center;gap:5px;flex-wrap:wrap;width:100%}
+.sk-selection-head strong{font-size:11px;font-weight:500;flex:1;min-width:70px;color:var(--sk-accent)}
+.sk-selection-actions{display:flex;flex-wrap:wrap;gap:5px;width:100%;border-top:1px solid var(--ev-border);padding-top:9px}
+#app-screen .ev-sketch .sk-selection p{font-size:10px;margin:0;line-height:1.8}
+#app-screen .ev-sketch .sk-selection{gap:9px}
+.sk-history-sheet>p{font-size:12px;line-height:1.8;color:var(--ev-muted,#737c73);margin:6px 8px 18px}
+.sk-timeline{display:flex;flex-direction:column;gap:6px}
+.sk-timeline>button{display:flex;flex-direction:column;gap:5px;text-align:left;min-height:56px;padding:12px 15px;border:1px solid #7e927a22;border-radius:10px;color:inherit;background:#82917c0a}
+.sk-timeline>button span{font-size:12px;font-weight:500}
+.sk-timeline>button small{font-size:10px;opacity:.7;overflow-wrap:anywhere}
+.sk-timeline>button[aria-current=step]{border-left:3px solid #7b957d;background:#7b957d22;opacity:1}
+.sk-timeline>button:focus-visible{outline:2px solid #7b957d;outline-offset:2px}
