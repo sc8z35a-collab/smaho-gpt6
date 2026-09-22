@@ -474,6 +474,7 @@
   // Reading Atelier: existing records stay canonical; all artwork is local SVG.
   let activeBook=null,readingQuery='',readingSort='recent',readingCategory='',readingLimit=36,readingQuoteLimit=30,readingSessionLimit=30;
   let readingLayout=A.load('readingLayout','shelf')==='list'?'list':'shelf',readingSvgId=0;
+  let readingSelecting=false,readingSelected=new Set(),readingMonth=dateKey().slice(0,7),readingSelectedDay=dateKey();
   const bookSessions=id=>read('readingSessions').filter(x=>x.bookId===id);
   const bookQuotes=id=>read('readingQuotes').filter(x=>x.bookId===id);
   const readingThemes=[['forest','深緑'],['ink','藍墨'],['clay','赤土'],['plum','葡萄'],['sand','砂丘'],['slate','青磁']];
@@ -514,13 +515,16 @@
   }
   function readingResults(){
     const query=readingNormalize(readingQuery);
-    const list=read('reading').filter(x=>(readingFilter==='all'||(readingFilter==='favorite'?x.favorite:readingStatus(x)===readingFilter))&&(!readingCategory||x.category===readingCategory)&&readingNormalize([x.title,x.author,x.note,x.category].join(' ')).includes(query));
+    const list=read('reading').filter(x=>(readingFilter==='all'||(readingFilter==='favorite'?x.favorite:readingFilter==='queue'?x.queued&&x.page<x.total:readingStatus(x)===readingFilter))&&(!readingCategory||x.category===readingCategory)&&readingNormalize([x.title,x.author,x.note,x.category].join(' ')).includes(query));
     list.sort((a,b)=>readingSort==='title'?String(a.title).localeCompare(String(b.title),'ja'):readingSort==='progress'?readingPercent(b)-readingPercent(a):readingSort==='rating'?(b.rating||0)-(a.rating||0):readingSort==='deadline'?String(a.deadline||'9999').localeCompare(String(b.deadline||'9999')):String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')));
     const root=$('#rd-results');if(!root)return;
     $('#rd-result-count').textContent=`${list.length}冊${list.length>readingLimit?` · ${readingLimit}冊を表示`:''}`;
     root.className='rd-library rd-layout-'+readingLayout;
-    root.innerHTML=list.slice(0,readingLimit).map((x,i)=>`<article class="rd-book-card" style="--rd-order:${Math.min(i,8)}"><div class="rd-book-stage"><button class="rd-cover-button" data-action="evBookOpen" data-id="${esc(x.id)}" aria-label="${esc(x.title)}を開く">${readingCover(x)}</button><button class="rd-favorite" data-action="rdFavorite" data-id="${esc(x.id)}" aria-label="${esc(x.title)}のお気に入り" aria-pressed="${!!x.favorite}">${A.icon('heart')}</button></div><div class="rd-book-info"><span class="rd-state">${readingStatusName(x)}${x.category?' / '+esc(x.category):''}</span><button class="rd-title-button" data-action="evBookOpen" data-id="${esc(x.id)}"><strong>${esc(x.title)}</strong><small>${esc(x.author||'著者未設定')}</small></button>${progress(readingPercent(x),x.title)}<button class="rd-progress-button" data-action="evBookProgress" data-id="${esc(x.id)}"><span>${x.page} / ${x.total} p.</span><b>${readingPercent(x)}%</b></button></div></article>`).join('')||`<div class="rd-empty">${readingScene()}<h3>${read('reading').length?'見つかりませんでした':'一冊から、はじまる。'}</h3><p>${read('reading').length?'検索条件や分類を変えてみてください。':'読みたい本も、読みかけの本も。'}</p>${readingButton(read('reading').length?'rdClear':'evBookEdit',read('reading').length?'絞り込みを解除':'最初の本を追加')}</div>`;
+    root.innerHTML=list.slice(0,readingLimit).map((x,i)=>`<article class="rd-book-card ${readingSelected.has(x.id)?'rd-selected':''}" data-book-id="${esc(x.id)}" style="--rd-order:${Math.min(i,8)}"><div class="rd-book-stage"><button class="rd-cover-button" data-action="${readingSelecting?'rdSelectBook':'evBookOpen'}" ${readingSelecting?`aria-pressed="${readingSelected.has(x.id)}"`:''} data-id="${esc(x.id)}" aria-label="${esc(x.title)}を開く">${readingCover(x)}</button>${readingSelecting?`<span class="rd-selection-mark" aria-hidden="true">${readingSelected.has(x.id)?'✓':'＋'}</span>`:''}<button ${readingSelecting?'hidden':''} class="rd-favorite" data-action="rdFavorite" data-id="${esc(x.id)}" aria-label="${esc(x.title)}のお気に入り" aria-pressed="${!!x.favorite}">${A.icon('heart')}</button></div><div class="rd-book-info"><span class="rd-state">${x.queued&&x.page<x.total?'次に読む · ':''}${readingStatusName(x)}${x.category?' / '+esc(x.category):''}</span><button class="rd-title-button" data-action="${readingSelecting?'rdSelectBook':'evBookOpen'}" ${readingSelecting?`aria-pressed="${readingSelected.has(x.id)}"`:''} data-id="${esc(x.id)}"><strong>${esc(x.title)}</strong><small>${esc(x.author||'著者未設定')}</small></button>${progress(readingPercent(x),x.title)}<button class="rd-progress-button" ${readingSelecting?'disabled':''} data-action="evBookProgress" data-id="${esc(x.id)}"><span>${x.page} / ${x.total} p.</span><b>${readingPercent(x)}%</b></button></div></article>`).join('')||`<div class="rd-empty">${readingScene()}<h3>${read('reading').length?'見つかりませんでした':'一冊から、はじまる。'}</h3><p>${read('reading').length?'検索条件や分類を変えてみてください。':'読みたい本も、読みかけの本も。'}</p>${readingButton(read('reading').length?'rdClear':'evBookEdit',read('reading').length?'絞り込みを解除':'最初の本を追加')}</div>`;
     $('#rd-more').hidden=list.length<=readingLimit;
+    const ids=new Set(read('reading').map(x=>x.id));readingSelected=new Set([...readingSelected].filter(id=>ids.has(id)));
+    const toolbar=$('#rd-bulk-toolbar');toolbar.hidden=!readingSelecting;
+    toolbar.innerHTML=`<p role="status">${readingSelected.size}冊を選択 <small>絞り込み外の選択も含みます</small></p><div>${readingButton('rdSelectVisible','表示中を選択')}${readingButton('rdSelectionClear','選択解除')}${readingButton('rdBulkEdit','まとめて変更','',readingSelected.size?'':'disabled')}</div>`;
   }
   readingApp=function(){
     activeBook=null;
@@ -531,9 +535,9 @@
     readingView(`<header class="rd-hero"><span class="rd-eyebrow">THE READING ATELIER</span><h1>ページの先に、<br>新しい世界。</h1><p>${list.length}冊の本棚 · ${list.filter(x=>x.page>=x.total).length}冊の読了</p>${readingScene()}${readingButton('evBookEdit','本を追加 ＋')}</header>
       <div class="rd-goal"><button data-action="evReadingGoal"><span>${year} READING GOAL</span><strong>${annual}<small> / ${goal} 冊</small></strong><span>目標を変更 ›</span></button><svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><circle class="rd-ring-track" cx="32" cy="32" r="26"/><circle class="rd-ring-fill" cx="32" cy="32" r="26" pathLength="100" stroke-dasharray="${Math.min(100,annual/goal*100)} 100"/><path d="m23 32 6 6 13-14"/></svg></div>
       ${current?`<button class="rd-resume" data-action="evBookOpen" data-id="${esc(current.id)}">${readingCover(current)}<span><small>CONTINUE READING</small><strong>${esc(current.title)}</strong><span>${current.page}ページの続きから</span></span>${A.icon('arrow')}</button>`:''}
-      <div class="rd-section-heading"><h2>私の本棚</h2><div class="rd-layout-control" aria-label="本棚の表示">${readingButton('rdLayout','棚','shelf',`aria-pressed="${readingLayout==='shelf'}"`)}${readingButton('rdLayout','一覧','list',`aria-pressed="${readingLayout==='list'}"`)}</div></div>
-      <label class="rd-search">${A.icon('search')}<input id="rd-search" type="search" maxlength="160" placeholder="書名・著者・メモを探す" aria-label="本棚を検索" value="${esc(readingQuery)}"></label>
-      ${chips([['all','すべて'],['planned','未読'],['reading','読書中'],['finished','読了'],['favorite','お気に入り']],readingFilter,'evReadingFilter')}
+      ${readingDailyCard()}<div class="rd-section-heading"><h2>私の本棚</h2><div class="rd-layout-control" aria-label="本棚の表示">${readingButton('rdLayout','棚','shelf',`aria-pressed="${readingLayout==='shelf'}"`)}${readingButton('rdLayout','一覧','list',`aria-pressed="${readingLayout==='list'}"`)}</div></div>
+      <div class="rd-organize-row">${readingButton('rdSelectionMode',readingSelecting?'選択を終了':'複数選択','',`aria-pressed="${readingSelecting}"`)}${readingButton('rdInsights','読書カレンダー')}</div><div id="rd-bulk-toolbar" class="rd-bulk-toolbar" hidden></div><label class="rd-search">${A.icon('search')}<input id="rd-search" type="search" maxlength="160" placeholder="書名・著者・メモを探す" aria-label="本棚を検索" value="${esc(readingQuery)}"></label>
+      ${chips([['all','すべて'],['planned','未読'],['reading','読書中'],['finished','読了'],['favorite','お気に入り'],['queue','次に読む']],readingFilter,'evReadingFilter')}
       <div class="rd-filters"><label>分類<select id="rd-category"><option value="">すべて</option>${categories.map(c=>`<option value="${esc(c)}" ${c===readingCategory?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label>並び順<select id="rd-sort">${[['recent','更新順'],['title','書名順'],['progress','進捗順'],['rating','評価順'],['deadline','目標日順']].map(([v,t])=>`<option value="${v}" ${v===readingSort?'selected':''}>${t}</option>`).join('')}</select></label></div>
       <p id="rd-result-count" class="rd-count" role="status"></p><div id="rd-results"></div>${readingButton('rdMore','さらに36冊を表示','','id="rd-more" hidden')}
       ${readingTimer&&read('reading').some(b=>b.id===readingTimer.bookId)?`<div class="rd-footer-actions">${readingButton('rdClockPrevious','保存した計時を開く')}</div>`:''}${readingWeek()}<div class="rd-footer-actions">${readingButton('frReading','月の集計・引用検索')}${readingButton('rdShelfExport','本棚を書き出す')}${readingButton('rdImport','バックアップを復元')}</div><p class="rd-local-note">このブラウザに保存 · 本文の配信・クラウド同期はありません</p>`,btn('evBookEdit','本を追加','plus'));
@@ -554,7 +558,7 @@
       if(!v.title.trim()||!readingNumber(v.total,1,100000))return false;
       const latest=x?read('reading').find(b=>b.id===x.id):null;if(x&&!latest){A.toast('この本は削除されています');return false;}
       const total=Number(v.total),page=Math.min(latest?.page||0,total);
-      return upsert('reading',{...latest,...v,title:v.title.trim(),author:v.author.trim(),category:v.category.trim(),id:x?.id||A.id(),total,page,createdAt:latest?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),finishedAt:page>=total?(latest?.finishedAt||dateKey()):null},returnToDetail?bookDetail:readingApp);
+      return upsert('reading',{...latest,...v,title:v.title.trim(),author:v.author.trim(),category:v.category.trim(),id:x?.id||A.id(),total,page,createdAt:latest?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),finishedAt:page>=total?(latest?.finishedAt||dateKey()):null,queued:page<total&&!!latest?.queued},returnToDetail?bookDetail:readingApp);
     });
     const preview=()=>{$('#rd-cover-preview').innerHTML=readingCover({id:x?.id||'preview',title:$('#ev-title').value,author:$('#ev-author').value,coverTheme:$('#ev-coverTheme').value,coverMotif:$('#ev-coverMotif').value});};
     ['title','author','coverTheme','coverMotif'].forEach(k=>$('#ev-'+k).addEventListener('input',preview));preview();
@@ -563,7 +567,7 @@
     const x=read('reading').find(x=>x.id===activeBook);if(!x)return readingApp();
     const sessions=bookSessions(x.id).sort((a,b)=>String(b.date).localeCompare(String(a.date))),quotes=bookQuotes(x.id),marks=Array.isArray(x.bookmarks)?x.bookmarks:[];
     const minutes=readingSum(sessions,s=>s.minutes),pages=readingSum(sessions,s=>Math.max(0,s.to-s.from)),estimate=pages>0&&minutes>0?Math.ceil(Math.max(0,x.total-x.page)*minutes/pages):null;
-    readingView(`<section class="rd-detail-hero"><div class="rd-detail-stage">${readingCover(x)}<span class="rd-stage-pedestal"></span></div><span class="rd-eyebrow">${readingStatusName(x)}${x.category?' / '+esc(x.category):''}</span><h1>${esc(x.title)}</h1><p>${esc(x.author||'著者未設定')}</p><div class="ev-rating">${[1,2,3,4,5].map(n=>`<button data-action="evBookRate" data-id="${n}" aria-label="${n}つ星${Number(x.rating)===n?'を解除':''}" aria-pressed="${n===Number(x.rating||0)}">${n<=Number(x.rating||0)?'★':'☆'}</button>`).join('')}</div><div class="rd-detail-actions">${readingButton('rdFavorite',x.favorite?'お気に入り済み':'お気に入り',x.id,`aria-pressed="${!!x.favorite}"`)}${readingButton('evBookEdit','編集',x.id)}${readingButton('rdRoom','集中読書',x.id)}</div></section>
+    readingView(`<section class="rd-detail-hero"><div class="rd-detail-stage">${readingCover(x)}<span class="rd-stage-pedestal"></span></div><span class="rd-eyebrow">${readingStatusName(x)}${x.category?' / '+esc(x.category):''}</span><h1>${esc(x.title)}</h1><p>${esc(x.author||'著者未設定')}</p><div class="ev-rating">${[1,2,3,4,5].map(n=>`<button data-action="evBookRate" data-id="${n}" aria-label="${n}つ星${Number(x.rating)===n?'を解除':''}" aria-pressed="${n===Number(x.rating||0)}">${n<=Number(x.rating||0)?'★':'☆'}</button>`).join('')}</div><div class="rd-detail-actions">${readingButton('rdFavorite',x.favorite?'お気に入り済み':'お気に入り',x.id,`aria-pressed="${!!x.favorite}"`)}${readingButton('evBookEdit','編集',x.id)}${readingButton('rdRoom','集中読書',x.id)}${x.page<x.total?readingButton('rdQueue',x.queued?'次に読むから外す':'次に読むに追加',x.id,`aria-pressed="${!!x.queued}"`):''}</div></section>
       <section class="rd-progress-panel"><header><span>読書の進捗</span><strong>${readingPercent(x)}<small>%</small></strong></header>${progress(readingPercent(x),x.title)}<div class="rd-progress-caption"><span>${x.page} / ${x.total} ページ</span>${readingButton('evBookProgress','修正',x.id)}</div><div class="rd-detail-metrics"><span><strong>${Math.max(0,x.total-x.page)}</strong>残りページ</span><span><strong>${minutes}</strong>記録した分数</span><span><strong>${estimate===null?'—':estimate}</strong>残り分数の目安</span></div>${readingButton('evReadingSession',x.page>=x.total?'読書時間を記録':'読書を記録')}<p class="rd-small">残り時間は保存した読書ペースからの推定です。</p></section>
       <button class="rd-plan" data-action="rdDeadline" data-id="${esc(x.id)}">${A.icon('calendar')}<span><small>読了のプラン</small><strong>${esc(readingPlan(x))}</strong></span>${A.icon('arrow')}</button>
       ${section('しおり',btn('rdBookmarkAdd','しおりを追加','plus'))}<div class="rd-bookmarks">${marks.length?marks.map(m=>`<div class="rd-bookmark"><button class="rd-bookmark-edit" data-action="rdBookmarkEdit" data-id="${esc(m.id)}"><b>p. ${m.page}</b><span>${esc(m.text||'しおり')}</span></button>${btn('rdBookmarkDelete','しおりを削除','trash',m.id)}</div>`).join(''):'<p class="rd-small">気になるページを、ひとことと一緒に。</p>'}</div>
@@ -587,7 +591,7 @@
     const x=read('reading').find(x=>x.id===el.dataset.id);if(!x)return;
     A.form('読書の進捗を修正',field('読み終えたページ','page',x.page,'number',`required min="0" max="${x.total}" step="1"`)+'<p class="rd-small">進捗のみ変更します。読書の履歴・週間集計には追加されません。</p>',v=>{
       const latest=read('reading').find(b=>b.id===x.id);if(!latest||!readingNumber(v.page,0,latest.total))return false;
-      const page=Number(v.page);return upsert('reading',{...latest,page,updatedAt:new Date().toISOString(),finishedAt:page>=latest.total?(latest.finishedAt||dateKey()):null},activeBook===x.id?bookDetail:readingApp);
+      const page=Number(v.page);return upsert('reading',{...latest,page,updatedAt:new Date().toISOString(),finishedAt:page>=latest.total?(latest.finishedAt||dateKey()):null,queued:page<latest.total&&!!latest.queued},activeBook===x.id?bookDetail:readingApp);
     });
   };
   A.actions.rdDeadline=el=>{
@@ -609,7 +613,7 @@
       const to=Number(v.page),finished=to>=latest.total&&latest.page<latest.total;
       const session={id:A.id(),bookId:x.id,date:v.date,from:latest.page,to,minutes:Number(v.minutes),note:v.note.trim(),...(measured?{timerId:measured.id}:{})};
       if(measured&&read('readingSessions').some(row=>row.timerId===measured.id)){A.toast('この計時はすでに記録済みです');return false;}
-      books[at]={...latest,page:to,updatedAt:new Date().toISOString(),finishedAt:to>=latest.total?(latest.finishedAt||v.date):null};
+      books[at]={...latest,page:to,updatedAt:new Date().toISOString(),finishedAt:to>=latest.total?(latest.finishedAt||v.date):null,queued:to<latest.total&&!!latest.queued};
       if(!A.saveBatch({readingSessions:[session,...read('readingSessions')],reading:books,...(measured?{readingTimer:null}:{})}))return false;
       if(measured){readingTimer=null;readingClockDirty=false;}
       bookDetail();if(finished){$('.rd-detail-hero')?.classList.add('rd-completed');A.toast('読了おめでとうございます');}else A.toast('読書を記録しました');
@@ -655,7 +659,71 @@
     const sessions=bookSessions(x.id);
     exportText('読書記録.txt',[x.title,x.author,x.category||'',x.page+'/'+x.total+'ページ','★'.repeat(Math.min(5,Math.max(0,x.rating||0))),x.deadline?'読了目標 '+x.deadline:'',x.finishedAt?'読了日 '+x.finishedAt:'','',x.note||'','','しおり',...(x.bookmarks||[]).map(m=>'p. '+m.page+' '+m.text),'','引用',...bookQuotes(x.id).map(q=>q.text+'\n'+(q.page?'p. '+q.page:'')),'','読書の履歴',...sessions.map(s=>s.date+' · '+s.from+' → '+s.to+'ページ · '+s.minutes+'分'+(s.note?'\n'+s.note:'')),'合計 '+readingSum(sessions,s=>s.minutes)+'分'].join('\n'));
   };
-  A.actions.rdShelfExport=()=>exportText('reading_atelier_'+dateKey()+'.json',JSON.stringify({app:'aura-reading',version:1,exportedAt:new Date().toISOString(),reading:read('reading'),readingSessions:read('readingSessions'),readingQuotes:read('readingQuotes'),readingGoal:A.load('readingGoal',12)},null,2),'application/json');
+  A.actions.rdShelfExport=()=>exportText('reading_atelier_'+dateKey()+'.json',JSON.stringify({app:'aura-reading',version:1,exportedAt:new Date().toISOString(),reading:read('reading'),readingSessions:read('readingSessions'),readingQuotes:read('readingQuotes'),readingGoal:A.load('readingGoal',12),readingDailyGoal:readingDailyGoal()},null,2),'application/json');
+
+  // Reading Almanac: all marks and counts come from saved records, never seeded activity.
+  const readingDailyGoal=()=>{const n=Number(A.load('readingDailyGoal',20));return readingNumber(n,1,10000)?n:20;};
+  const readingRecordedSessions=()=>{const ids=new Set(read('reading').map(x=>x.id));return read('readingSessions').filter(x=>ids.has(x.bookId)&&readingDate(x.date)&&x.date<=dateKey());};
+  function readingDayTotals(sessions){
+    const totals=new Map();for(const s of sessions){const value=totals.get(s.date)||{pages:0,minutes:0,count:0};value.pages+=Math.max(0,Number(s.to)-Number(s.from))||0;value.minutes+=Math.max(0,Number(s.minutes))||0;value.count++;totals.set(s.date,value);}return totals;
+  }
+  function readingStreak(sessions){
+    const days=new Set(sessions.map(x=>x.date));let start=days.has(dateKey())?0:1,count=0;
+    while(count<=days.size&&days.has(daysAgo(start+count)))count++;
+    return count;
+  }
+  function readingSprig(ratio){
+    const filled=Math.min(8,Math.floor(Math.max(0,ratio)*8));
+    return `<svg class="rd-sprig" viewBox="0 0 90 110" fill="none" aria-hidden="true" focusable="false"><ellipse cx="45" cy="99" rx="29" ry="5" fill="currentColor" opacity=".1"/><path d="M44 98C32 72 57 44 44 13" stroke="currentColor" stroke-width="1.4"/>${Array.from({length:8},(_,i)=>{const y=82-i*9,left=i%2===0;return `<path class="${i<filled?'rd-leaf-filled':''}" d="${left?`M42 ${y}C23 ${y+1} 18 ${y-10} 22 ${y-18}c16 0 23 8 20 18Z`:`M46 ${y}c20 0 25-12 21-19-16 2-24 10-21 19Z`}" fill="currentColor" opacity="${i<filled?.8:.12}" stroke="currentColor" stroke-width=".5" style="--rd-leaf:${i}"/>`;}).join('')}<circle cx="43" cy="12" r="3" fill="#c2a15f"/></svg>`;
+  }
+  function readingDailyCard(){
+    const sessions=readingRecordedSessions(),today=readingDayTotals(sessions).get(dateKey())||{pages:0},goal=readingDailyGoal(),streak=readingStreak(sessions);
+    return `<section class="rd-daily-card"><div><span class="rd-eyebrow">A LITTLE, EVERY DAY</span><button class="rd-daily-goal" data-action="rdDailyGoal"><strong>${today.pages}<small> / ${goal} p.</small></strong><span>今日の目標を変更 ›</span></button>${progress(today.pages/goal*100,'今日のページ目標')}<p>${today.pages>=goal?'今日のページ目標を達成':`目標まで、あと${goal-today.pages}ページ`} · ${streak}日連続</p></div>${readingSprig(today.pages/goal)}</section>`;
+  }
+  A.actions.rdDailyGoal=()=>{const insights=!!$('#rd-almanac');A.form('1日の読書目標',field('1日に読みたいページ数','dailyGoal',readingDailyGoal(),'number','required min="1" max="10000" step="1"')+'<p class="rd-small">「読書を記録」のページ数で集計。目標を変えると過去の達成表示も新しい基準に変わります。</p>',v=>{if(!readingNumber(v.dailyGoal,1,10000))return false;if(!A.save('readingDailyGoal',Number(v.dailyGoal)))return false;(insights?readingInsights:readingApp)();});};
+  A.actions.rdQueue=el=>{const x=read('reading').find(x=>x.id===el.dataset.id);if(x&&x.page<x.total)upsert('reading',{...x,queued:!x.queued},readingDetailRefresh);};
+  A.actions.rdSelectionMode=()=>{readingSelecting=!readingSelecting;readingSelected.clear();readingApp();};
+  A.actions.rdSelectBook=el=>{
+    if(!readingSelecting)return;const id=el.dataset.id;
+    if(readingSelected.has(id))readingSelected.delete(id);else{if(readingSelected.size>=500)return A.toast('一度に選べるのは500冊までです');readingSelected.add(id);}
+    readingResults();const button=A.$$('[data-action=rdSelectBook]').find(b=>b.dataset.id===id);button?.focus({preventScroll:true});
+  };
+  A.actions.rdSelectVisible=()=>{A.$$('.rd-book-card').forEach(card=>{if(readingSelected.size<500)readingSelected.add(card.dataset.bookId);});readingResults();};
+  A.actions.rdSelectionClear=()=>{readingSelected.clear();readingResults();};
+  A.actions.rdBulkEdit=()=>{
+    const ids=new Set(readingSelected);if(!ids.size)return;
+    A.form(ids.size+'冊をまとめて変更',select('変更する項目','operation',[['category','分類を変更'],['favorite','お気に入りに追加'],['unfavorite','お気に入りを解除'],['queue','次に読むに追加'],['unqueue','次に読むから外す']],'category')+`<div id="rd-bulk-category">${field('分類（空欄で解除）','category','','text','maxlength="30"')}</div>`+'<p class="rd-small">進捗・読書メモ・履歴・引用は変更しません。「次に読む」への追加は未読・読書中の本だけです。選択は検索条件の変更後も保持されます。</p>',v=>{
+      if(!['category','favorite','unfavorite','queue','unqueue'].includes(v.operation))return false;
+      const current=read('reading'),count=current.filter(x=>ids.has(x.id)).length;
+      const next=current.map(x=>{if(!ids.has(x.id))return x;return {...x,...(v.operation==='category'?{category:v.category.trim()}:v.operation==='favorite'?{favorite:true}:v.operation==='unfavorite'?{favorite:false}:v.operation==='queue'?{queued:x.page<x.total}:{queued:false})};});
+      if(!A.save('reading',next))return false;readingSelected.clear();readingSelecting=false;readingApp();A.toast(count+'冊の変更を保存しました');
+    });$('#ev-operation').onchange=e=>{$('#rd-bulk-category').hidden=e.target.value!=='category';};
+  };
+  function readingInsights(){
+    const sessions=readingRecordedSessions(),monthSessions=sessions.filter(x=>x.date.startsWith(readingMonth)),totals=readingDayTotals(monthSessions),goal=readingDailyGoal();
+    const [year,month]=readingMonth.split('-').map(Number),count=new Date(year,month,0).getDate(),offset=(new Date(year,month-1,1).getDay()+6)%7;
+    const finished=read('reading').filter(x=>x.page>=x.total&&String(x.finishedAt||'').startsWith(readingMonth));
+    if(!readingSelectedDay.startsWith(readingMonth))readingSelectedDay=readingMonth===dateKey().slice(0,7)?dateKey():readingMonth+'-01';
+    const pages=readingSum(monthSessions,x=>Math.max(0,x.to-x.from)),minutes=readingSum(monthSessions,x=>x.minutes),achieved=[...totals.values()].filter(x=>x.pages>=goal).length;
+    readingView(`<div id="rd-almanac"><header class="rd-almanac-hero"><span class="rd-eyebrow">YOUR READING ALMANAC</span><h1>読んだ日々が、<br>少しずつ、実る。</h1><p>${readingStreak(sessions)}日連続の読書記録</p>${readingSprig(achieved/Math.max(1,totals.size))}</header><div class="rd-month-nav">${readingButton('rdMonthMove','‹','-1',`aria-label="前の月" ${readingMonth==='1900-01'?'disabled':''}`)}<label>記録を見る月<input id="rd-month" type="month" min="1900-01" max="${dateKey().slice(0,7)}" value="${readingMonth}"></label>${readingButton('rdMonthMove','›','1',`aria-label="次の月" ${readingMonth===dateKey().slice(0,7)?'disabled':''}`)}</div><div class="rd-almanac-metrics">${[[pages,'ページ'],[minutes,'分'],[totals.size,'記録した日'],[finished.length,'読了した本']].map(([n,label])=>`<div><strong>${n}</strong><span>${label}</span></div>`).join('')}</div><section class="rd-calendar-paper"><header><h2>ページの積み重ね</h2>${readingButton('rdDailyGoal',goal+' p. / 日')}</header><div class="rd-calendar-week">${['月','火','水','木','金','土','日'].map(d=>`<span>${d}</span>`).join('')}</div><div class="rd-calendar-grid">${'<span aria-hidden="true"></span>'.repeat(offset)}${Array.from({length:count},(_,i)=>{const date=readingMonth+'-'+String(i+1).padStart(2,'0'),v=totals.get(date)||{pages:0,minutes:0,count:0},level=v.pages>=goal?4:v.pages>0?Math.max(1,Math.ceil(v.pages/goal*3)):0;return `<button data-action="rdCalendarDay" data-id="${date}" data-level="${level}" aria-pressed="${readingSelectedDay===date}" ${date===dateKey()?'aria-current="date"':''} aria-label="${date}、${v.pages}ページ、${v.minutes}分${v.pages>=goal?'、目標達成':''}" ${date>dateKey()?'disabled':''}><b>${i+1}</b><small>${v.count?v.pages+'p':'—'}</small>${v.count?'<i aria-hidden="true"></i>':''}</button>`;}).join('')}</div><footer><span>${achieved}日、ページ目標を達成</span><span class="rd-calendar-key" aria-hidden="true"><i></i><i></i><i></i><i></i></span></footer></section><section id="rd-day-records" class="rd-day-records" aria-live="polite"></section><section class="rd-month-finished"><h2>この月に読み終えた本</h2>${finished.map(x=>`<button data-action="evBookOpen" data-id="${esc(x.id)}">${readingCover(x)}<span><strong>${esc(x.title)}</strong><small>${esc(x.finishedAt)} 読了</small></span>${A.icon('arrow')}</button>`).join('')||'<p class="rd-small">読了日がこの月の本はありません。</p>'}</section><div class="rd-footer-actions">${readingButton('rdMonthToday','今月へ')}${readingButton('rdMonthExport','この月をCSV保存')}${readingButton('evReadingHome','本棚へ')}</div><p class="rd-local-note">保存した読書の履歴を集計。進捗だけの修正は含みません。連続日数は今日または昨日から遡って数えます。読み直したページも加算。目標達成日は現在の目標で再計算します。</p></div>`,'',true);
+    $('#rd-month').onchange=e=>{const value=e.target.value;if(/^\d{4}-(0[1-9]|1[0-2])$/.test(value)&&value>='1900-01'&&value<=dateKey().slice(0,7)){readingMonth=value;readingInsights();}};
+    readingDayRecords();
+  }
+  function readingDayRecords(){
+    const root=$('#rd-day-records');if(!root)return;
+    const books=new Map(read('reading').map(x=>[x.id,x])),sessions=readingRecordedSessions().filter(x=>x.date===readingSelectedDay);
+    root.innerHTML=`<h2>${readingSelectedDay.slice(5).replace('-',' / ')} の読書</h2><p class="rd-small">${readingSum(sessions,x=>Math.max(0,x.to-x.from))}ページ · ${readingSum(sessions,x=>x.minutes)}分 · ${sessions.length}回</p>${sessions.map(s=>`<button class="rd-day-session" data-action="evBookOpen" data-id="${esc(s.bookId)}"><span><strong>${esc(books.get(s.bookId)?.title||'本')}</strong><small>${s.from} → ${s.to}ページ${s.note?' · '+esc(s.note):''}</small></span><b>${s.minutes}<small>分</small></b></button>`).join('')||'<p class="rd-small">この日の読書記録はありません。</p>'}`;
+  }
+  A.actions.rdInsights=readingInsights;
+  A.actions.rdCalendarDay=el=>{if(!readingDate(el.dataset.id)||el.dataset.id>dateKey())return;readingSelectedDay=el.dataset.id;A.$$('[data-action=rdCalendarDay]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===readingSelectedDay)));readingDayRecords();};
+  A.actions.rdMonthMove=el=>{const delta=Number(el.dataset.id);if(![-1,1].includes(delta))return;const [year,month]=readingMonth.split('-').map(Number),date=new Date(year,month-1+delta,1,12),next=dateKey(date).slice(0,7);if(next<'1900-01'||next>dateKey().slice(0,7))return;readingMonth=next;readingInsights();};
+  A.actions.rdMonthToday=()=>{readingMonth=dateKey().slice(0,7);readingSelectedDay=dateKey();readingInsights();};
+  A.actions.rdMonthExport=()=>{
+    const books=new Map(read('reading').map(x=>[x.id,x]));
+    const cell=value=>'"'+String(value??'').replace(/^[=+@\-\t\r]/,"'$&").replace(/"/g,'""')+'"';
+    const rows=[['日付','書名','著者','開始ページ','終了ページ','読んだページ','分','メモ'],...readingRecordedSessions().filter(x=>x.date.startsWith(readingMonth)).sort((a,b)=>a.date.localeCompare(b.date)).map(s=>[s.date,books.get(s.bookId)?.title,books.get(s.bookId)?.author,s.from,s.to,Math.max(0,s.to-s.from),s.minutes,s.note||''])];
+    exportText('reading_'+readingMonth+'.csv','\ufeff'+rows.map(row=>row.map(cell).join(',')).join('\r\n'),'text/csv');
+  };
 
   // Visible-only stopwatch. Restores paused checkpoints; never claims background measurement.
   const readingStoredClock=A.load('readingTimer',null);
@@ -765,7 +833,7 @@
     const books=list(raw.reading,2000).map(x=>{
       if(!obj(x))fail('本の形式が不正です');
       const total=num(x.total,1,100000),marks=new Set();
-      return {id:unique(x.id,seenBooks),title:str(x.title,160,true),author:str(x.author,80),note:str(x.note,12000),category:str(x.category,30),total,page:num(x.page,0,total),rating:x.rating==null?0:num(x.rating,0,5),favorite:x.favorite===true,coverTheme:readingThemes.some(t=>t[0]===x.coverTheme)?x.coverTheme:readingTheme(x),coverMotif:readingMotifs.some(t=>t[0]===x.coverMotif)?x.coverMotif:'botanical',deadline:x.deadline?date(x.deadline):'',finishedAt:x.finishedAt?date(x.finishedAt):null,createdAt:str(x.createdAt,40),updatedAt:str(x.updatedAt,40),bookmarks:list(x.bookmarks||[],100).map(m=>{if(!obj(m))fail('しおりの形式が不正です');return {id:unique(m.id,marks),page:num(m.page,1,100000),text:str(m.text,120)};})};
+      return {id:unique(x.id,seenBooks),title:str(x.title,160,true),author:str(x.author,80),note:str(x.note,12000),category:str(x.category,30),total,page:num(x.page,0,total),rating:x.rating==null?0:num(x.rating,0,5),favorite:x.favorite===true,queued:x.queued===true&&x.page<x.total,coverTheme:readingThemes.some(t=>t[0]===x.coverTheme)?x.coverTheme:readingTheme(x),coverMotif:readingMotifs.some(t=>t[0]===x.coverMotif)?x.coverMotif:'botanical',deadline:x.deadline?date(x.deadline):'',finishedAt:x.finishedAt?date(x.finishedAt):null,createdAt:str(x.createdAt,40),updatedAt:str(x.updatedAt,40),bookmarks:list(x.bookmarks||[],100).map(m=>{if(!obj(m))fail('しおりの形式が不正です');return {id:unique(m.id,marks),page:num(m.page,1,100000),text:str(m.text,120)};})};
     });
     const sessions=list(raw.readingSessions,30000).map(x=>{
       if(!obj(x)||!seenBooks.has(x.bookId))fail('履歴に対応する本がありません');
@@ -773,7 +841,7 @@
     });
     const quotes=list(raw.readingQuotes,10000).map(x=>{if(!obj(x)||!seenBooks.has(x.bookId))fail('引用に対応する本がありません');return {id:unique(x.id,seenQuotes),bookId:id(x.bookId),text:str(x.text,12000,true),page:x.page==null?null:num(x.page,1,100000)};});
     const goal=raw.readingGoal==null?12:num(raw.readingGoal,1,1000);
-    return {books,sessions,quotes,goal};
+    return {books,sessions,quotes,goal,dailyGoal:raw.readingDailyGoal==null?20:num(raw.readingDailyGoal,1,10000)};
   }
   A.actions.rdImport=()=>{
     A.overlay(`<div class="modal-sheet rd-import"><h3>本棚を復元</h3><p>このアプリから書き出したJSONを選択してください（5MB以下）。既にある本はIDで判定し、その本の履歴・引用を含めてスキップします。既存データを上書きしません。</p><label class="form-label" for="rd-import-file">バックアップファイル</label><input id="rd-import-file" type="file" accept=".json,application/json"><p id="rd-import-status" role="status"></p>${readingButton('closeOverlay','閉じる')}</div>`,'sheet-overlay');
@@ -785,12 +853,12 @@
         if(file.size>5*1024*1024)throw Error('5MB以下のファイルを選んでください');
         const data=readingImportData(JSON.parse(await file.text()));if(!input.isConnected||A.current!=='reading')return;
         const existing=new Set(read('reading').map(x=>x.id)),missing=data.books.filter(x=>!existing.has(x.id));
-        A.form('復元内容の確認',`<div class="rd-restore-count"><strong>${missing.length}</strong><span>冊を追加</span></div><p>全${data.books.length}冊のうち、既存の${data.books.length-missing.length}冊はスキップします。追加する本の履歴・引用・しおりも復元します。</p><p class="rd-small">保存時に重複を再確認します。年間目標は未設定の場合のみ復元。未記録の計時はバックアップに含みません。念のため、先に現在の本棚も書き出しておくことをおすすめします。</p>`,()=>{
+        A.form('復元内容の確認',`<div class="rd-restore-count"><strong>${missing.length}</strong><span>冊を追加</span></div><p>全${data.books.length}冊のうち、既存の${data.books.length-missing.length}冊はスキップします。追加する本の履歴・引用・しおりも復元します。</p><p class="rd-small">保存時に重複を再確認します。年間・1日の目標は未設定の場合のみ復元。未記録の計時はバックアップに含みません。念のため、先に現在の本棚も書き出しておくことをおすすめします。</p>`,()=>{
           const current=read('reading'),ids=new Set(current.map(x=>x.id)),fresh=data.books.filter(x=>!ids.has(x.id)),newIds=new Set(fresh.map(x=>x.id));
           if(!fresh.length){A.toast('新しく復元する本はありません');return;}
           const sessionIds=new Set(read('readingSessions').map(x=>x.id)),quoteIds=new Set(read('readingQuotes').map(x=>x.id));
           const sessions=data.sessions.filter(x=>newIds.has(x.bookId)).map(x=>({...x,id:sessionIds.has(x.id)?A.id():x.id})),quotes=data.quotes.filter(x=>newIds.has(x.bookId)).map(x=>({...x,id:quoteIds.has(x.id)?A.id():x.id}));
-          if(!A.saveBatch({reading:[...fresh,...current],readingSessions:[...sessions,...read('readingSessions')],readingQuotes:[...quotes,...read('readingQuotes')],...(A.load('readingGoal',null)===null?{readingGoal:data.goal}:{})}))return false;
+          if(!A.saveBatch({reading:[...fresh,...current],readingSessions:[...sessions,...read('readingSessions')],readingQuotes:[...quotes,...read('readingQuotes')],...(A.load('readingGoal',null)===null?{readingGoal:data.goal}:{}),...(A.load('readingDailyGoal',null)===null?{readingDailyGoal:data.dailyGoal}:{})}))return false;
           readingApp();A.toast(fresh.length+'冊を復元しました');
         },'追加して復元');
       }catch(error){if(input.isConnected){status.textContent=error instanceof SyntaxError?'JSONを読み取れませんでした。ファイルをご確認ください。':error.message;input.disabled=false;}}
