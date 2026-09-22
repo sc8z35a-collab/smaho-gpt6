@@ -134,6 +134,7 @@ function musicScore(track){
 
 // Each playback owns its complete graph, including effect tails. Disposing a
 // session cannot leak an old track's reverb into a seek or the next track.
+const musicAudioCache=new WeakMap();
 class OriginalMusicEngine{
   constructor(context,track,destination){
     this.context=context;this.track=track;this.nodes=[];this.voices=new Set();this.disposed=false;
@@ -145,12 +146,20 @@ class OriginalMusicEngine{
     this.output.connect(highpass);highpass.connect(glue);glue.connect(ceiling);ceiling.connect(destination);
     const convolver=node(c.createConvolver()),verbTone=node(c.createBiquadFilter()),verb=node(c.createGain());
     const tide=track.id==='tide',seconds=tide?3.8:track.id==='orbit'?2.8:1.8;
-    const impulse=c.createBuffer(2,Math.ceil(c.sampleRate*seconds),c.sampleRate);
-    for(let ch=0;ch<2;ch++){
-      const data=impulse.getChannelData(ch);let low=0;
-      for(let i=0;i<data.length;i++){const white=musicRandom(track.seed+ch,i)*2-1;low=low*.6+white*.4;data[i]=low*Math.pow(1-i/data.length,tide?2.6:3.5)*(i<c.sampleRate*.018?0:1);}
+    // Reuse immutable buffers across seeks; at most three entries per context.
+    if(!musicAudioCache.has(c))musicAudioCache.set(c,new Map());
+    const cache=musicAudioCache.get(c);
+    if(!cache.has(track.id)){
+      const impulse=c.createBuffer(2,Math.ceil(c.sampleRate*seconds),c.sampleRate);
+      for(let ch=0;ch<2;ch++){
+        const data=impulse.getChannelData(ch);let low=0;
+        for(let i=0;i<data.length;i++){const white=musicRandom(track.seed+ch,i)*2-1;low=low*.6+white*.4;data[i]=low*Math.pow(1-i/data.length,tide?2.6:3.5)*(i<c.sampleRate*.018?0:1);}
+      }
+      const noise=c.createBuffer(1,c.sampleRate*2,c.sampleRate),data=noise.getChannelData(0);
+      for(let i=0;i<data.length;i++)data[i]=musicRandom(track.seed,i)*2-1;
+      cache.set(track.id,{impulse,noise});
     }
-    convolver.buffer=impulse;verbTone.type='lowpass';verbTone.frequency.value=tide?4200:5600;verb.gain.value=tide?.36:.22;
+    convolver.buffer=cache.get(track.id).impulse;verbTone.type='lowpass';verbTone.frequency.value=tide?4200:5600;verb.gain.value=tide?.36:.22;
     convolver.connect(verbTone);verbTone.connect(verb);verb.connect(this.output);this.reverb=convolver;
     const delayL=node(c.createDelay(2)),delayR=node(c.createDelay(2)),feedback=node(c.createGain()),delayTone=node(c.createBiquadFilter());
     const panL=node(c.createStereoPanner()),panR=node(c.createStereoPanner()),echo=node(c.createGain());
@@ -162,10 +171,10 @@ class OriginalMusicEngine{
     this.buses={};
     for(const [name,level,send,echoSend] of [['keys',.95,.22,.13],['pad',.72,.38,0],['bass',.82,.015,0],['drums',.7,.07,0],['air',.48,.36,0],['lead',.85,.3,.3]]){
       const bus=node(c.createGain()),wet=node(c.createGain()),echoGain=node(c.createGain());bus.gain.value=level;wet.gain.value=send;echoGain.gain.value=echoSend;
-      bus.connect(this.output);bus.connect(wet);wet.connect(convolver);bus.connect(echoGain);echoGain.connect(delayL);this.buses[name]=bus;
+      const eq=node(c.createBiquadFilter());eq.type='highpass';eq.frequency.value={keys:120,pad:170,bass:28,drums:35,air:240,lead:160}[name];eq.Q.value=.6;
+      bus.connect(eq);eq.connect(this.output);eq.connect(wet);wet.connect(convolver);eq.connect(echoGain);echoGain.connect(delayL);this.buses[name]=bus;
     }
-    this.noise=c.createBuffer(1,c.sampleRate*2,c.sampleRate);
-    const noise=this.noise.getChannelData(0);for(let i=0;i<noise.length;i++)noise[i]=musicRandom(track.seed,i)*2-1;
+    this.noise=cache.get(track.id).noise;
   }
   timeline(start,offset){
     const end=start+this.track.length-offset,fade=Math.max(start,end-4);
@@ -197,7 +206,13 @@ class OriginalMusicEngine{
       const carrier=oscillator('sine',f,.72),mod=keep(c.createOscillator()),index=keep(c.createGain());
       mod.frequency.value=f*(kind==='keys'?2:3.002);index.gain.setValueAtTime(f*(kind==='keys'?1.15:.28)*v,time);index.gain.exponentialRampToValueAtTime(.01,time+Math.min(duration,.65));mod.connect(index);index.connect(carrier.frequency);sources.push(mod);
       oscillator('sine',f*2.001,.2);oscillator('sine',f*3.003,.065);oscillator('sine',f*.999,.12);
-      attack=kind==='piano'?.006:.014;release=Math.min(kind==='piano'?1.5:.85,duration*.55);sustain=.16;tone.frequency.value=kind==='piano'?4200:5400;
+      attack=kind==='piano'?.01:.014;release=Math.min(kind==='piano'?1.5:.85,duration*.55);sustain=.16;
+      tone.frequency.setValueAtTime((kind==='piano'?2800:3800)+v*6000,time);
+      if(kind==='keys'){
+        const tremolo=keep(c.createOscillator()),depth=keep(c.createGain());tremolo.frequency.value=4.2;depth.gain.value=v*.035;tremolo.connect(depth);depth.connect(amp.gain);sources.push(tremolo);
+        // Taper modulation as well as the carrier, avoiding a buzz at note-off.
+        depth.gain.setValueAtTime(v*.035,time);depth.gain.exponentialRampToValueAtTime(.000001,time+duration);
+      }
     }else if(kind==='pad'){
       oscillator('triangle',f,.42,-5);oscillator('triangle',f,.42,5);oscillator('sine',f/2,.12);
       const lfo=keep(c.createOscillator()),depth=keep(c.createGain());lfo.frequency.value=.11+musicRandom(event.seed,2)*.12;depth.gain.value=260;lfo.connect(depth);depth.connect(tone.frequency);sources.push(lfo);
@@ -209,20 +224,22 @@ class OriginalMusicEngine{
       tone.frequency.setValueAtTime(Math.min(9000,f*9),time);tone.frequency.exponentialRampToValueAtTime(Math.max(500,f*1.5),time+duration);tone.Q.value=1.2;
     }else if(kind==='glass'||kind==='chime'){
       oscillator('sine',f,.65);oscillator('sine',f*2.756,.13);oscillator('sine',f*4.07,.055);
-      attack=.004;sustain=.1;release=Math.min(2,duration*.65);tone.frequency.value=7000;
+      attack=.004;sustain=.1;release=Math.min(2,duration*.65);tone.frequency.setValueAtTime(7000,time);
     }else if(kind==='bass'){
       oscillator('sine',f,.82);oscillator('triangle',f,.23);oscillator('sine',f*2,.08);
-      tone.frequency.value=500;attack=.018;sustain=.65;release=Math.min(.17,duration*.3);
+      tone.frequency.setValueAtTime(650,time);attack=.018;sustain=.65;release=Math.min(.17,duration*.3);
     }else if(kind==='kick'){
       const o=oscillator('sine',125,.9);o.frequency.exponentialRampToValueAtTime(this.track.id==='tide'?42:48,time+.13);
-      tone.frequency.value=1200;attack=.003;sustain=.07;release=duration*.65;
+      tone.frequency.setValueAtTime(1200,time);attack=.005;sustain=.07;release=duration*.65;
+      const bass=this.buses.bass.gain;bass.setValueAtTime(.82,time);bass.linearRampToValueAtTime(this.track.id==='tide'?.74:.56,time+.012);bass.exponentialRampToValueAtTime(.82,time+.2);
     }else if(kind==='tom'){
-      const o=oscillator('sine',f*1.7,.85);o.frequency.exponentialRampToValueAtTime(f,time+.1);tone.frequency.value=900;sustain=.06;release=duration*.65;
+      const o=oscillator('sine',f*1.7,.85);o.frequency.exponentialRampToValueAtTime(f,time+.1);tone.frequency.setValueAtTime(900,time);sustain=.06;release=duration*.65;
     }else if(kind==='snare'||kind==='clap'){
       noise('bandpass',kind==='clap'?1700:2400,.8);if(kind==='snare')oscillator('triangle',185,.35);
-      attack=.002;sustain=.12;release=duration*.7;tone.frequency.value=7000;
+      attack=.002;sustain=.12;release=duration*.7;tone.frequency.setValueAtTime(7000,time);
     }else if(kind==='hat'||kind==='shaker'||kind==='brush'){
-      noise('highpass',kind==='hat'?7200:kind==='brush'?2200:5500);attack=kind==='brush'?.05:.002;sustain=.12;release=duration*.65;
+      noise(kind==='brush'?'highpass':'bandpass',kind==='hat'?7400:kind==='brush'?2200:6200,.7);attack=kind==='brush'?.05:.003;sustain=.12;release=duration*.65;
+      tone.frequency.setValueAtTime(kind==='brush'?6200:10000,time);
     }else{
       const filter=noise('bandpass',550,.6);attack=duration*(kind==='swell'?.65:.4);release=duration*.3;sustain=.85;
       filter.frequency.setValueAtTime(350,time);filter.frequency.exponentialRampToValueAtTime(kind==='swell'?4200:1100,time+duration*.6);filter.frequency.exponentialRampToValueAtTime(400,time+duration);
