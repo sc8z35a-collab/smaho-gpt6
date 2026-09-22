@@ -24,8 +24,231 @@ A.apps.camera.render=camera;
 A.actions.cameraStart=async()=>{if(!navigator.mediaDevices?.getUserMedia)return A.toast('この環境ではカメラを利用できません。写真を追加できます。');const token=++cameraSession;try{const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:cameraFacing,width:{ideal:1280},height:{ideal:1920}},audio:false});if(token!==cameraSession||A.current!=='camera'){stream.getTracks().forEach(t=>t.stop());return;}if(cameraStream)cameraStream.getTracks().forEach(t=>t.stop());cameraStream=stream;$('#camera-video').srcObject=stream;$('#camera-video').style.transform=cameraFacing==='user'?'scaleX(-1)':'';$('#camera-placeholder').hidden=true;await $('#camera-video').play();}catch(e){if(token===cameraSession)A.toast(e.name==='NotAllowedError'?'カメラの許可を確認してください':'カメラを起動できませんでした');}};
 A.actions.cameraFlip=()=>{cameraFacing=cameraFacing==='user'?'environment':'user';if(cameraStream)stopCamera();A.actions.cameraStart();};A.actions.cameraGrid=()=>{cameraGrid=!cameraGrid;$('#camera-grid').hidden=!cameraGrid;};
 A.actions.cameraCapture=()=>{const v=$('#camera-video');if(!cameraStream||!v?.videoWidth)return A.toast('先にカメラを起動');const c=document.createElement('canvas');const scale=Math.min(1,1200/Math.max(v.videoWidth,v.videoHeight));c.width=v.videoWidth*scale;c.height=v.videoHeight*scale;const ctx=c.getContext('2d');if(cameraFacing==='user'){ctx.translate(c.width,0);ctx.scale(-1,1);}ctx.drawImage(v,0,0,c.width,c.height);if(A.storePhoto(c.toDataURL('image/jpeg',.84),new Date().toLocaleDateString('ja-JP')+' の一枚')){A.haptic();A.toast('写真に保存済み');const preview=$('#camera-preview');preview.animate([{filter:'brightness(3)'},{filter:'brightness(1)'}],{duration:350});}};
-// Music: original procedural ambient, synthesized entirely on-device.
-const tracks=[{id:'dusk',title:'Golden Hour',artist:'aura sounds',album:'SLOW\nAFTERNOONS',art:'art-dusk',length:192,base:146.83,notes:[0,4,7,11,12,7,4,2],tempo:76},{id:'tide',title:'A Quiet Tide',artist:'aura sounds',album:'QUIET\nTIDES',art:'art-tide',length:214,base:130.81,notes:[0,3,7,10,14,10,7,3],tempo:64},{id:'orbit',title:'Somewhere, Softly',artist:'aura sounds',album:'SOFT\nORBIT',art:'art-orbit',length:186,base:164.81,notes:[0,5,7,12,16,12,7,5],tempo:82}];
+// Original scores and synthesis stay on-device: no samples, network or paid API.
+// MIDI voicings are deliberately voice-led, not parallel root-position triads.
+const tracks=[
+  {id:'dusk',title:'Golden Hour',artist:'aura sounds',album:'SLOW\nAFTERNOONS',art:'art-dusk',length:192,tempo:76,bars:60,key:'D major',style:'Warm broken beat',seed:17,swing:.14,
+    detail:'温かなエレピ、指弾き風ベース、ブラシとスウィング。9thの和音から静かなブリッジを経て、夕暮れの主題へ。',
+    chords:[[38,54,57,61,64],[35,54,57,61,66],[43,54,57,59,62],[45,55,59,62,64],[42,52,57,61,64],[35,54,57,61,64],[40,55,59,62,66],[45,55,57,61,64]],
+    bridge:[[43,54,57,59,64],[42,52,56,61,64],[35,54,57,61,66],[40,55,59,62,66],[43,54,57,62,66],[38,54,57,61,64],[40,55,59,62,66],[45,55,57,61,64]],
+    sections:[[0,'Prelude',.35],[4,'Sunlit theme',.68],[12,'Pocket',.83],[20,'Open windows',1],[28,'Blue interlude',.4],[36,'Homeward',.78],[44,'Golden bloom',1],[52,'Afterglow',.55],[56,'Coda',.25]],
+    melody:[[[0,0,1],[1.5,1,.5],[2.5,3,.5],[3,2,.8]],[[.5,1,.7],[2,0,1.6]],[[0,2,.8],[1.5,3,.4],[2,4,.7],[3,2,.8]],[[0,1,1.4],[2.5,0,1]],[[.5,0,.6],[1.5,2,.6],[2.5,3,1]],[[0,4,1],[1.5,3,.5],[2.5,1,1]],[[0,2,.8],[1,1,.6],[2.5,0,1]],[[.5,1,1],[2,0,1.7]]]},
+  {id:'tide',title:'A Quiet Tide',artist:'aura sounds',album:'QUIET\nTIDES',art:'art-tide',length:214,tempo:64,bars:56,key:'C minor / E♭ major',style:'Tidal chamber ambient',seed:83,swing:.025,
+    detail:'フェルト風ピアノとガラスの倍音、ゆっくり膨らむ弦の層。波音のうねりと長い余韻の間に旋律が浮かびます。',
+    chords:[[36,55,58,62,63],[44,55,58,60,63],[39,55,58,62,65],[46,53,58,60,62],[41,56,60,63,67],[36,55,58,62,67],[44,55,58,60,63],[43,53,59,62,65]],
+    bridge:[[44,55,58,60,63],[46,53,58,62,65],[39,55,58,62,65],[48,55,58,62,67],[41,56,60,63,67],[44,55,58,60,63],[38,53,56,60,65],[43,53,59,62,65]],
+    sections:[[0,'Shoreline',.25],[4,'First tide',.52],[12,'Undertow',.7],[20,'Silver water',.9],[28,'Still water',.25],[36,'Returning tide',.68],[44,'Horizon',1],[52,'Dissolve',.2]],
+    melody:[[[0,3,1.7],[2.5,2,1]],[[1,0,2.3]],[[.5,1,1],[2,3,1.5]],[[0,2,2.5]],[[0,4,1.4],[2,3,1.6]],[[.5,1,2.5]],[[0,2,1.2],[2,0,1.5]],[[1,1,2.2]]]},
+  {id:'orbit',title:'Somewhere, Softly',artist:'aura sounds',album:'SOFT\nORBIT',art:'art-orbit',length:186,tempo:82,bars:62,key:'E major / C♯ minor',style:'Orbital downtempo',seed:149,swing:.055,
+    detail:'左右にほどけるアルペジオ、柔らかなアナログ・プラックとサブベース。ハーフタイムの空白から、星屑のようなフィナーレへ。',
+    chords:[[40,56,59,63,66],[37,56,59,63,68],[45,56,59,61,64],[47,54,59,61,66],[44,54,59,63,66],[37,56,59,63,68],[42,57,61,64,68],[47,57,59,63,66]],
+    bridge:[[37,56,59,63,68],[45,56,59,61,64],[40,56,59,63,66],[47,54,59,61,66],[42,57,61,64,68],[44,54,59,63,66],[45,56,59,61,64],[47,57,59,63,66]],
+    sections:[[0,'Ignition',.32],[4,'Soft orbit',.65],[12,'Satellites',.82],[20,'Constellation',1],[28,'Weightless',.3],[36,'Re-entry',.72],[44,'Wide awake',1],[52,'Last light',.72],[60,'Landing',.2]],
+    melody:[[[.5,0,.6],[1.5,2,.5],[2.5,3,1]],[[0,4,.8],[1.5,2,.6],[3,1,.6]],[[0,2,.5],[1,3,.7],[2.5,4,1]],[[.5,2,1],[2,0,1.5]],[[0,1,.7],[1.5,3,.7],[3,2,.7]],[[.5,4,.7],[2,3,.5],[3,1,.5]],[[0,2,1],[1.5,1,.5],[2.5,0,.8]],[[0,1,1.5],[2.5,0,1]]]}
+];
+const musicSection=(track,seconds)=>track.sections.filter(s=>s[0]*240/track.tempo<=seconds).at(-1)||track.sections[0];
+// Stateless humanisation: a seek always lands on the same performance.
+const musicRandom=(seed,index)=>{const x=Math.sin(seed*127.1+index*311.7)*43758.5453;return x-Math.floor(x);};
+const scoreCache=new Map();
+function musicScore(track){
+  if(scoreCache.has(track.id))return scoreCache.get(track.id);
+  const events=[],beat=60/track.tempo,barTime=beat*4;
+  const tail={pad:1.8,keys:1.1,piano:1.6,lead:.6,glass:2.1,arp:.45,bass:.12};
+  function add(kind,bar,step,midi,duration,velocity,pan=0){
+    const index=events.length,r=musicRandom(track.seed,index),swing=step%1===.5?track.swing:0;
+    const time=Math.max(0,(bar*4+step+swing)*beat+(r-.5)*.018);
+    if(time>=track.length-2)return;
+    events.push({kind,time,midi,duration:Math.min(duration*beat+(tail[kind]||0),track.length-time),velocity:velocity*(.92+r*.16),pan:Math.max(-1,Math.min(1,pan)),seed:index+track.seed});
+  }
+  for(let bar=0;bar<track.bars;bar++){
+    const section=musicSection(track,bar*barTime+.001),energy=section[2],intro=bar<4;
+    const bridge=bar>=28&&bar<36,outro=bar>=track.sections.at(-1)[0];
+    const harmony=bridge?track.bridge:track.chords;
+    const ci=Math.floor((bridge?bar-28:bar)/2)%8;
+    const chord=outro?track.chords[0]:harmony[ci],next=harmony[(ci+1)%8];
+    const dusk=track.id==='dusk',tide=track.id==='tide';
+    if(bar%2===0){
+      chord.slice(1).forEach((n,i)=>add('pad',bar,i*.018,n,7.6,.055*energy,(i-1.5)*.38));
+      if(tide||intro||bridge||outro)add('air',bar,0,0,7.9,tide?.035:.012,Math.sin(bar)*.4);
+    }
+    // Root / fifth / approach notes give the bass a phrase, not a static drone.
+    if(tide){
+      if(bar%2===0)add('bass',bar,0,chord[0]-12,6.6,.18*energy);
+    }else{
+      const pattern=intro||bridge||outro?[[0,0,2.8]]:dusk?[[0,0,1.2],[1.75,0,.5],[2.5,7,.65],[3.5,0,.35]]:[[0,0,1.3],[1.5,12,.45],[2.75,0,.65]];
+      pattern.forEach(([s,n,d])=>add('bass',bar,s,chord[0]+n,d,.23*energy));
+      if(bar%2===1&&!intro&&!outro&&!bridge)add('bass',bar,3.75,next[0]-(next[0]>chord[0]?1:-1),.18,.1*energy);
+    }
+    const keyKind=tide?'piano':dusk?'keys':'lead';
+    const comp=tide?[0]:intro||bridge||outro?[.1]:dusk?[0,1.5,3.25]:[.5,2.5];
+    if(!tide||bar%2===0)comp.forEach((step,j)=>chord.slice(1).forEach((n,i)=>{
+      add(keyKind,bar,step+i*(tide?.07:.018),n,tide?3.2:j===0?1.1:.65,(tide?.075:dusk?.078:.045)*energy,((i-1.5)*.16)-.12);
+    }));
+    // Eight authored call/response motifs, reharmonised in the bridge. Leave breaths.
+    if(!intro&&!outro&&(!bridge||bar%2===0)){
+      const motif=track.melody[(bar-4+track.melody.length)%track.melody.length];
+      const upper=[...chord.slice(1).map(n=>n+12),chord[1]+24];
+      motif.forEach(([step,degree,duration],i)=>{
+        const pitch=upper[(degree+(bridge?1:0))%5];
+        add(tide?'piano':dusk?'keys':'lead',bar,step,pitch,duration,(tide?.19:dusk?.16:.13)*(bridge?.7:1),.12+Math.sin(bar+i)*.16);
+      });
+      if(energy>=.9&&bar%4===3){
+        [0,1,2].forEach((n,i)=>add('glass',bar,2+i*.5,upper[3-n],.65,.055,-.55+i*.5));
+      }
+    }else if(bar%2===0){
+      add(tide?'glass':'keys',bar,.15,chord[3]+12,3,.11,.25);
+      if(bar%4===2)add(tide?'piano':'glass',bar,2.5,chord[2]+12,1,.065,-.3);
+    }
+    if(!dusk&&(!intro||bar>=2)&&!outro){
+      const steps=tide?[.75,2.25,3.5]:bridge?[.5,2.5]:[0,.5,1,1.5,2,2.5,3,3.5];
+      steps.forEach((s,i)=>{
+        if(tide&&bar%2===1&&i===2)return;
+        const order=[0,2,1,3,2,0,3,1],n=chord[1+order[(i+bar%4)%8]]+(tide?12:12+(bar%8===7&&i>5?12:0));
+        add(tide?'glass':'arp',bar,s,n,tide?1.5:.35,(tide?.038:.06)*energy,Math.sin((bar*8+i)*1.7)*.65);
+      });
+    }
+    // Three distinct rhythm sections, with ghost notes and end-of-phrase fills.
+    if(!intro&&!outro&&!bridge){
+      if(tide){
+        if(bar%2===0)add('kick',bar,0,0,.32,.1*energy);
+        if(bar%2===1)add('brush',bar,2.1,0,.8,.055*energy,-.35);
+        [1.5,3.5].forEach(s=>add('shaker',bar,s,0,.12,.028*energy,.45));
+      }else{
+        (dusk?[0,1.75,2.5]:[0,1.5,2.75]).forEach((s,i)=>add('kick',bar,s,0,.38,(i===0?.5:.34)*energy));
+        (dusk?[1,3]:[2]).forEach(s=>{add('snare',bar,s+.018,0,.22,.18*energy,.08);add('clap',bar,s+.045,0,.18,.07*energy,-.15);});
+        if(bar%2===1)add('snare',bar,dusk?2.75:3.75,0,.13,.04*energy,-.2);
+        for(let i=0;i<8;i++)add('hat',bar,i*.5,0,i===7&&bar%4===3?.3:.075,(i%2?.062:.037)*energy,i%2?.34:-.26);
+        if(energy>=.8)for(let i=0;i<4;i++)add('shaker',bar,.25+i,0,.09,.033*energy,-.5);
+      }
+      if(bar%8===7){
+        [3.25,3.5,3.75].forEach((s,i)=>add(tide?'glass':'tom',bar,s,tide?chord[4]+12:45-i*3,.22,tide?.04:.075+i*.015,(i-1)*.45));
+      }
+    }
+    if(bar>0&&track.sections.some(s=>s[0]===bar)&&!outro){
+      add('swell',bar-1,2,0,2,.055,-.3);
+      add('chime',bar,0,chord[4]+12,2,.045,.5);
+    }
+  }
+  events.sort((a,b)=>a.time-b.time);scoreCache.set(track.id,events);return events;
+}
+
+// Each playback owns its complete graph, including effect tails. Disposing a
+// session cannot leak an old track's reverb into a seek or the next track.
+class OriginalMusicEngine{
+  constructor(context,track,destination){
+    this.context=context;this.track=track;this.nodes=[];this.voices=new Set();this.disposed=false;
+    const c=context,node=n=>(this.nodes.push(n),n);
+    this.output=node(c.createGain());this.output.gain.value=.8;
+    const highpass=node(c.createBiquadFilter());highpass.type='highpass';highpass.frequency.value=28;
+    const glue=node(c.createDynamicsCompressor());glue.threshold.value=-19;glue.knee.value=15;glue.ratio.value=2.4;glue.attack.value=.025;glue.release.value=.22;
+    const ceiling=node(c.createDynamicsCompressor());ceiling.threshold.value=-3;ceiling.knee.value=0;ceiling.ratio.value=20;ceiling.attack.value=.002;ceiling.release.value=.09;
+    this.output.connect(highpass);highpass.connect(glue);glue.connect(ceiling);ceiling.connect(destination);
+    const convolver=node(c.createConvolver()),verbTone=node(c.createBiquadFilter()),verb=node(c.createGain());
+    const tide=track.id==='tide',seconds=tide?3.8:track.id==='orbit'?2.8:1.8;
+    const impulse=c.createBuffer(2,Math.ceil(c.sampleRate*seconds),c.sampleRate);
+    for(let ch=0;ch<2;ch++){
+      const data=impulse.getChannelData(ch);let low=0;
+      for(let i=0;i<data.length;i++){const white=musicRandom(track.seed+ch,i)*2-1;low=low*.6+white*.4;data[i]=low*Math.pow(1-i/data.length,tide?2.6:3.5)*(i<c.sampleRate*.018?0:1);}
+    }
+    convolver.buffer=impulse;verbTone.type='lowpass';verbTone.frequency.value=tide?4200:5600;verb.gain.value=tide?.36:.22;
+    convolver.connect(verbTone);verbTone.connect(verb);verb.connect(this.output);this.reverb=convolver;
+    const delayL=node(c.createDelay(2)),delayR=node(c.createDelay(2)),feedback=node(c.createGain()),delayTone=node(c.createBiquadFilter());
+    const panL=node(c.createStereoPanner()),panR=node(c.createStereoPanner()),echo=node(c.createGain());
+    delayL.delayTime.value=60/track.tempo*.75;delayR.delayTime.value=60/track.tempo*.5;
+    feedback.gain.value=tide?.2:.28;delayTone.type='lowpass';delayTone.frequency.value=3000;
+    panL.pan.value=-.72;panR.pan.value=.72;echo.gain.value=track.id==='orbit'?.26:.13;
+    delayL.connect(panL);panL.connect(echo);delayL.connect(delayR);delayR.connect(panR);panR.connect(echo);
+    delayR.connect(delayTone);delayTone.connect(feedback);feedback.connect(delayL);echo.connect(this.output);this.delay=delayL;
+    this.buses={};
+    for(const [name,level,send,echoSend] of [['keys',.95,.22,.13],['pad',.72,.38,0],['bass',.82,.015,0],['drums',.7,.07,0],['air',.48,.36,0],['lead',.85,.3,.3]]){
+      const bus=node(c.createGain()),wet=node(c.createGain()),echoGain=node(c.createGain());bus.gain.value=level;wet.gain.value=send;echoGain.gain.value=echoSend;
+      bus.connect(this.output);bus.connect(wet);wet.connect(convolver);bus.connect(echoGain);echoGain.connect(delayL);this.buses[name]=bus;
+    }
+    this.noise=c.createBuffer(1,c.sampleRate*2,c.sampleRate);
+    const noise=this.noise.getChannelData(0);for(let i=0;i<noise.length;i++)noise[i]=musicRandom(track.seed,i)*2-1;
+  }
+  timeline(start,offset){
+    const end=start+this.track.length-offset,fade=Math.max(start,end-4);
+    const gain=this.output.gain;gain.cancelScheduledValues(start);gain.setValueAtTime(.0001,start);
+    gain.linearRampToValueAtTime(.8*Math.min(1,(this.track.length-offset)/4),Math.min(start+.06,end));
+    if(fade>start+.06)gain.setValueAtTime(.8,fade);
+    gain.linearRampToValueAtTime(.0001,end);
+  }
+  schedule(event,time,offset=0){
+    if(this.disposed)return;
+    const c=this.context,kind=event.kind,duration=event.duration-offset;
+    if(duration<.025)return;
+    const sources=[],nodes=[],keep=n=>(nodes.push(n),n),amp=keep(c.createGain()),pan=keep(c.createStereoPanner());
+    const tone=keep(c.createBiquadFilter());tone.type='lowpass';tone.Q.value=.55;
+    const pitched=['keys','piano','lead','glass','arp','pad','bass','chime'].includes(kind);
+    const bus=kind==='pad'?'pad':kind==='bass'?'bass':['air','swell'].includes(kind)?'air':!pitched?'drums':['lead','arp','glass','chime'].includes(kind)?'lead':'keys';
+    pan.pan.value=event.pan;amp.connect(tone);tone.connect(pan);pan.connect(this.buses[bus]);
+    const f=440*Math.pow(2,((event.midi||48)-69)/12),v=event.velocity;
+    let attack=.009,release=Math.min(.12,duration*.25),level=v,sustain=.32;
+    const oscillator=(type,freq,weight=1,detune=0)=>{
+      const o=keep(c.createOscillator()),g=keep(c.createGain());o.type=type;o.frequency.setValueAtTime(freq,time);o.detune.value=detune;g.gain.value=weight;o.connect(g);g.connect(amp);sources.push(o);return o;
+    };
+    const noise=(filterType,freq,q=.7)=>{
+      const source=keep(c.createBufferSource()),filter=keep(c.createBiquadFilter());source.buffer=this.noise;source.loop=true;filter.type=filterType;filter.frequency.value=freq;filter.Q.value=q;source.connect(filter);filter.connect(amp);sources.push(source);return filter;
+    };
+    tone.frequency.setValueAtTime(9000,time);
+    if(kind==='keys'||kind==='piano'){
+      // A decaying FM tine / hammer plus independently damped string partials.
+      const carrier=oscillator('sine',f,.72),mod=keep(c.createOscillator()),index=keep(c.createGain());
+      mod.frequency.value=f*(kind==='keys'?2:3.002);index.gain.setValueAtTime(f*(kind==='keys'?1.15:.28)*v,time);index.gain.exponentialRampToValueAtTime(.01,time+Math.min(duration,.65));mod.connect(index);index.connect(carrier.frequency);sources.push(mod);
+      oscillator('sine',f*2.001,.2);oscillator('sine',f*3.003,.065);oscillator('sine',f*.999,.12);
+      attack=kind==='piano'?.006:.014;release=Math.min(kind==='piano'?1.5:.85,duration*.55);sustain=.16;tone.frequency.value=kind==='piano'?4200:5400;
+    }else if(kind==='pad'){
+      oscillator('triangle',f,.42,-5);oscillator('triangle',f,.42,5);oscillator('sine',f/2,.12);
+      const lfo=keep(c.createOscillator()),depth=keep(c.createGain());lfo.frequency.value=.11+musicRandom(event.seed,2)*.12;depth.gain.value=260;lfo.connect(depth);depth.connect(tone.frequency);sources.push(lfo);
+      attack=Math.min(1.5,duration*.3);release=Math.min(1.8,duration*.4);sustain=.8;
+      tone.frequency.setValueAtTime(1000,time);tone.frequency.linearRampToValueAtTime(1800,time+duration*.5);tone.frequency.linearRampToValueAtTime(850,time+duration);
+    }else if(kind==='lead'||kind==='arp'){
+      oscillator('sawtooth',f,.4,-4);oscillator('triangle',f,.55,4);oscillator('sine',f/2,.08);
+      attack=.013;sustain=kind==='arp'?.13:.28;release=Math.min(.55,duration*.5);
+      tone.frequency.setValueAtTime(Math.min(9000,f*9),time);tone.frequency.exponentialRampToValueAtTime(Math.max(500,f*1.5),time+duration);tone.Q.value=1.2;
+    }else if(kind==='glass'||kind==='chime'){
+      oscillator('sine',f,.65);oscillator('sine',f*2.756,.13);oscillator('sine',f*4.07,.055);
+      attack=.004;sustain=.1;release=Math.min(2,duration*.65);tone.frequency.value=7000;
+    }else if(kind==='bass'){
+      oscillator('sine',f,.82);oscillator('triangle',f,.23);oscillator('sine',f*2,.08);
+      tone.frequency.value=500;attack=.018;sustain=.65;release=Math.min(.17,duration*.3);
+    }else if(kind==='kick'){
+      const o=oscillator('sine',125,.9);o.frequency.exponentialRampToValueAtTime(this.track.id==='tide'?42:48,time+.13);
+      tone.frequency.value=1200;attack=.003;sustain=.07;release=duration*.65;
+    }else if(kind==='tom'){
+      const o=oscillator('sine',f*1.7,.85);o.frequency.exponentialRampToValueAtTime(f,time+.1);tone.frequency.value=900;sustain=.06;release=duration*.65;
+    }else if(kind==='snare'||kind==='clap'){
+      noise('bandpass',kind==='clap'?1700:2400,.8);if(kind==='snare')oscillator('triangle',185,.35);
+      attack=.002;sustain=.12;release=duration*.7;tone.frequency.value=7000;
+    }else if(kind==='hat'||kind==='shaker'||kind==='brush'){
+      noise('highpass',kind==='hat'?7200:kind==='brush'?2200:5500);attack=kind==='brush'?.05:.002;sustain=.12;release=duration*.65;
+    }else{
+      const filter=noise('bandpass',550,.6);attack=duration*(kind==='swell'?.65:.4);release=duration*.3;sustain=.85;
+      filter.frequency.setValueAtTime(350,time);filter.frequency.exponentialRampToValueAtTime(kind==='swell'?4200:1100,time+duration*.6);filter.frequency.exponentialRampToValueAtTime(400,time+duration);
+    }
+    // A carried note starts softly at its decayed level instead of re-attacking.
+    if(offset>0){attack=.025;level*=Math.exp(-offset/(kind==='pad'?15:kind==='bass'?4:1.8));}
+    attack=Math.min(attack,duration*.25);release=Math.min(release,duration*.65);
+    const hold=Math.max(time+attack+.001,time+duration-release);
+    amp.gain.setValueAtTime(.0001,time);amp.gain.linearRampToValueAtTime(Math.max(.0002,level),time+attack);
+    amp.gain.exponentialRampToValueAtTime(Math.max(.00015,level*sustain),hold);amp.gain.exponentialRampToValueAtTime(.0001,time+duration);
+    const voice={sources,nodes};this.voices.add(voice);let ended=0;
+    sources.forEach(source=>{
+      source.onended=()=>{if(++ended===sources.length){nodes.forEach(n=>n.disconnect());this.voices.delete(voice);}};
+      if(source.buffer)source.start(time,musicRandom(event.seed,8));else source.start(time);
+      source.stop(time+duration+.02);
+    });
+  }
+  dispose(){
+    if(this.disposed)return;this.disposed=true;
+    const c=this.context,t=c.currentTime;
+    this.output.gain.cancelScheduledValues(t);this.output.gain.setTargetAtTime(.0001,t,.008);
+    for(const voice of this.voices)for(const source of voice.sources){try{source.stop(t+.04);}catch{/* Already ended. */}}
+    // Disconnect feedback and reverb too; never let old effect tails accumulate.
+    setTimeout(()=>{for(const voice of this.voices)voice.nodes.forEach(n=>n.disconnect());this.voices.clear();this.nodes.forEach(n=>n.disconnect());this.nodes=[];this.noise=null;},70);
+  }
+}
 const M=A.music={track:tracks[0],playing:false,position:0,startedAt:0,context:null,gain:null,scheduler:null,beat:0,liked:A.load('musicLikes',[])};
 const fmt=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
 // Original local SVG covers: unique paint IDs, no downloads or generated-image dependencies.
@@ -39,25 +262,67 @@ A.musicArtwork=(track='dusk',record=false)=>{
   <g stroke="#fff" stroke-opacity=".08">${Array.from({length:18},(_,i)=>`<path d="M10 ${18+i*12}h300"/>`).join('')}</g></g><rect x="10.5" y="10.5" width="299" height="219" rx="14" fill="none" stroke="#fff" stroke-opacity=".4"/>
   ${record?`<g class="vinyl-disc"><circle cx="213" cy="135" r="91" fill="url(#${id}-vinyl)" stroke="#798087" stroke-width="1.5"/><g fill="none" stroke="#b7bec6" stroke-opacity=".17">${Array.from({length:12},(_,i)=>`<circle cx="213" cy="135" r="${39+i*4}"/>`).join('')}</g><path d="M154 80a80 80 0 0 1 113-5M159 194a80 80 0 0 0 111-4" fill="none" stroke="#d8e0e8" stroke-opacity=".2" stroke-width="7"/><circle cx="213" cy="135" r="32" fill="url(#${id}-sky)"/><circle cx="213" cy="135" r="26" fill="none" stroke="#ffffff55"/><path d="M200 123h26m-26 5h26m-21 21h16" stroke="#fff" stroke-opacity=".5"/><circle cx="213" cy="135" r="6" fill="#252b33" stroke="#a0a5a8"/><circle cx="212" cy="134" r="2" fill="#ecf0eb"/></g>`:''}</svg>`;
 };
-A.musicLibraryPreview=()=>`<button class="music-originals-entry" data-action="musicOriginals"><span class="music-originals-heading"><strong>オリジナル音源</strong><small>3曲 · ブラウザ生成</small>${icon('chevronRight')}</span><span class="music-originals-covers">${tracks.map(t=>`<span>${A.musicArtwork(t.id)}<strong>${t.title}</strong><small>${fmt(t.length)}</small></span>`).join('')}</span></button>`;
+A.musicLibraryPreview=()=>`<button class="music-originals-entry" data-action="musicOriginals"><span class="music-originals-heading"><strong>オリジナル音源</strong><small>3曲 · Original arrangements</small>${icon('chevronRight')}</span><span class="music-originals-covers">${tracks.map(t=>`<span>${A.musicArtwork(t.id)}<strong>${t.title}</strong><small>${fmt(t.length)}</small></span>`).join('')}</span></button>`;
 const art=(t,extra='')=>`<div class="album-art ${t.art} ${extra}">${A.musicArtwork(t.id,extra==='player-art')}<span>${t.album.replace('\n','<br>')}</span></div>`;
-M.elapsed=()=>M.playing?Math.min(M.track.length,M.position+(Date.now()-M.startedAt)/1000):M.position;
-M.setVolume=()=>{if(M.gain&&M.context)M.gain.gain.setTargetAtTime(A.settings.volume/100*.35,M.context.currentTime,.15);};
-function audioInit(){if(!M.context){const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)throw Error('unsupported');M.context=new Audio();M.gain=M.context.createGain();M.gain.gain.value=A.settings.volume/100*.35;const compressor=M.context.createDynamicsCompressor();compressor.threshold.value=-16;compressor.ratio.value=4;M.gain.connect(compressor);compressor.connect(M.context.destination);}M.context.resume();}
-function note(freq,time,duration,volume){const c=M.context,osc=c.createOscillator(),gain=c.createGain();osc.type='sine';osc.frequency.value=freq;gain.gain.setValueAtTime(.0001,time);gain.gain.exponentialRampToValueAtTime(volume,time+.08);gain.gain.exponentialRampToValueAtTime(.0001,time+duration);osc.connect(gain);gain.connect(M.gain);osc.start(time);osc.stop(time+duration+.05);osc.onended=()=>{osc.disconnect();gain.disconnect();};}
-function synth(){if(!M.playing||!M.context)return;const t=M.context.currentTime,b=M.beat++,track=M.track;const semitone=track.notes[b%track.notes.length];note(track.base*Math.pow(2,semitone/12)*2,t,1.5,.14);if(b%4===0){[0,7,12].forEach((n,i)=>note(track.base*Math.pow(2,n/12),t+i*.025,3.2,.07));note(track.base/2,t,2,.12);}if(b%2===0)note(track.base*4,t+.23,.8,.035);}
-M.start=()=>{try{audioInit();M.context.resume();M.startedAt=Date.now();M.playing=true;M.gain.gain.setTargetAtTime(A.settings.volume/100*.35,M.context.currentTime,.1);synth();clearInterval(M.scheduler);M.scheduler=setInterval(synth,60000/M.track.tempo/2);$('#phone-screen').classList.add('playing');refreshMusic();}catch{M.playing=false;A.toast('このブラウザでは音楽再生を利用できません');}};
-M.pause=()=>{M.position=M.elapsed();M.playing=false;clearInterval(M.scheduler);if(M.gain)M.gain.gain.setTargetAtTime(0,M.context.currentTime,.1);$('#phone-screen').classList.remove('playing');refreshMusic();};
+M.elapsed=()=>M.playing&&M.context?Math.min(M.track.length,M.position+Math.max(0,M.context.currentTime-M.audioStartedAt)):M.position;
+M.setVolume=()=>{if(M.gain&&M.context)M.gain.gain.setTargetAtTime(Math.max(0,Math.min(100,Number(A.settings.volume)||0))/100,M.context.currentTime,.06);};
+function audioInit(){
+  if(!M.context||M.context.state==='closed'){
+    const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)throw Error('unsupported');
+    M.context=new Audio();M.gain=M.context.createGain();M.gain.gain.value=0;M.gain.connect(M.context.destination);
+    M.context.onstatechange=()=>{if(M.playing&&M.context.state==='interrupted')M.pause();};
+  }
+}
+let musicSession=0;
+function scheduleMusic(){
+  if(!M.playing||!M.engine)return;
+  const now=M.context.currentTime,score=M.score;
+  // A throttled tab skips stale attacks rather than firing a backlog at once.
+  while(M.cursor<score.length){
+    const event=score[M.cursor],when=M.audioStartedAt+event.time-M.position;
+    if(when>now+.18)break;M.cursor++;
+    if(when>=now-.03)M.engine.schedule(event,Math.max(now+.002,when));
+  }
+  if(M.elapsed()>=M.track.length)M.next(1);
+}
+M.start=()=>{
+  if(M.playing)return;
+  const session=++musicSession;
+  try{
+    audioInit();if(M.position>=M.track.length)M.position=0;
+    M.position=Math.max(0,Math.min(M.track.length,Number(M.position)||0));
+    M.engine?.dispose();M.engine=new OriginalMusicEngine(M.context,M.track,M.gain);
+    M.score=musicScore(M.track);M.audioStartedAt=M.context.currentTime+.045;M.startedAt=Date.now();
+    M.engine.timeline(M.audioStartedAt,M.position);M.cursor=0;
+    while(M.cursor<M.score.length&&M.score[M.cursor].time<M.position){
+      const e=M.score[M.cursor++];
+      if(e.time+e.duration>M.position&&['pad','bass','keys','piano','glass','lead','arp','air'].includes(e.kind))M.engine.schedule(e,M.audioStartedAt,M.position-e.time);
+    }
+    M.playing=true;M.setVolume();scheduleMusic();clearInterval(M.scheduler);M.scheduler=setInterval(scheduleMusic,25);
+    $('#phone-screen').classList.add('playing');refreshMusic();
+    Promise.resolve(M.context.resume()).catch(()=>{if(session===musicSession){M.pause();A.toast('音声を開始できません。もう一度再生してください');}});
+  }catch{M.pause();A.toast('このブラウザでは音楽再生を利用できません');}
+};
+M.pause=()=>{
+  musicSession++;M.position=M.elapsed();M.playing=false;clearInterval(M.scheduler);M.scheduler=null;
+  M.engine?.dispose();M.engine=null;
+  $('#phone-screen').classList.remove('playing');refreshMusic();
+};
+M.seek=seconds=>{
+  const playing=M.playing;M.pause();M.position=Math.max(0,Math.min(M.track.length,Number(seconds)||0));
+  if(playing)M.start();M.tick();
+};
+window.addEventListener('pagehide',()=>M.pause());
 M.toggle=()=>M.playing?M.pause():M.start();
 M.select=(id,play=true)=>{const next=tracks.find(t=>t.id===id);if(!next)return;if(M.playing)M.pause();M.track=next;M.position=0;M.beat=0;if(play)M.start();};
 M.next=step=>{M.select(tracks[(tracks.indexOf(M.track)+step+tracks.length)%tracks.length].id,true);if(A.current==='music')music(musicPage);if(!$('#overlay').hidden&&$('#control-volume'))A.controls();};
-M.tick=()=>{if(M.playing&&M.elapsed()>=M.track.length)M.next(1);const progress=$('#music-progress');if(progress&&document.activeElement!==progress)progress.value=M.elapsed();if($('#music-elapsed'))$('#music-elapsed').textContent=fmt(M.elapsed());if($('#music-remaining'))$('#music-remaining').textContent='−'+fmt(M.track.length-M.elapsed());};
+M.tick=()=>{if(M.playing&&M.elapsed()>=M.track.length)M.next(1);const progress=$('#music-progress');if(progress&&document.activeElement!==progress)progress.value=M.elapsed();if($('#music-elapsed'))$('#music-elapsed').textContent=fmt(M.elapsed());if($('#music-remaining'))$('#music-remaining').textContent='−'+fmt(M.track.length-M.elapsed());if($('#music-section'))$('#music-section').textContent=musicSection(M.track,M.elapsed())[1];};
 let musicPage='home';
-function music(arg){musicPage=arg==='player'?'player':'home';A.statusTheme(true);$('#app-screen').classList.add('music-app');if(musicPage==='player')return player();A.view(A.nav('ミュージック',`<button data-action="musicCatalogue">検索</button><button data-action="musicFavorites" aria-label="お気に入り">${icon('heart')}</button>`)+`<div class="app-content"><h1 class="app-title">音源</h1><div class="music-hero">${A.musicArtwork('dusk',true)}<div class="music-feature-title"><strong>Golden Hour</strong><span>aura sounds</span></div><button data-action="musicPlayTrack" data-id="dusk" aria-label="Golden Hourを再生">${icon('play')}</button></div><div class="album-grid">${tracks.slice(0,2).map(t=>`<button class="album-card" data-action="musicPlayTrack" data-id="${t.id}">${art(t)}<h3>${t.title}</h3><p>${t.artist}</p></button>`).join('')}</div>${tracks.map(t=>`<button class="track-row" data-action="musicPlayTrack" data-id="${t.id}">${art(t)}<div><strong>${t.title}</strong><small>${t.artist}</small></div><span>${fmt(t.length)}</span></button>`).join('')}<p class="setting-description" style="color:#777984;margin-top:20px">ブラウザ生成の環境音楽</p></div>${miniPlayer()}`);}
+function music(arg){musicPage=arg==='player'?'player':'home';A.statusTheme(true);$('#app-screen').classList.add('music-app');if(musicPage==='player')return player();A.view(A.nav('ミュージック',`<button data-action="musicCatalogue">検索</button><button data-action="musicFavorites" aria-label="お気に入り">${icon('heart')}</button>`)+`<div class="app-content"><h1 class="app-title">音源</h1><div class="music-hero">${A.musicArtwork('dusk',true)}<div class="music-feature-title"><strong>Golden Hour</strong><span>aura sounds</span></div><button data-action="musicPlayTrack" data-id="dusk" aria-label="Golden Hourを再生">${icon('play')}</button></div><div class="album-grid">${tracks.slice(0,2).map(t=>`<button class="album-card" data-action="musicPlayTrack" data-id="${t.id}">${art(t)}<h3>${t.title}</h3><p>${t.artist}</p></button>`).join('')}</div>${tracks.map(t=>`<button class="track-row" data-action="musicPlayTrack" data-id="${t.id}">${art(t)}<div><strong>${t.title}</strong><small>${t.style} · ${t.tempo} BPM</small></div><span>${fmt(t.length)}</span></button>`).join('')}<p class="setting-description" style="color:#777984;margin-top:20px">3つのオリジナル・アレンジ。全編ブラウザ内で演奏 · 外部音声のダウンロードなし</p></div>${miniPlayer()}`);}
 function miniPlayer(){return `<div class="music-mini"><div class="mini-art ${M.track.art}"></div><button data-action="musicPlayer">${M.track.title}<small>${M.track.artist}</small></button><button data-action="musicToggle" aria-label="再生・一時停止" id="mini-play">${icon(M.playing?'pause':'play')}</button><button data-action="musicNext" aria-label="次の曲">${icon('next')}</button></div><div style="height:24px;background:#252329;flex-shrink:0"></div>`;}
-function player(){const t=M.track;A.view(A.nav('再生中',`<button data-action="musicInfo" aria-label="音源について">···</button>`,'musicHome','閉じる')+`<div class="player-content">${art(t,'player-art')}<div class="player-info"><div><h2>${t.title}</h2><p>${t.artist}</p></div><button data-action="musicLike" id="music-like" aria-label="お気に入り" aria-pressed="${M.liked.includes(t.id)}">${M.liked.includes(t.id)?'♥':'♡'}</button></div><input class="music-progress" type="range" min="0" max="${t.length}" step="1" value="${M.elapsed()}" id="music-progress" aria-label="再生位置"><div class="progress-labels"><span id="music-elapsed">${fmt(M.elapsed())}</span><span id="music-remaining">−${fmt(t.length-M.elapsed())}</span></div><div class="player-controls"><button data-action="musicPrevious" aria-label="前の曲">${icon('previous')}</button><button class="main-play" data-action="musicToggle" id="player-play" aria-label="再生・一時停止">${icon(M.playing?'pause':'play')}</button><button data-action="musicNext" aria-label="次の曲">${icon('next')}</button></div><label class="player-volume">${icon('volume')}<input type="range" id="music-volume" min="0" max="100" value="${A.settings.volume}" aria-label="音量">${icon('volume')}</label></div>`);$('#music-progress').oninput=e=>{M.position=+e.target.value;M.startedAt=Date.now();M.tick();};$('#music-volume').oninput=e=>{A.settings.volume=+e.target.value;M.setVolume();A.save('settings',A.settings);};}
+function player(){const t=M.track;A.view(A.nav('再生中',`<button data-action="musicInfo" aria-label="音源について">···</button>`,'musicHome','閉じる')+`<div class="player-content">${art(t,'player-art')}<div class="player-info"><div><h2>${t.title}</h2><p>${t.artist}</p></div><button data-action="musicLike" id="music-like" aria-label="お気に入り" aria-pressed="${M.liked.includes(t.id)}">${M.liked.includes(t.id)?'♥':'♡'}</button></div><input class="music-progress" type="range" min="0" max="${t.length}" step="1" value="${M.elapsed()}" id="music-progress" aria-label="再生位置"><div class="progress-labels"><span id="music-elapsed">${fmt(M.elapsed())}</span><span id="music-remaining">−${fmt(t.length-M.elapsed())}</span></div><div class="player-controls"><button data-action="musicPrevious" aria-label="前の曲">${icon('previous')}</button><button class="main-play" data-action="musicToggle" id="player-play" aria-label="再生・一時停止">${icon(M.playing?'pause':'play')}</button><button data-action="musicNext" aria-label="次の曲">${icon('next')}</button></div><div style="text-align:center;font-size:11px;line-height:1.8;opacity:.75;margin:12px 0" aria-label="楽曲構成"><span id="music-section">${musicSection(t,M.elapsed())[1]}</span><br>${t.tempo} BPM · ${t.key}<br>${t.style}</div><label class="player-volume">${icon('volume')}<input type="range" id="music-volume" min="0" max="100" value="${A.settings.volume}" aria-label="音量">${icon('volume')}</label></div>`);$('#music-progress').oninput=e=>M.seek(+e.target.value);$('#music-volume').oninput=e=>{A.settings.volume=+e.target.value;M.setVolume();A.save('settings',A.settings);};}
 function refreshMusic(){if($('#mini-play'))$('#mini-play').innerHTML=icon(M.playing?'pause':'play');if($('#player-play'))$('#player-play').innerHTML=icon(M.playing?'pause':'play');}
-A.apps.music.render=music;A.actions.musicHome=()=>music('home');A.actions.musicPlayer=()=>music('player');A.actions.musicToggle=M.toggle;A.actions.musicNext=()=>M.next(1);A.actions.musicPrevious=()=>M.next(-1);A.actions.musicPlayTrack=el=>{M.select(el.dataset.id,true);music('player');};A.actions.musicLike=()=>{M.liked=M.liked.includes(M.track.id)?M.liked.filter(x=>x!==M.track.id):[...M.liked,M.track.id];A.save('musicLikes',M.liked);$('#music-like').textContent=M.liked.includes(M.track.id)?'♥':'♡';$('#music-like').setAttribute('aria-pressed',M.liked.includes(M.track.id));};A.actions.musicInfo=()=>A.toast('aura originals — このブラウザで生成したオリジナル音源です');
+A.apps.music.render=music;A.actions.musicHome=()=>music('home');A.actions.musicPlayer=()=>music('player');A.actions.musicToggle=M.toggle;A.actions.musicNext=()=>M.next(1);A.actions.musicPrevious=()=>M.next(-1);A.actions.musicPlayTrack=el=>{M.select(el.dataset.id,true);music('player');};A.actions.musicLike=()=>{M.liked=M.liked.includes(M.track.id)?M.liked.filter(x=>x!==M.track.id):[...M.liked,M.track.id];A.save('musicLikes',M.liked);$('#music-like').textContent=M.liked.includes(M.track.id)?'♥':'♡';$('#music-like').setAttribute('aria-pressed',M.liked.includes(M.track.id));};A.actions.musicInfo=()=>A.toast(`${M.track.title} — ${M.track.detail}`,true);
 A.actions.musicFavorites=()=>{A.view(A.nav('お気に入り','','musicHome','戻る')+`<div class="app-content">${tracks.filter(t=>M.liked.includes(t.id)).map(t=>`<button class="track-row" data-action="musicPlayTrack" data-id="${t.id}">${art(t)}<div><strong>${t.title}</strong><small>${t.artist}</small></div>${icon('play','style="width:18px"')}</button>`).join('')||A.empty('お気に入りなし','heart')}</div>${miniPlayer()}`);};
 // Voice Studio: local-only audio, transactional IndexedDB, recoverable failed writes.
 const VOICE_DB='aura-voice-studio',VOICE_LIMIT=50*1024*1024;
