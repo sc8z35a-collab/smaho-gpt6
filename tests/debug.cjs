@@ -37,7 +37,7 @@ test('B04 failed version restore preserves history',async p=>{
 test('B05 shopping list names cannot escape select options',async p=>{
  await seed(p,'shoppingLists',[{id:'list',name:'</option></select><img id="injected" src="x">'}]);
  await open(p,'shopping');await act(p,'evShoppingEdit');assert.equal(await p.locator('#injected').count(),0);
- assert.ok((await p.locator('#ev-listId option').allTextContents()).includes('</option></select><img id="injected" src="x">'));
+ assert.ok((await p.locator('#ep-listId option').allTextContents()).includes('</option></select><img id="injected" src="x">'));
 });
 test('B06 recurring expense identity is retained in first write',async p=>{
  await seed(p,'expenses',[{id:'e',kind:'expense',amount:10,category:'fixed',note:'Rent',date:'2026-09-20',recurringId:'r'}]);
@@ -128,7 +128,7 @@ test('B25 Sudoku pencil on filled cell has no phantom undo',async p=>{
  const value=await p.evaluate(()=>{Aura.open('games','sudoku');const s=Aura.load('sudokuState',{}),i=s.givens.findIndex(x=>!x);Aura.actions.sudokuSelect({dataset:{index:String(i)}});Aura.actions.sudokuNumber({dataset:{value:String(s.solution[i])}});Aura.actions.sudokuPencil();Aura.actions.sudokuNumber({dataset:{value:'1'}});Aura.actions.sudokuUndo();return Aura.load('sudokuState',{}).values[i];});assert.equal(value,0);
 });
 test('B26 H shortcut does not interrupt select editing',async p=>{
- await open(p,'converter');await p.locator('#ev-from').focus();await p.keyboard.press('h');assert.equal(await p.evaluate(()=>Aura.current),'converter');
+ await open(p,'converter');await p.locator('#ep-unit-from').focus();await p.keyboard.press('h');assert.equal(await p.evaluate(()=>Aura.current),'converter');
 });
 test('B27 failed photo favorite save preserves displayed state',async p=>{
  await open(p,'photos');await act(p,'photoOpen','sample-lake');await failWrites(p,'photoFavorites');await act(p,'photoFavorite');
