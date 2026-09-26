@@ -488,7 +488,7 @@
   };
   A.actions.evSketchHelp=()=>A.overlay(`${A.overlayTitle('スケッチの使い方')}<div class="ev-menu-sheet sk-help"><h3>描画と編集</h3><p>図形はドラッグ、文字は配置場所をタップ。選択ツールは現在のレイヤーの要素を囲み枠で選択し、移動・複製・削除できます。「変形・色」で回転・拡大縮小・反転・色の変更、「手前へ／奥へ」でレイヤー内の重なりを調整できます。選択判定は外接矩形です。</p><h3>レイヤーと拡大</h3><p>最大8レイヤー。自由／固定でロックを切り替えます。拡大時は「手のひら」ツールでドラッグして移動。「集中表示」で設定を隠し、同じボタンで戻せます。消しゴムは現在のレイヤーだけを透明にします。旧作品の消しゴムは見た目を保つため用紙色のままです。</p><h3>ショートカット</h3><p>Ctrl / ⌘ + Z：元に戻す<br>Ctrl / ⌘ + Shift + Z、Ctrl + Y：やり直す<br>B：ペン、E：消しゴム、V：選択、I：スポイト、P：手のひら<br>Delete：選択要素を削除</p><h3>保存の範囲</h3><p>自動保存はこのブラウザのみ。履歴は編集中のみ最大30操作（容量により減少）。1作品1,000要素・合計100,000点、1ストローク5,000点。容量不足時の未保存作品はタブ内で保持しますが、再読み込み前にJSONで退避してください。</p></div>`,'sheet-overlay');
   document.addEventListener('keydown',e=>{
-    if(A.current!=='sketch'||!$('#overlay').hidden||!$('#ev-canvas')||e.isComposing||e.target.closest('input,textarea,select,[contenteditable]'))return;
+    if(A.current!=='sketch'||!$('#overlay').hidden||!$('#ev-canvas')||e.isComposing||(e.target instanceof Element&&e.target.closest('input,textarea,select,[contenteditable]')))return;
     const key=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
     if(mod&&['z','y'].includes(key)){e.preventDefault();(key==='y'||e.shiftKey?A.actions.evSketchRedo:A.actions.evSketchUndo)();}
     else if(!mod&&!e.altKey){const tool={b:'pen',e:'erase',v:'select',i:'picker',p:'pan'}[key];if(tool){e.preventDefault();A.actions.evSketchTool({dataset:{id:tool}});}else if(key==='delete'&&skSelected>=0){e.preventDefault();A.actions.evSketchObjectDelete();}}

@@ -30,7 +30,7 @@
  function open(id){if(!catalog.some(x=>x[0]===id))return library();stop();current=id;A.save('arcadeRecent',[id,...A.load('arcadeRecent',[]).filter(x=>x!==id)].slice(0,8));if(['2048','snake','memory'].includes(id)){legacy(id);const content=$('.app-content');content.classList.add('arcade-play','arc-legacy','arc-'+id);$('.app-screen').classList.add('arcade-screen');A.cleanups.push(stop);return;}({blocks:blocksApp,mines:minesApp,reversi:reversiApp,breaker:breakerApp,sudoku:sudokuApp})[id]();}
  A.apps.games.render=arg=>arg?open(arg):library();A.actions.gamesLibrary=library;A.actions.gameOpen=el=>open(el.dataset.game);A.actions.arcFilter=el=>{category=el.dataset.value;library();};A.actions.arcFavorite=el=>{const favorites=A.load('arcadeFavorites',[]),id=el.dataset.game;A.save('arcadeFavorites',favorites.includes(id)?favorites.filter(x=>x!==id):[...favorites,id]);library();};
  const help=(title,text)=>A.overlay(`${A.overlayTitle(title)}<div class="arc-help">${text}</div>`);
- const keys=fn=>on(document,'keydown',e=>{if(!$('#overlay').hidden||e.target.closest('input,textarea,select'))return;fn(e);});
+ const keys=fn=>on(document,'keydown',e=>{if(!$('#overlay').hidden||e.isComposing||(e.target instanceof Element&&e.target.closest('input,textarea,select,[contenteditable]')))return;fn(e);});
  const number=n=>Number(n).toLocaleString();
 
  // Block Atelier: seven-bag pieces, hold, ghost, rotation kicks and progressive gravity.
@@ -1220,8 +1220,8 @@
    on(button,'click',e=>{if(e.detail===0&&breaker.running){breaker.target+=direction==='left'?-28:28;orbitWake();}});
   }
   keys(e=>{
-   if(e.ctrlKey||e.metaKey||e.altKey||e.isComposing||e.target.closest('[contenteditable]'))return;
-   if(e.code==='Space'&&e.target.closest('button'))return;
+   if(e.ctrlKey||e.metaKey||e.altKey||e.isComposing)return;
+   if(e.code==='Space'&&e.target instanceof Element&&e.target.closest('button'))return;
    if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();if(breaker.running)breakerKeys[e.key==='ArrowLeft'?'left':'right']=true;return;}
    if(['Space','KeyP','KeyF'].includes(e.code)){e.preventDefault();if(e.repeat)return;
     if(e.code==='Space')breaker.running?orbitLaunch():A.actions.breakerToggle();

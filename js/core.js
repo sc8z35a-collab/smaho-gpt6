@@ -1010,12 +1010,12 @@
   A.spotlight=()=>{
     A.overlay(`${A.overlayTitle('検索')}<label class="spotlight-input">${A.icon('search')}<input id="spotlight-query" placeholder="アプリ・記録を検索" aria-label="アプリと記録を検索" autocomplete="off"></label><p class="spotlight-label" id="spotlight-heading">アプリ</p><div class="spotlight-results" id="spotlight-results"></div><div id="spotlight-content"></div><p class="control-footer">端末内を検索</p>`,'spotlight-overlay');
     const render=value=>{
-      const q=value.trim().toLowerCase();
-      const apps=Object.values(A.apps).filter(app=>(app.name+app.id).toLowerCase().includes(q));
+      const q=value.normalize('NFKC').trim().toLowerCase(),norm=v=>String(v??'').normalize('NFKC').toLowerCase();
+      const apps=Object.values(A.apps).filter(app=>norm(app.name+app.id).includes(q));
       A.$('#spotlight-results').innerHTML=apps.map(app=>A.launcher(app)).join('');
       // Stored records may be imported or legacy: never assume optional text fields exist.
-      const notes=q?(A.searchableNotes?.()||A.load('notes',[])).filter(n=>n&&(String(n.title||'')+'\n'+String(n.body||'')).toLowerCase().includes(q)).map(n=>({...n,title:String(n.title||''),body:String(n.body||'')})).slice(0,5):[];
-      const reminders=q?(A.searchableReminders?.()||A.load('reminders',[])).filter(r=>r&&String(r.text||'').toLowerCase().includes(q)).slice(0,5):[];
+      const notes=q?(A.searchableNotes?.()||A.load('notes',[])).filter(n=>n&&norm(String(n.title||'')+'\n'+String(n.body||'')).includes(q)).map(n=>({...n,title:String(n.title||''),body:String(n.body||'')})).slice(0,5):[];
+      const reminders=q?(A.searchableReminders?.()||A.load('reminders',[])).filter(r=>r&&norm(r.text||'').includes(q)).slice(0,5):[];
       const extra=q?(A.searchAdditional?.(q)||''):'';
       A.$('#spotlight-content').innerHTML=(notes.length?`<p class="spotlight-label">メモ</p><div class="search-content-group">${notes.map(n=>`<button data-action="searchNote" data-id="${A.escape(n.id)}">${smallIcon('notes')}<span><strong>${A.escape(n.title||'新しいメモ')}</strong><small>${A.escape(n.body.slice(0,65))}</small></span>${A.icon('arrow')}</button>`).join('')}</div>`:'')+(reminders.length?`<p class="spotlight-label">リマインダー</p><div class="search-content-group">${reminders.map(r=>`<button data-app="reminders">${smallIcon('reminders')}<span><strong>${A.escape(r.text)}</strong><small>${r.done?'完了済み':'未完了'}</small></span></button>`).join('')}</div>`:'')+extra+(!apps.length&&!notes.length&&!reminders.length&&!extra?'<div class="search-empty">該当なし</div>':'');
     };

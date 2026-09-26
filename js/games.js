@@ -268,7 +268,7 @@ function game2048(){
  on(board,'pointerup',e=>{if(!pointer||e.pointerId!==pointer.id)return;const dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;pointer=null;if(board.hasPointerCapture(e.pointerId))board.releasePointerCapture(e.pointerId);if(Math.max(Math.abs(dx),Math.abs(dy))<18)return;move2048(Math.abs(dx)>Math.abs(dy)?dx>0?'right':'left':dy>0?'down':'up');});
  const cancelPointer=()=>{pointer=null;};on(board,'pointercancel',cancelPointer);on(board,'lostpointercapture',cancelPointer);
  listenKey(e=>{
-  if(!active2048()||!$('#overlay').hidden||e.isComposing||e.target.closest('input,textarea,select,[contenteditable]')||e.altKey)return;
+  if(!active2048()||!$('#overlay').hidden||e.isComposing||(e.target instanceof Element&&e.target.closest('input,textarea,select,[contenteditable]'))||e.altKey)return;
   const key=e.key.toLowerCase(),modifier=e.ctrlKey||e.metaKey;
   if(!modifier&&waiting2048()&&e.target===board&&(key==='enter'||e.code==='Space')){e.preventDefault();if(!e.repeat)A.actions.continue2048();return;}
   if(key==='z'||key==='y'){e.preventDefault();if(!e.repeat)historyStep2048(key==='y'||e.shiftKey);return;}
@@ -656,10 +656,10 @@ function gameSnake(){
  // Direction buttons react on press, rather than waiting for click release.
  for(const button of A.$$('.snake-pad button'))on(button,'pointerdown',e=>{if(e.isPrimary&&e.button===0){e.preventDefault();steerSnake(button.dataset.value);}});
  on(document,'keydown',e=>{
-  if(!$('#overlay').hidden||e.isComposing||e.ctrlKey||e.altKey||e.metaKey||e.target.closest('input,textarea,select,[contenteditable]'))return;
+  if(!$('#overlay').hidden||e.isComposing||e.ctrlKey||e.altKey||e.metaKey||(e.target instanceof Element&&e.target.closest('input,textarea,select,[contenteditable]')))return;
   const d={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',w:'up',a:'left',s:'down',d:'right'}[e.key.length===1?e.key.toLowerCase():e.key];
   if(d){e.preventDefault();if(!e.repeat)steerSnake(d);}
-  if(e.code==='KeyP'||e.code==='Space'&&!e.target.closest('button,summary')){e.preventDefault();if(!e.repeat)toggleSnake();}
+  if(e.code==='KeyP'||e.code==='Space'&&!(e.target instanceof Element&&e.target.closest('button,summary'))){e.preventDefault();if(!e.repeat)toggleSnake();}
  });
  gameCleanups.push(()=>{stopSnake('おかえりなさい。「再開」で続けられます');snakeCanvas=null;snakeGround=null;snakeParticles=[];snakeFloats=[];snakeScoreAnimation?.cancel();});
  updateSnakeOptions();updateSnakeUi();fitSnakeCanvas();updateSnakeSaveWarning();
