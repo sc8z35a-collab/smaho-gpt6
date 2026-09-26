@@ -590,7 +590,7 @@ frame.addEventListener('load',async()=>{
   [values.steps/8000,values.minutes/30,values.water/2000].forEach((v,i)=>assert(Number(rings[i].getAttribute('stroke-dasharray').split(' ')[0])===Math.max(0,Math.min(1,v))*100,'Wrong ring value'));
   const nativeSave=A.save;A.save=()=>false;try{await A.actions.healthWater();assert(A.healthData().water===values.water,'Failed save changed health');}finally{A.save=nativeSave;}
   await A.actions.healthRetry();await delay(100);const saved=A.healthData().water||0;
-  const content=d.querySelector('.health-dashboard');content.scrollTop=80;const scroll=content.scrollTop;d.querySelector('[data-action="healthWater"]').focus();click('[data-action="healthWater"]');await delay(150);assert(d.querySelector('.health-dashboard').scrollTop===scroll,'Hydration moved scroll');assert(d.activeElement.dataset.action==='healthWater','Hydration lost focus');assert(A.healthData().water===saved+200,'Hydration not saved');
+  d.querySelector('[data-action="healthWater"]').focus({preventScroll:true});const content=d.querySelector('.health-dashboard');content.scrollTop=80;const scroll=content.scrollTop;click('[data-action="healthWater"]');await delay(150);assert(d.querySelector('.health-dashboard').scrollTop===scroll,'Hydration moved scroll');assert(d.activeElement.dataset.action==='healthWater','Hydration lost focus');assert(A.healthData().water===saved+200,'Hydration not saved');
  });
  await test('Zero health activity draws empty rings without fake progress',()=>{
   // Rings are derived from today's records only; clear them for a deterministic empty state.
