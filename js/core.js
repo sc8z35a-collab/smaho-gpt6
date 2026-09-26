@@ -6,6 +6,58 @@
   A.escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   A.id = () => globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2);
   A.load = (key, fallback) => { try { const value = localStorage.getItem('aura.' + key); return value === null ? fallback : JSON.parse(value); } catch { return fallback; } };
+  // Stored records may be imported, legacy or damaged. Normalize known keys at the
+  // single read boundary so one bad entry never breaks an app, search or the home screen.
+  {
+    const rawLoad=A.load;
+    const obj=x=>x&&typeof x==='object'&&!Array.isArray(x);
+    const str=v=>typeof v==='string'?v:v===undefined||v===null?'':String(v);
+    const num=(v,fallback=0)=>Number.isFinite(Number(v))&&v!==null&&v!==''?Number(v):fallback;
+    const ymd=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v+'T12:00:00'));
+    const hm=v=>typeof v==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+    const withId=x=>obj(x)&&(typeof x.id==='string'||typeof x.id==='number')&&String(x.id)!=='';
+    const list=(fn,keep=withId)=>value=>Array.isArray(value)?value.filter(keep).map(x=>fn({...x,...(x.id!==undefined?{id:String(x.id)}:{})})).filter(Boolean):null;
+    const schemas={
+      notes:list(x=>({...x,title:str(x.title),body:str(x.body),updated:num(x.updated,0),pinned:!!x.pinned,folder:str(x.folder),tags:str(x.tags)})),
+      noteTrash:list(x=>({...x,title:str(x.title),body:str(x.body),updated:num(x.updated,0),deletedAt:num(x.deletedAt,0)})),
+      reminders:list(x=>({...x,text:str(x.text),done:!!x.done,due:ymd(x.due)?x.due:'',list:str(x.list),note:str(x.note),steps:Array.isArray(x.steps)?x.steps.filter(obj).map(s=>({...s,id:str(s.id)||Math.random().toString(36).slice(2),text:str(s.text),done:!!s.done})):[]})),
+      events:list(x=>ymd(x.date)?{...x,title:str(x.title)||'予定',time:hm(x.time)?x.time:'00:00',endTime:hm(x.endTime)?x.endTime:'',place:str(x.place)}:null),
+      contacts:list(x=>({...x,name:str(x.name).trim()||'名前なし',phone:str(x.phone),email:str(x.email),note:str(x.note),group:str(x.group),favorite:!!x.favorite})),
+      journal:list(x=>{const title=str(x.title),body=str(x.body);if(!ymd(x.date)&&!title&&!body)return null;return {...x,date:ymd(x.date)?x.date:'0001-01-01',title,body,tags:str(x.tags),mood:['1','2','3','4','5'].includes(String(x.mood))?String(x.mood):'3',favorite:!!x.favorite};}),
+      reading:list(x=>{const total=Math.max(1,Math.floor(num(x.total,1)));return {...x,title:str(x.title)||'無題の本',author:str(x.author),note:str(x.note),total,page:Math.max(0,Math.min(total,Math.floor(num(x.page,0))))};}),
+      readingSessions:list(x=>ymd(x.date)?{...x,bookId:str(x.bookId),from:num(x.from,0),to:num(x.to,0),minutes:Math.max(0,num(x.minutes,0))}:null),
+      readingQuotes:list(x=>({...x,bookId:str(x.bookId),text:str(x.text)})),
+      shopping:list(x=>({...x,name:str(x.name)||'品名なし',quantity:Math.max(1,Math.min(999,Math.floor(num(x.quantity,1)))),price:Math.max(0,num(x.price,0)),done:!!x.done})),
+      shoppingLists:list(x=>({...x,name:str(x.name)||'リスト'})),
+      shoppingTemplates:list(x=>({...x,name:str(x.name)||'定番',items:Array.isArray(x.items)?x.items.filter(obj).map(i=>({...i,name:str(i.name)||'品名なし',quantity:Math.max(1,Math.min(999,Math.floor(num(i.quantity,1)))),price:Math.max(0,num(i.price,0))})):[]})),
+      habits:list(x=>({...x,name:str(x.name)||'習慣',days:Array.isArray(x.days)?x.days.filter(ymd):[]})),
+      habitArchive:list(x=>({...x,name:str(x.name)||'習慣',days:Array.isArray(x.days)?x.days.filter(ymd):[]})),
+      expenses:list(x=>ymd(x.date)&&Number.isFinite(Number(x.amount))?{...x,kind:x.kind==='income'?'income':'expense',amount:Math.abs(Number(x.amount)),note:str(x.note),category:str(x.category)||'other'}:null),
+      recurringExpenses:list(x=>({...x,note:str(x.note),amount:Math.abs(num(x.amount,0)),day:Math.max(1,Math.min(31,Math.floor(num(x.day,1))))})),
+      files:list(x=>({...x,name:str(x.name)||'無題.txt',content:str(x.content),date:num(x.date,0),folder:str(x.folder)})),
+      fileVersions:list(x=>({...x,fileId:str(x.fileId),name:str(x.name),content:str(x.content),date:num(x.date,0)})),
+      sketches:list(x=>x,obj),
+      focusHistory:list(x=>ymd(x.date)?{...x,minutes:Math.max(0,num(x.minutes,0)),label:str(x.label)}:null,obj),
+      dailyIntentions:list(x=>ymd(x.date)?{...x,text:str(x.text)}:null,obj),
+      calcHistory:list(x=>({expression:str(x.expression),result:str(x.result)}),obj),
+      callLog:list(x=>({...x,number:str(x.number),name:str(x.name)||str(x.number),duration:Math.max(0,num(x.duration,0)),date:num(x.date,0)}),obj),
+      mails:list(x=>({...x,sender:str(x.sender),subject:str(x.subject),body:str(x.body),preview:str(x.preview),time:str(x.time),folder:['inbox','sent','draft'].includes(x.folder)?x.folder:'inbox',read:!!x.read})),
+      conversionHistory:list(x=>typeof x.category==='string'?{...x,value:str(x.value)}:null),
+      conversionPresets:list(x=>typeof x.category==='string'?{...x,value:str(x.value)}:null),
+      shoppingBudgets:list(x=>({...x,amount:Math.max(0,num(x.amount,0))})),
+      noteFolders:value=>Array.isArray(value)?value.filter(x=>typeof x==='string'&&x.trim()):null,
+      fileFolders:value=>Array.isArray(value)?value.filter(x=>typeof x==='string'&&x.trim()):null,
+      expenseBudgets:value=>obj(value)?Object.fromEntries(Object.entries(value).filter(([,v])=>obj(v)).map(([k,v])=>[k,{total:Math.max(0,num(v.total,0)),categories:obj(v.categories)?v.categories:{}}])):null,
+      settings:value=>obj(value)?value:null,
+      chats:value=>obj(value)?Object.fromEntries(Object.entries(value).filter(([,v])=>Array.isArray(v)).map(([k,v])=>[k,v.filter(obj).map(m=>({...m,text:str(m.text),sent:!!m.sent}))])):null,
+      chatUnread:value=>obj(value)?Object.fromEntries(Object.entries(value).map(([k,v])=>[k,Math.max(0,Math.floor(num(v,0)))])):null
+    };
+    A.load=(key,fallback)=>{
+      const value=rawLoad(key,fallback);
+      if(!Object.hasOwn(schemas,key)||value===fallback)return value;
+      try{const normalized=schemas[key](value);return normalized===null?fallback:normalized;}catch{return fallback;}
+    };
+  }
   A.save = (key, value) => { try { localStorage.setItem('aura.' + key, JSON.stringify(value)); return true; } catch { A.toast('容量不足。不要な写真を削除'); return false; } };
   // Related writes use snapshots so a failed write does not report success.
   // localStorage has no transactions: rollback is best effort if storage itself
@@ -35,7 +87,9 @@
       return false;
     }
   };
-  A.settings = A.load('settings', {wallpaper:'default', dark:false, wifi:true, bluetooth:true, cellular:true, airplane:false, focus:false, sound:true, brightness:100, volume:60});
+  A.settings = {wallpaper:'default', dark:false, wifi:true, bluetooth:true, cellular:true, airplane:false, focus:false, sound:true, brightness:100, volume:60, ...A.load('settings', {})};
+  for(const key of ['brightness','volume'])if(!Number.isFinite(Number(A.settings[key])))A.settings[key]=key==='brightness'?100:60;
+  A.settings.brightness=Math.max(10,Math.min(100,Number(A.settings.brightness)));A.settings.volume=Math.max(0,Math.min(100,Number(A.settings.volume)));
   A.actions = {}; A.apps = {}; A.cleanups = []; A.current = null; A.locked = false;
   A.icons = {
     pin:'<path d="m8 3 8 0-1 6 4 4v2h-6v7l-2-2v-5H5v-2l4-4Z"/>',
