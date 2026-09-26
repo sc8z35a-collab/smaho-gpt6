@@ -51,3 +51,7 @@
 .sk-focused .sk-viewport{max-height:68vh}.sk-focused .sk-command-bar{position:sticky;top:0;z-index:2;background:var(--app-bg,#f8f7fa);padding:6px 0}
 .sk-viewport #ev-canvas[data-tool=pan]{cursor:grab}.sk-viewport #ev-canvas[data-tool=pan]:active{cursor:grabbing}.sk-viewport #ev-canvas[data-tool=select]{cursor:move}
 .sk-selection>span{flex-basis:100%}.sk-selection button{font-size:10px;min-height:38px}
+
+/* Over-budget amounts read as a warning in both themes. */
+.ev-budget strong.ev-over{color:#b85a52}
+.screen-dark-mode .ev-budget strong.ev-over{color:#f0a49b}
