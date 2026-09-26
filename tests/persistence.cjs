@@ -221,8 +221,10 @@ async function checkReminderStudio(browser,url){
   await page.locator('[data-action=rmUndo]').click();assert.equal(await page.evaluate(()=>Aura.reminderModel.get().find(x=>x.id==='legacy-reminder').due),undefined);
   pass('actual selection controls and undo operate correctly');
 
-  await page.evaluate(()=>Aura.actions.rmCompact());await page.reload();assert.equal(await page.locator('.ev-reminders.rm-compact').count(),1);
-  await page.evaluate(()=>{localStorage.setItem('aura.reminderCompact','"invalid"');});await page.reload();assert.equal(await page.locator('.ev-reminders.rm-compact').count(),0);
+  // Compact is the default since #17; toggling persists the relaxed view.
+  const compactBefore=await page.locator('.ev-reminders.rm-compact').count();
+  await page.evaluate(()=>Aura.actions.rmCompact());await page.reload();assert.equal(await page.locator('.ev-reminders.rm-compact').count(),1-compactBefore);
+  await page.evaluate(()=>{localStorage.setItem('aura.reminderCompact','"invalid"');});await page.reload();assert.equal(await page.locator('.ev-reminders.rm-compact').count(),1);
   pass('compact view persists and invalid preferences fall back safely');
 
   for(const viewport of [{width:320,height:568},{width:390,height:844},{width:768,height:1024},{width:844,height:390},{width:1920,height:1080}]){

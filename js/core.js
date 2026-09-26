@@ -21,7 +21,11 @@
         return {key:'aura.'+key,encoded};
       });
       pending.forEach(item=>item.previous=localStorage.getItem(item.key));
-      for(const item of pending){localStorage.setItem(item.key,item.encoded);written.push(item);}
+      // Route every write through A.save: one write path, one failure contract.
+      for(const [index,[key,value]] of Object.entries(values).entries()){
+        if(!A.save(key,value))throw new Error('Write failed');
+        written.push(pending[index]);
+      }
       return true;
     } catch {
       let restored=true;
@@ -92,7 +96,10 @@
     document:'<path d="M5 2h9l5 5v15H5Zm9 0v6h5M8 12h8M8 16h8"/>',
     calendar:'<rect x="3" y="5" width="18" height="17" rx="2"/><path d="M7 2v6m10-6v6M3 11h18M7 15h3m4 0h3m-10 4h3"/>',
     photos:'<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="2"/><path d="m3 17 6-6 4 4 3-3 5 5"/>',
-    coffee:'<path d="M3 7h14v8a6 6 0 0 1-12 0V7ZM17 8h2a3 3 0 0 1 0 6h-2M3 22h16M7 1v3m6-3v3"/>'
+    coffee:'<path d="M3 7h14v8a6 6 0 0 1-12 0V7ZM17 8h2a3 3 0 0 1 0 6h-2M3 22h16M7 1v3m6-3v3"/>',
+    // Referenced by Notes (focus view), Settings (readability) and chevron links.
+    eye:'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    chevronRight:'<path d="m9 5 7 7-7 7"/>'
   };
   A.icon = (name, extra='') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${A.icons[name] || A.icons.grid}</svg>`;
   // App artwork is separate from the small, monochrome UI action glyphs above.
@@ -655,6 +662,7 @@
     const screen = A.$('#app-screen');
     screen.dataset.visualApp = A.current || '';
     screen.innerHTML = html;
+    screen.querySelectorAll('form[id]').forEach(form=>A.linkLabels?.(form));
     const navTitle=screen.querySelector('.app-nav h2')?.textContent;
     screen.querySelectorAll('.app-title').forEach(title=>{if(!title.id&&title.textContent===navTitle)title.classList.add('redundant-title');});
     // Enhance existing content, never replace controls, data, or event targets.
@@ -672,7 +680,9 @@
   A.closeOverlay = () => { A.$('#overlay').hidden=true;A.$('#overlay').innerHTML='';A.$('#phone-screen').classList.remove('overlay-open'); };
   A.overlayTitle = title => `<header class="overlay-heading"><h2>${title}</h2><button class="close-button" data-action="closeOverlay" aria-label="閉じる">×</button></header>`;
   A.confirm = (title,desc,callback) => { A.overlay(`<div class="modal-sheet"><h3>${title}</h3><p>${desc}</p><div class="modal-actions"><button class="secondary-button" data-action="closeOverlay">キャンセル</button><button class="primary-button" id="confirm-yes">確定</button></div></div>`,'sheet-overlay');A.$('#confirm-yes').onclick=()=>{A.closeOverlay();callback();}; };
-  A.form = (title,html,onSubmit,button='保存') => { A.overlay(`<div class="modal-sheet" style="margin-top:20px"><h3>${title}</h3><form id="modal-form">${html}<div class="modal-actions"><button type="button" class="secondary-button" data-action="closeOverlay">キャンセル</button><button class="primary-button" type="submit">${button}</button></div></form></div>`,'sheet-overlay'); A.$('#modal-form').onsubmit=e=>{e.preventDefault(); const values=Object.fromEntries(new FormData(e.currentTarget)); if(onSubmit(values)!==false)A.closeOverlay();}; };
+  // Give unassociated visible labels an accessible target (the next form control).
+  A.linkLabels = root => { if(!root)return; let serial=0; root.querySelectorAll('label.form-label:not([for])').forEach(label=>{ if(label.querySelector('input,select,textarea'))return; let next=label.nextElementSibling; while(next&&!next.matches('input,select,textarea'))next=next.matches('label')?null:next.nextElementSibling; if(!next)return; if(!next.id)next.id=`${root.id||'form'}-field-${++serial}`; label.htmlFor=next.id; }); };
+  A.form = (title,html,onSubmit,button='保存') => { A.overlay(`<div class="modal-sheet" style="margin-top:20px"><h3>${title}</h3><form id="modal-form">${html}<div class="modal-actions"><button type="button" class="secondary-button" data-action="closeOverlay">キャンセル</button><button class="primary-button" type="submit">${button}</button></div></form></div>`,'sheet-overlay'); A.linkLabels(A.$('#modal-form')); A.$('#modal-form').onsubmit=e=>{e.preventDefault(); const values=Object.fromEntries(new FormData(e.currentTarget)); if(onSubmit(values)!==false)A.closeOverlay();}; };
   A.download = (blob, name) => { const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000); };
   A.actions.home=A.home;A.actions.closeOverlay=A.closeOverlay;
   A.applySettings = () => { const s=A.settings; A.$('#wallpaper').className='wallpaper '+(s.wallpaper==='default'?'':s.wallpaper);A.$('#phone-screen').classList.toggle('screen-dark-mode',s.dark);A.$('#phone-screen').style.setProperty('--brightness',.4 + s.brightness*.006);A.$('#phone-screen').style.setProperty('--warmth',s.warm?'.3':'0');A.save('settings',s); };
@@ -820,7 +830,8 @@
   document.addEventListener('click',e=>{const button=e.target.closest('[data-app], [data-action]');if(!button || button.disabled)return;if(button.dataset.app)A.open(button.dataset.app);else{const fn=A.actions[button.dataset.action];if(fn)fn(button,e);}});
   A.$('#status-controls').onclick=A.controls;A.$('#status-time').onclick=A.notifications;A.$('#dynamic-island').onclick=()=>A.open('music','player');A.$('#home-search').onclick=A.spotlight;A.$('#desktop-lock').onclick=A.lock;A.$('#desktop-reset').onclick=A.home;A.$('#power-button').onclick=()=>A.locked?A.home():A.lock();A.$('#unlock-button').onclick=A.home;A.$('#lock-flashlight').onclick=A.actions.flashlight;A.$('#about-button').onclick=A.actions.about;
   let touchStartY=0;A.$('#lock-screen').addEventListener('touchstart',e=>touchStartY=e.touches[0].clientY,{passive:true});A.$('#lock-screen').addEventListener('touchend',e=>{if(touchStartY-e.changedTouches[0].clientY>50)A.home();},{passive:true});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!A.$('#overlay').hidden)A.closeOverlay();else A.home();}if(A.settings.keyboardShortcuts!==false&&e.key==='h'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.isComposing&&A.$('#overlay').hidden&&!e.target.closest('input,textarea,select,[contenteditable]'))A.home();});
+  // The lock screen is dismissed only by its explicit unlock controls, never by Escape / H.
+  document.addEventListener('keydown',e=>{const target=e.target instanceof Element?e.target:document.body;if(e.key==='Escape'){if(!A.$('#overlay').hidden)A.closeOverlay();else if(!A.locked)A.home();}if(A.settings.keyboardShortcuts!==false&&e.key==='h'&&!A.locked&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.isComposing&&A.$('#overlay').hidden&&!target.closest('input,textarea,select,[contenteditable]'))A.home();});
   // Some mobile browsers force a 980px layout in "desktop site" mode.
   // Compensate only when a touch device's layout is much wider than its screen;
   // ordinary desktop windows and user pinch-zoom remain unchanged.
@@ -892,7 +903,7 @@
   });
   bar.addEventListener('pointercancel',()=>{clearTimeout(holdTimer);gesture=null;});
   bar.onclick=e=>{if(suppressClick&&e.detail!==0){suppressClick=false;return;}A.home();};
-  document.addEventListener('keydown',e=>{if(A.settings.keyboardShortcuts!==false&&e.key==='Tab'&&e.altKey&&!e.isComposing&&A.$('#overlay').hidden&&!e.target.closest('input,textarea,select,[contenteditable]')){e.preventDefault();A.recents();}});
+  document.addEventListener('keydown',e=>{const target=e.target instanceof Element?e.target:document.body;if(A.settings.keyboardShortcuts!==false&&e.key==='Tab'&&e.altKey&&!A.locked&&!e.isComposing&&A.$('#overlay').hidden&&!target.closest('input,textarea,select,[contenteditable]')){e.preventDefault();A.recents();}});
   // Springboard preferences are local, version-independent, and restricted to known apps.
   const defaultOrder=appData.map(([id])=>id);
   let homeOrder=A.load('homeOrder',defaultOrder);
@@ -1002,8 +1013,9 @@
       const q=value.trim().toLowerCase();
       const apps=Object.values(A.apps).filter(app=>(app.name+app.id).toLowerCase().includes(q));
       A.$('#spotlight-results').innerHTML=apps.map(app=>A.launcher(app)).join('');
-      const notes=q?(A.searchableNotes?.()||A.load('notes',[])).filter(n=>(n.title+n.body).toLowerCase().includes(q)).slice(0,5):[];
-      const reminders=q?(A.searchableReminders?.()||A.load('reminders',[])).filter(r=>r.text.toLowerCase().includes(q)).slice(0,5):[];
+      // Stored records may be imported or legacy: never assume optional text fields exist.
+      const notes=q?(A.searchableNotes?.()||A.load('notes',[])).filter(n=>n&&(String(n.title||'')+'\n'+String(n.body||'')).toLowerCase().includes(q)).map(n=>({...n,title:String(n.title||''),body:String(n.body||'')})).slice(0,5):[];
+      const reminders=q?(A.searchableReminders?.()||A.load('reminders',[])).filter(r=>r&&String(r.text||'').toLowerCase().includes(q)).slice(0,5):[];
       const extra=q?(A.searchAdditional?.(q)||''):'';
       A.$('#spotlight-content').innerHTML=(notes.length?`<p class="spotlight-label">メモ</p><div class="search-content-group">${notes.map(n=>`<button data-action="searchNote" data-id="${A.escape(n.id)}">${smallIcon('notes')}<span><strong>${A.escape(n.title||'新しいメモ')}</strong><small>${A.escape(n.body.slice(0,65))}</small></span>${A.icon('arrow')}</button>`).join('')}</div>`:'')+(reminders.length?`<p class="spotlight-label">リマインダー</p><div class="search-content-group">${reminders.map(r=>`<button data-app="reminders">${smallIcon('reminders')}<span><strong>${A.escape(r.text)}</strong><small>${r.done?'完了済み':'未完了'}</small></span></button>`).join('')}</div>`:'')+extra+(!apps.length&&!notes.length&&!reminders.length&&!extra?'<div class="search-empty">該当なし</div>':'');
     };
@@ -1221,7 +1233,7 @@
   A.overlay=(html,extra='')=>{if(A.$('#overlay').hidden)overlayReturnFocus=document.activeElement;baseOverlay(html,extra);const overlay=A.$('#overlay');overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label',overlay.querySelector('h2,h3')?.textContent||'メニュー');(overlay.querySelector('input:not([type=range]),.close-button,button'))?.focus({preventScroll:true});};
   A.closeOverlay=()=>{const wasOpen=!A.$('#overlay').hidden;baseCloseOverlay();if(wasOpen&&overlayReturnFocus?.isConnected)overlayReturnFocus.focus({preventScroll:true});};
   A.actions.closeOverlay=A.closeOverlay;
-  document.addEventListener('keydown',e=>{if(e.key!=='Tab'||A.$('#overlay').hidden||!e.target.closest('#overlay,#toast'))return;const items=[...A.$$('button:not(:disabled),input,textarea,select,a[href],summary',A.$('#overlay')),...A.$$('#toast.visible button')].filter(el=>el.getClientRects().length);const first=items[0],last=items.at(-1);if(!first)return;if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'||A.$('#overlay').hidden||!(e.target instanceof Element)||!e.target.closest('#overlay,#toast'))return;const items=[...A.$$('button:not(:disabled),input,textarea,select,a[href],summary',A.$('#overlay')),...A.$$('#toast.visible button')].filter(el=>el.getClientRects().length);const first=items[0],last=items.at(-1);if(!first)return;if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}});
   A.$('#home-search').onclick=A.spotlight;A.$('#status-time').onclick=A.notifications;
   A.renderLockNotices();
   A.renderHome();A.applySettings();A.updateClock();setInterval(()=>A.updateClock(),1000);

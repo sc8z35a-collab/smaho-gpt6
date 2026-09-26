@@ -166,7 +166,7 @@
   // Reminder studio: keep one canonical model for Today, search and exports.
   let reminderFilter='pending',reminderSort='priority',reminderQuery='',reminderList='*';
   let reminderDraft='',reminderDraftDue='',reminderUndo=null;
-  let reminderSelecting=false,reminderSelected=new Set(),reminderCompact=A.load('reminderCompact',true)===true;
+  let reminderSelecting=false,reminderSelected=new Set(),reminderCompact=A.load('reminderCompact',true)!==false;
   const reminders=()=>A.reminderModel.get();
   const reminderLists=()=>[...new Set(reminders().map(x=>x.list).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
   const repeatLabel=x=>x.repeat==='daily'?'毎日':x.repeat==='weekly'?'毎週':'';
