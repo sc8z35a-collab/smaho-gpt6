@@ -72,7 +72,7 @@
   const resetFocus = (changes={}) => {const next={...focus,...changes,end:0,id:null};next.remaining=next.duration;if(commitFocus(next))focusApp();};
   A.actions.evFocusReset=()=>focus.end?A.confirm('集中をリセット？','今回の記録は残りません。',resetFocus):resetFocus();
   A.actions.evFocusMode=el=>{if(focus.end)return A.toast('先に一時停止してください');resetFocus({mode:el.dataset.id,duration:el.dataset.id==='work'?1500:300});};
-  A.actions.evFocusDuration=el=>{if(focus.end)return;resetFocus({duration:Number(el.dataset.id)*60});};
+  A.actions.evFocusDuration=el=>{if(focus.end)return;const change=()=>resetFocus({duration:Number(el.dataset.id)*60});focus.id?A.confirm('時間を変更？','一時停止中の集中は記録されません。',change):change();};
   setInterval(focusTick,1000);
 
   function streak(days){let count=0;for(let i=days.includes(dateKey())?0:1;i<3660;i++){if(!days.includes(daysAgo(i)))break;count++;}return count;}
@@ -244,7 +244,7 @@
   focusApp=function(){simpleFocusApp();const prefs=focusPreferences(),history=read('focusHistory'),sum=history.filter(x=>x.date===dateKey()).reduce((s,x)=>s+x.minutes,0);$('.app-nav .nav-action:last-child').insertAdjacentHTML('beforeend',btn('evFocusSettings','集中の設定','settings'));$('.ev-focus-ring').insertAdjacentHTML('beforebegin',`<button class="ev-focus-label" data-action="evFocusLabel">${esc(focus.label||'集中することを選ぶ')} ${A.icon('edit')}</button>`);$('.ev-controls').insertAdjacentHTML('afterend',`<div class="ev-daily-goal"><span>今日の目標</span><strong>${sum} / ${prefs.goal}分</strong>${progress(sum/prefs.goal*100,'集中の目標')}</div>`);$('.ev-focus').insertAdjacentHTML('beforeend',`${section('最近の集中')}<div class="ev-card">${history.slice(0,8).map(h=>`<div class="ev-row"><span class="ev-grow"><strong>${esc(h.label||'集中')}</strong><small>${esc(h.date)}</small></span><strong>${h.minutes}分</strong></div>`).join('')||empty('完了した集中がここに残ります')}</div>`);};
   A.apps.focus.render=focusApp;
   A.actions.evFocusSettings=()=>{const p=focusPreferences();A.form('集中の設定',field('集中（分）','work',p.work,'number','required min="1" max="180" step="1"')+field('休憩（分）','rest',p.rest,'number','required min="1" max="60" step="1"')+field('1日の目標（分）','goal',p.goal,'number','required min="1" max="1440" step="1"'),v=>{const next=Object.fromEntries(Object.entries(v).map(([k,value])=>[k,Number(value)]));if(!A.save('focusPreferences',next))return false;if(!focus.end&&!focus.id&&!commitFocus({...focus,duration:next[focus.mode]*60,remaining:next[focus.mode]*60,id:null})){A.save('focusPreferences',p);return false;}focusApp();});};
-  A.actions.evFocusMode=el=>{if(focus.end)return A.toast('先に一時停止してください');resetFocus({mode:el.dataset.id,duration:focusPreferences()[el.dataset.id]*60});};
+  A.actions.evFocusMode=el=>{if(focus.end)return A.toast('先に一時停止してください');if(!['work','rest'].includes(el.dataset.id)||el.dataset.id===focus.mode)return;const change=()=>resetFocus({mode:el.dataset.id,duration:focusPreferences()[el.dataset.id]*60});focus.id?A.confirm('モードを切り替え？','一時停止中の集中は記録されません。',change):change();};
   A.actions.evFocusLabel=()=>{const tasks=A.searchableReminders().filter(x=>!x.done);A.form('集中すること',field('内容','label',focus.label||'','text','maxlength="100"')+(tasks.length?`<div class="ev-task-options">${tasks.slice(0,8).map(t=>`<button type="button" data-action="evFocusChooseTask" data-id="${esc(t.id)}">${esc(t.text)}</button>`).join('')}</div>`:''),v=>{if(!commitFocus({...focus,label:v.label.trim()}))return false;focusApp();});};
   A.actions.evFocusChooseTask=el=>{const task=A.searchableReminders().find(x=>x.id===el.dataset.id);if(task)$('#ev-label').value=task.text;};
 
