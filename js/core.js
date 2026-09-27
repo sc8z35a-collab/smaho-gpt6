@@ -1011,8 +1011,8 @@
   const swapIcons=(first,second)=>{
     const x=homeOrder.indexOf(first),y=homeOrder.indexOf(second);
     if(x<0||y<0)return;
-    [homeOrder[x],homeOrder[y]]=[homeOrder[y],homeOrder[x]];
-    A.save('homeOrder',homeOrder);selectedIcon=null;A.renderHome();A.haptic();
+    const next=[...homeOrder];[next[x],next[y]]=[next[y],next[x]];
+    selectedIcon=null;if(A.save('homeOrder',next)){homeOrder=next;A.haptic();}A.renderHome();
   };
   let suppressLauncher=false;
   // The release of a long press can be retargeted to the newly opened menu.
@@ -1071,7 +1071,7 @@
   A.actions.gestureGuide=()=>A.overlay(`${A.overlayTitle('操作ガイド')}<div class="gesture-guide">${[['grid','ホームを左へスワイプ','全アプリを表示'],['search','ホームを下へスワイプ','アプリ・記録を検索'],['edit','アイコンを長押し','新規作成 / 配置の入替'],['signal','画面右上をタップ・下へスワイプ','明るさ・集中モード'],['messages','画面左上の時刻をタップ','通知・未読・再通知'],['arrow','下端のホームバー','タップ：ホーム / 上：切替']].map(([icon,title,body])=>`<article>${A.icon(icon)}<div><strong>${title}</strong><p>${body}</p></div></article>`).join('')}</div><p class="control-footer">PC：Escで閉じる / Hでホーム / Alt+Tabでアプリ切替</p>`,'guide-overlay');
   A.actions.chooseWallpaper=el=>{if(!wallpapers.some(([id])=>id===el.dataset.value))return;A.settings.wallpaper=el.dataset.value;A.applySettings();A.actions.personalize();};
   A.actions.chooseIconStyle=el=>{if(!['standard','glass','tinted'].includes(el.dataset.value))return;A.settings.iconStyle=el.dataset.value;A.applySettings();A.actions.personalize();};
-  A.actions.resetLayout=()=>A.confirm('ホームの配置をリセット','配置のみ初期化。データは保持',()=>{homeOrder=[...defaultOrder];A.save('homeOrder',homeOrder);A.actions.finishEditing();A.toast('配置をリセット');});
+  A.actions.resetLayout=()=>A.confirm('ホームの配置をリセット','配置のみ初期化。データは保持',()=>{if(!A.save('homeOrder',defaultOrder))return;homeOrder=[...defaultOrder];A.actions.finishEditing();A.toast('配置をリセット');});
   const baseApply=A.applySettings;
   A.applySettings=()=>{
     if(!depths.some(([id])=>id===A.settings.depth))A.settings.depth='balanced';
