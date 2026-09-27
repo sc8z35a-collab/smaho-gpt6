@@ -56,6 +56,7 @@
       fileFolders:value=>Array.isArray(value)?value.filter(x=>typeof x==='string'&&x.trim()):null,
       expenseBudgets:value=>obj(value)?Object.fromEntries(Object.entries(value).filter(([,v])=>obj(v)).map(([k,v])=>[k,{total:Math.max(0,num(v.total,0)),categories:obj(v.categories)?v.categories:{}}])):null,
       settings:value=>obj(value)?value:null,
+      ...Object.fromEntries(['blocksBest','breakerBest','minesWins','reversiWins','sudokuWins','memoryBest','snakeBest','2048best'].map(k=>[k,value=>Number.isSafeInteger(value)&&value>=0?value:null])),
       weatherFavorites:value=>Array.isArray(value)?value.filter(p=>obj(p)&&typeof p.name==='string'&&Number.isFinite(p.latitude)&&Number.isFinite(p.longitude)):null,
       mapSavedPlaces:list(p=>Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon))?{...p,lat:Number(p.lat),lon:Number(p.lon),name:str(p.name)||'保存した場所',display_name:str(p.display_name)||str(p.name)||'保存した場所',category:str(p.category),note:str(p.note)}:null),
       arcadeRecent:value=>Array.isArray(value)?value.filter(x=>typeof x==='string'):null,
