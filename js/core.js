@@ -49,6 +49,15 @@
       fileFolders:value=>Array.isArray(value)?value.filter(x=>typeof x==='string'&&x.trim()):null,
       expenseBudgets:value=>obj(value)?Object.fromEntries(Object.entries(value).filter(([,v])=>obj(v)).map(([k,v])=>[k,{total:Math.max(0,num(v.total,0)),categories:obj(v.categories)?v.categories:{}}])):null,
       settings:value=>obj(value)?value:null,
+      arcadeRecent:value=>Array.isArray(value)?value.filter(x=>typeof x==='string'):null,
+      arcadeFavorites:value=>Array.isArray(value)?value.filter(x=>typeof x==='string'):null,
+      photoFavorites:value=>Array.isArray(value)?value.filter(x=>typeof x==='string'):null,
+      musicLikes:value=>Array.isArray(value)?value.filter(x=>typeof x==='string'):null,
+      homeOrder:value=>Array.isArray(value)?value.filter(x=>typeof x==='string'):null,
+      readingGoal:value=>Number.isInteger(value)&&value>=1&&value<=1000?value:null,
+      expenseBudget:value=>Number.isFinite(value)&&value>=0?value:null,
+      profileName:value=>typeof value==='string'&&value.trim()?value:null,
+      focusPreferences:value=>obj(value)?Object.fromEntries(Object.entries(value).filter(([k,v])=>['work','rest','goal'].includes(k)&&Number.isInteger(v)&&v>=1&&v<=1440)):null,
       chats:value=>obj(value)?Object.fromEntries(Object.entries(value).filter(([,v])=>Array.isArray(v)).map(([k,v])=>[k,v.filter(obj).map(m=>({...m,text:str(m.text),sent:!!m.sent}))])):null,
       chatUnread:value=>obj(value)?Object.fromEntries(Object.entries(value).map(([k,v])=>[k,Math.max(0,Math.floor(num(v,0)))])):null
     };
