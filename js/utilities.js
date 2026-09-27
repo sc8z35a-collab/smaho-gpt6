@@ -173,7 +173,7 @@ function updateClockView(){
 }
 function beep(){try{const c=getAudioContext();if(!c)return;for(let i=0;i<3;i++){const o=c.createOscillator(),g=c.createGain(),t=c.currentTime+i*.35;o.frequency.value=880;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.1,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.23);o.connect(g);g.connect(c.destination);o.start(t);o.stop(t+.25);o.onended=()=>{o.disconnect();g.disconnect();};}}catch{}}
 function alarmNotice(title,sound=true,body='時計を開く'){A.notify({app:'clock',title:title==='タイマーが終了しました'?'タイマー終了':title,body});if(!A.settings.focus&&!A.noticeMuted?.('clock')){A.network?.clockNotice(title);if(sound&&A.settings.sound)beep();}}
-A.clockTick=()=>{finishTimer();updateClockView();const n=new Date(),minute=n.toTimeString().slice(0,5),key=n.toDateString()+minute;if(key!==alarmLast){alarmLast=key;const alarm=alarms.find(a=>a.enabled&&a.time===minute);if(alarm)alarmNotice(alarm.label||'アラーム');}};
+A.clockTick=()=>{finishTimer();updateClockView();const n=new Date(),minute=n.toTimeString().slice(0,5),key=n.toDateString()+minute;if(key!==alarmLast){alarmLast=key;alarms.filter(a=>a.enabled&&a.time===minute).forEach((alarm,i)=>alarmNotice(alarm.label||'アラーム',i===0));}};
 A.apps.clock.render=arg=>{
   if(['world','alarm','stopwatch','timer'].includes(arg))clockTab=arg;
   finishTimer();clock();clearInterval(clockInterval);clockInterval=setInterval(updateClockView,80);
@@ -218,6 +218,8 @@ A.actions.timerClearHistory=()=>A.confirm('完了履歴を削除','すべての�
 const validAlarmTime=value=>/^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 alarms=(Array.isArray(alarms)?alarms:[]).filter(a=>a&&typeof a.id==='string'&&validAlarmTime(a.time)).map(a=>({...a,label:String(a.label||''),enabled:a.enabled===true}));
 const commitAlarms=next=>{if(!A.save('alarms',next))return false;alarms=next;return true;};
+// Another tab may add, delete or toggle alarms: never ring a stale copy.
+window.addEventListener('storage',e=>{if(e.key!=='aura.alarms'&&e.key!==null)return;const next=A.load('alarms',[]);alarms=(Array.isArray(next)?next:[]).filter(a=>a&&typeof a.id==='string'&&validAlarmTime(a.time)).map(a=>({...a,label:String(a.label||''),enabled:a.enabled===true}));if(A.current==='clock'&&clockTab==='alarm')clock();});
 A.actions.alarmToggle=el=>{const a=alarms.find(a=>a.id===el.dataset.id);if(!a)return clock();if(!commitAlarms(alarms.map(x=>x.id===a.id?{...x,enabled:!x.enabled}:x)))return;if(!a.enabled){try{getAudioContext();}catch{}}clock();};A.actions.alarmDelete=el=>{if(commitAlarms(alarms.filter(a=>a.id!==el.dataset.id)))clock();};A.actions.alarmAdd=()=>A.form('新しいアラーム','<label class="form-label" for="alarm-time">時刻</label><input class="text-input" id="alarm-time" type="time" name="time" value="07:00" required><label class="form-label" for="alarm-label">ラベル</label><input class="text-input" id="alarm-label" name="label" placeholder="一日をはじめよう" maxlength="60">',v=>{if(!validAlarmTime(v.time)){A.toast('時刻を確認してください');return false;}const label=v.label.trim();if(alarms.some(a=>a.time===v.time&&a.label===label)){A.toast('同じ時刻・ラベルのアラームがあります');return false;}if(!commitAlarms([...alarms,{id:A.id(),time:v.time,label,enabled:true}].sort((x,y)=>x.time.localeCompare(y.time))))return false;try{getAudioContext();}catch{}clock();});
 // Health: consent-based sensor observations and timestamped local records only.
 const HEALTH_LIMIT=20000;
