@@ -50,6 +50,8 @@
   let focus = A.load('focusSession',null) || {mode:'work',duration:25*60,remaining:25*60,end:0};
   if(!['work','rest'].includes(focus.mode)||!Number.isFinite(focus.remaining)||!Number.isFinite(focus.duration)||!Number.isFinite(focus.end))focus={mode:'work',duration:1500,remaining:1500,end:0};
   const commitFocus = next => {if(!A.save('focusSession',next))return false;focus=next;return true;};
+  // One focus session across tabs: finishing it twice would duplicate history and notifications.
+  window.addEventListener('storage',e=>{if(e.key!=='aura.focusSession'&&e.key!==null)return;const next=A.load('focusSession',null);if(next&&['work','rest'].includes(next.mode)&&[next.remaining,next.duration,next.end].every(Number.isFinite))focus=next;if(A.current==='focus')A.apps.focus.render();});
   const secondsLeft = () => focus.end ? Math.max(0,Math.ceil((focus.end-Date.now())/1000)) : focus.remaining;
   A.focusTimerSnapshot=()=>focus.id||focus.end?{label:focus.mode==='rest'?'休憩':'集中',running:!!focus.end,remaining:secondsLeft(),duration:focus.duration,end:focus.end}:null;
   function finishFocus() {
