@@ -4,6 +4,8 @@
   A.$ = (s, root = document) => root.querySelector(s);
   A.$$ = (s, root = document) => [...root.querySelectorAll(s)];
   A.escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  // First user-perceived character (grapheme), so ZWJ emoji and flags stay intact in avatars.
+  A.initial = value => { const text=String(value??'').trim(); if(!text)return '?'; try{ return [...new Intl.Segmenter('ja',{granularity:'grapheme'}).segment(text)][0].segment; }catch{ return Array.from(text)[0]; } };
   A.id = () => globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2);
   A.load = (key, fallback) => { try { const value = localStorage.getItem('aura.' + key); return value === null ? fallback : JSON.parse(value); } catch { return fallback; } };
   // Stored records may be imported, legacy or damaged. Normalize known keys at the

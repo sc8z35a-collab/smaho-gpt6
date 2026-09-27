@@ -57,7 +57,7 @@
     const render=()=>{
       const list=visibleContacts(),duplicates=duplicateIds();
       $('#ep-contact-count').textContent=`${list.length}件`+(contactFilter==='duplicates'?' · 同じ番号またはメール':'');
-      $('#ep-contact-results').innerHTML=list.map(x=>`<button class="ev-row ev-wide" data-action="evContactOpen" data-id="${esc(x.id)}"><span class="ev-avatar">${esc(Array.from(x.name)[0])}</span><span class="ev-grow"><strong>${esc(x.name)}${x.favorite?' ★':''}</strong><small>${esc(x.group||'未分類')} · ${esc(x.phone||x.email||'連絡先未入力')}${duplicates.has(x.id)?' · 重複候補':''}</small></span>${A.icon('arrow')}</button>`).join('')||empty('連絡先なし');
+      $('#ep-contact-results').innerHTML=list.map(x=>`<button class="ev-row ev-wide" data-action="evContactOpen" data-id="${esc(x.id)}"><span class="ev-avatar">${esc(A.initial(x.name))}</span><span class="ev-grow"><strong>${esc(x.name)}${x.favorite?' ★':''}</strong><small>${esc(x.group||'未分類')} · ${esc(x.phone||x.email||'連絡先未入力')}${duplicates.has(x.id)?' · 重複候補':''}</small></span>${A.icon('arrow')}</button>`).join('')||empty('連絡先なし');
     };
     $('#ep-contact-query').value=contactQuery;
     $('#ep-contact-query').oninput=e=>{contactQuery=e.target.value;render();};
@@ -82,7 +82,7 @@
   A.actions.evContactOpen=el=>{
     const x=rows('contacts').find(x=>x.id===el.dataset.id);if(!x)return;
     const phone=phoneKey(x.phone),validPhone=/^\+?[0-9]{3,15}$/.test(phone);
-    page('contacts',`<div class="ev-contact-hero"><span class="ev-avatar">${esc(Array.from(x.name)[0])}</span><h1>${esc(x.name)}</h1><p class="ep-muted">${esc(x.group||'未分類')}</p>${button('evContactFavorite',x.favorite?'★ お気に入り':'☆ お気に入り',x.id,`aria-pressed="${!!x.favorite}"`)}</div>
+    page('contacts',`<div class="ev-contact-hero"><span class="ev-avatar">${esc(A.initial(x.name))}</span><h1>${esc(x.name)}</h1><p class="ep-muted">${esc(x.group||'未分類')}</p>${button('evContactFavorite',x.favorite?'★ お気に入り':'☆ お気に入り',x.id,`aria-pressed="${!!x.favorite}"`)}</div>
       <div class="ev-contact-actions">${validPhone?`<a href="tel:${esc(phone)}">${A.icon('phone')}電話</a><a href="sms:${esc(phone)}">${A.icon('messages')}SMS</a>`:''}${x.email?`<a href="mailto:${esc(encodeURIComponent(x.email))}">${A.icon('mail')}メール</a>`:''}</div>
       <div class="ev-card ev-contact-info"><p>${esc(x.phone)}</p><p>${esc(x.email)}</p><p>${esc(x.note)}</p></div>
       <p class="ev-caption">発信・送信は移動先で確認</p>${button('epContactCopy','コピー',x.id)}
