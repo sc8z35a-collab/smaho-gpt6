@@ -6,6 +6,9 @@
   A.escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   // First user-perceived character (grapheme), so ZWJ emoji and flags stay intact in avatars.
   A.initial = value => { const text=String(value??'').trim(); if(!text)return '?'; try{ return [...new Intl.Segmenter('ja',{granularity:'grapheme'}).segment(text)][0].segment; }catch{ return Array.from(text)[0]; } };
+  // Shared search normalization: width-insensitive (NFKC), case-insensitive, trimmed.
+  A.fold = value => String(value??'').normalize('NFKC').toLowerCase();
+  A.matches = (query, ...fields) => A.fold(fields.filter(v=>v!==undefined&&v!==null).join(' ')).includes(A.fold(query).trim());
   A.id = () => globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2);
   A.load = (key, fallback) => { try { const value = localStorage.getItem('aura.' + key); return value === null ? fallback : JSON.parse(value); } catch { return fallback; } };
   // Stored records may be imported, legacy or damaged. Normalize known keys at the
@@ -1038,7 +1041,7 @@
   A.library=()=>{
     const groups=[['よく使う',A.recentApps.length?A.recentApps.slice(0,4):['today','focus','habits','journal']],['つながる',['phone','messages','mail','safari','contacts']],['毎日のこと',['calendar','notes','reminders','files','today']],['クリエイティブ',['photos','camera','music','recorder','sketch']],['暮らしと発見',['weather','maps','health','wallet','expenses','shopping']],['自分の時間',['focus','habits','journal','reading']],['ユーティリティ',['clock','calculator','settings','games','converter']]];
     A.overlay(`${A.overlayTitle('アプリライブラリ')}<label class="spotlight-input">${A.icon('search')}<input id="library-query" aria-label="ライブラリを検索" placeholder="アプリを検索" autocomplete="off"></label><div class="library-groups" id="library-groups">${groups.map(([name,ids])=>`<section class="library-category"><div>${ids.map(id=>A.launcher(A.apps[id])).join('')}</div><h3>${name}</h3></section>`).join('')}</div><div class="spotlight-results" id="library-results" hidden></div><p class="control-footer"></p>`,'library-overlay');
-    A.$('#library-query').oninput=e=>{const q=e.target.value.trim().toLowerCase();A.$('#library-groups').hidden=!!q;const results=A.$('#library-results');results.hidden=!q;results.innerHTML=Object.values(A.apps).filter(app=>(app.name+app.id).toLowerCase().includes(q)).map(app=>A.launcher(app)).join('')||'<p class="search-empty">アプリが見つかりません。</p>';};
+    A.$('#library-query').oninput=e=>{const q=A.fold(e.target.value).trim();A.$('#library-groups').hidden=!!q;const results=A.$('#library-results');results.hidden=!q;results.innerHTML=Object.values(A.apps).filter(app=>A.matches(q,app.name,app.id)).map(app=>A.launcher(app)).join('')||'<p class="search-empty">アプリが見つかりません。</p>';};
   };
   A.actions.library=A.library;
   const wallpapers=[['default','Dusk'],['ocean','Ocean'],['forest','Forest'],['mono','Stone'],['aurora','Aurora'],['sunrise','Sunrise']];
