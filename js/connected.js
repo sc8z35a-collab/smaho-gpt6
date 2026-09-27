@@ -277,7 +277,7 @@
     const controller = browserController = new AbortController();
     A.view(A.nav('ブラウザ', button('webSaved', '保存済み')) + `<div class="connected-browser-bar"><form id="web-form" class="connected-search"><input id="browser-url" class="text-input" aria-label="URLまたは検索語" placeholder="検索・URL" maxlength="2000" value="${esc(state.query || state.url || '')}"><button class="primary-button" type="submit">開く</button></form><div class="web-controls"><button data-action="webBack" ${browserIndex === 0 ? 'disabled' : ''} aria-label="戻る">‹</button><button data-action="webForward" ${browserIndex === browserHistory.length - 1 ? 'disabled' : ''} aria-label="進む">›</button><button data-action="webHome">ホーム</button><button data-action="webReload">再読込</button><select id="web-engine" aria-label="検索先"><option value="wiki">Wikipedia（アプリ内）</option><option value="google">Google（別タブ）</option><option value="bing">Bing（別タブ）</option><option value="duck">DuckDuckGo（別タブ）</option></select></div></div><div class="app-content connected-browser" id="web-content" aria-live="polite"></div>`);
     const engine = A.load('webEngine', 'wiki'); $('#web-engine').value = ['wiki', 'google', 'bing', 'duck'].includes(engine) ? engine : 'wiki';
-    $('#web-engine').onchange = e => A.save('webEngine', e.target.value);
+    $('#web-engine').onchange = e => { if (!['wiki', 'google', 'bing', 'duck'].includes(e.target.value) || !A.save('webEngine', e.target.value)) e.target.value = A.load('webEngine', 'wiki'); };
     $('#web-form').onsubmit = e => {
       e.preventDefault(); const input = $('#browser-url').value.trim(); if (!input) return;
       let url = input;
@@ -301,7 +301,7 @@
     } else if (state.type === 'saved') {
       root.innerHTML = `<h1 class="app-title">保存したページ</h1>${webBookmarks.map((b, i) => `<div class="web-bookmark"><button class="list-row" data-bookmark-index="${i}"><span class="row-main"><strong>${esc(b.title)}</strong><small>${esc(b.url)}</small></span></button><button data-remove-bookmark="${i}" aria-label="保存を削除">×</button></div>`).join('') || stateBox('保存したページなし')}`;
       root.querySelectorAll('[data-bookmark-index]').forEach(el => el.onclick = () => browserNavigate({type: 'url', ...webBookmarks[Number(el.dataset.bookmarkIndex)]}));
-      root.querySelectorAll('[data-remove-bookmark]').forEach(el => el.onclick = () => { webBookmarks.splice(Number(el.dataset.removeBookmark), 1); A.save('webBookmarks', webBookmarks); browserNavigate({type: 'saved'}, false); });
+      root.querySelectorAll('[data-remove-bookmark]').forEach(el => el.onclick = () => { const next = webBookmarks.filter((_, i) => i !== Number(el.dataset.removeBookmark)); if (!A.save('webBookmarks', next)) return; webBookmarks = next; browserNavigate({type: 'saved'}, false); });
     } else loadWiki(state, root, controller);
   }
   async function loadWiki(state, root, controller) {
