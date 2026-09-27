@@ -126,7 +126,7 @@ function finishTimer(){
     A.toast('タイマー終了。履歴を保存できませんでした');
   }
   if(A.current==='clock'&&clockTab==='timer')clock();
-  alarmNotice('タイマーが終了しました',timerStore.sound,`${timer.label} · ${timerLength(timer.duration)}`);
+  alarmNotice('タイマーが終了しました',timerStore.sound,`${timer.label} · ${timerLength(timer.duration)}`,'timer:'+entry.id);
 }
 const clockTabs=()=>A.tabs([{id:'world',icon:'globe',name:'世界時計',action:'clockTab',value:'world'},{id:'alarm',icon:'alarm',name:'アラーム',action:'clockTab',value:'alarm'},{id:'stopwatch',icon:'timer',name:'ストップウォッチ',action:'clockTab',value:'stopwatch'},{id:'timer',icon:'clock',name:'タイマー',action:'clockTab',value:'timer'}],clockTab);
 const stopwatchElapsed=()=>stopwatch.elapsed+(stopwatch.running?Date.now()-stopwatch.start:0);
@@ -174,8 +174,8 @@ function updateClockView(){
   if($('#stopwatch-display'))$('#stopwatch-display').textContent=stopwatchFormat(stopwatchElapsed());updateTimerView();
 }
 function beep(){try{const c=getAudioContext();if(!c)return;for(let i=0;i<3;i++){const o=c.createOscillator(),g=c.createGain(),t=c.currentTime+i*.35;o.frequency.value=880;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.1,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.23);o.connect(g);g.connect(c.destination);o.start(t);o.stop(t+.25);o.onended=()=>{o.disconnect();g.disconnect();};}}catch{}}
-function alarmNotice(title,sound=true,body='時計を開く'){A.notify({app:'clock',title:title==='タイマーが終了しました'?'タイマー終了':title,body});if(!A.settings.focus&&!A.noticeMuted?.('clock')){A.network?.clockNotice(title);if(sound&&A.settings.sound)beep();}}
-A.clockTick=()=>{finishTimer();updateClockView();const n=new Date(),minute=n.toTimeString().slice(0,5),key=n.toDateString()+minute;if(key!==alarmLast){alarmLast=key;alarms.filter(a=>a.enabled&&a.time===minute).forEach((alarm,i)=>alarmNotice(alarm.label||'アラーム',i===0));}};
+function alarmNotice(title,sound=true,body='時計を開く',key=''){A.notify({app:'clock',title:title==='タイマーが終了しました'?'タイマー終了':title,body,key});if(!A.settings.focus&&!A.noticeMuted?.('clock')){A.network?.clockNotice(title);if(sound&&A.settings.sound)beep();}}
+A.clockTick=()=>{finishTimer();updateClockView();const n=new Date(),minute=n.toTimeString().slice(0,5),key=n.toDateString()+minute;if(key!==alarmLast){alarmLast=key;alarms.filter(a=>a.enabled&&a.time===minute).forEach((alarm,i)=>alarmNotice(alarm.label||'アラーム',i===0,'時計を開く',`alarm:${alarm.id}:${key}`));}};
 A.apps.clock.render=arg=>{
   if(['world','alarm','stopwatch','timer'].includes(arg))clockTab=arg;
   finishTimer();clock();clearInterval(clockInterval);clockInterval=setInterval(updateClockView,80);
