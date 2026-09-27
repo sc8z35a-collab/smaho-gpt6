@@ -60,8 +60,9 @@
       const history=read('focusHistory');
       if(!history.some(h=>h.id===focus.id) && !A.save('focusHistory',[{id:focus.id,date:dateKey(new Date(focus.end)),minutes:focus.duration/60,label:focus.label||''},...history].slice(0,3650)))return;
     }
+    const finishedId=focus.id||String(focus.end);
     if(!commitFocus({...focus,end:0,remaining:0,id:null}))return false;
-    A.notify({app:'focus',title:focus.mode==='work'?'集中完了':'休憩終了',body:focus.mode==='work'?'おつかれさま':'次の集中へ'});
+    A.notify({app:'focus',title:focus.mode==='work'?'集中完了':'休憩終了',body:focus.mode==='work'?'おつかれさま':'次の集中へ',key:'focus:'+finishedId});
     return true;
   }
   function focusTick(){const completed=finishFocus();if(A.current!=='focus')return;const el=$('#ev-focus-time');if(!el)return;if(completed){focusApp();return;}A.$$('[data-action="evFocusDuration"]').forEach(button=>button.disabled=!!focus.end);const s=secondsLeft();el.textContent=`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;$('#ev-focus-ring').style.setProperty('--progress',`${(1-s/focus.duration)*360}deg`);const toggle=$('#ev-focus-toggle');toggle.textContent=focus.end?'一時停止':s===0?'もう一度':'開始';}
