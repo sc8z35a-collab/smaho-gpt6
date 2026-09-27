@@ -51,6 +51,8 @@ function readTimerStore(){
   return fallback;
 }
 let timerStore=readTimerStore();
+// Keep one timer across tabs: adopt the other tab's session instead of finishing (and ringing) twice.
+window.addEventListener('storage',e=>{if(e.key!=='aura.clockTimer'&&e.key!==null)return;timerStore=readTimerStore();timer=timerStore.session;if(A.current==='clock'&&clockTab==='timer')clock();});
 function saveTimer(next,extra={}){
   const store={...timerStore,...extra,session:next};
   if(!A.save('clockTimer',store))return false;
