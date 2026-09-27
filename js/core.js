@@ -944,7 +944,8 @@
   A.updateWidgets=()=>{
     const now=new Date(),date=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
     const events=(A.todayEvents?.(date)||[]).slice().sort((a,b)=>a.time.localeCompare(b.time));
-    const time=now.toTimeString().slice(0,5),event=events.find(e=>e.time>=time);
+    // An event in progress (before its end time, or within an hour when no end is set) is still "now".
+    const time=now.toTimeString().slice(0,5),minutes=t=>Number(t.slice(0,2))*60+Number(t.slice(3,5)),current=minutes(time),event=events.find(e=>{const start=minutes(e.time),end=e.endTime?(e.endTime<=e.time?1440:minutes(e.endTime)):start+60;return end>current;});
     const set=(selector,text)=>{const el=A.$(selector);if(el&&el.textContent!==String(text))el.textContent=text;};
     set('.widget-event>span',event?.title||(events.length?'今日の予定は終了':'今日は自由な一日'));
     set('.widget-event>small',event?`${event.time} · ${event.place||'予定'}`:'タップして予定を追加');
