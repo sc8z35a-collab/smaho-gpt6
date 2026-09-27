@@ -43,7 +43,7 @@
     const duplicates=duplicateIds();
     return rows('contacts').filter(x=>(contactGroup==='*'||(x.group||'')===contactGroup)
       && (contactFilter==='all'||(contactFilter==='favorites'?x.favorite:duplicates.has(x.id)))
-      && normalize([x.name,x.phone,x.email,x.note,x.group].join(' ')).includes(normalize(contactQuery)))
+      && (normalize([x.name,x.phone,x.email,x.note,x.group].join(' ')).includes(normalize(contactQuery))||(/\d/.test(contactQuery)&&/^[+\d\s()\-]+$/.test(normalize(contactQuery))&&phoneKey(x.phone).includes(phoneKey(contactQuery)))))
       .sort((a,b)=>(contactSort==='favorite'?Number(!!b.favorite)-Number(!!a.favorite):0)||a.name.localeCompare(b.name,'ja'));
   }
   function renderContacts() {
