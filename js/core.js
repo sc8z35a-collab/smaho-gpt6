@@ -107,6 +107,9 @@
   };
   A.settings = {wallpaper:'default', dark:false, wifi:true, bluetooth:true, cellular:true, airplane:false, focus:false, sound:true, brightness:100, volume:60, ...A.load('settings', {})};
   for(const key of ['brightness','volume'])if(!Number.isFinite(Number(A.settings[key])))A.settings[key]=key==='brightness'?100:60;
+  if(!['default','ocean','forest','mono','aurora','sunrise'].includes(A.settings.wallpaper))A.settings.wallpaper='default';
+  if(A.settings.iconStyle!==undefined&&!['standard','glass','tinted'].includes(A.settings.iconStyle))A.settings.iconStyle='standard';
+  if(A.settings.clockStyle!==undefined&&!['classic','light','rounded'].includes(A.settings.clockStyle))A.settings.clockStyle='classic';
   A.settings.brightness=Math.max(10,Math.min(100,Number(A.settings.brightness)));A.settings.volume=Math.max(0,Math.min(100,Number(A.settings.volume)));
   A.actions = {}; A.apps = {}; A.cleanups = []; A.current = null; A.locked = false;
   A.icons = {
@@ -1065,8 +1068,8 @@
   A.actions.toggleLockPreview=()=>{A.settings.lockPreview=A.settings.lockPreview===false;A.applySettings();A.renderLockNotices();A.actions.personalize();};
   A.actions.previewLock=()=>A.lock();
   A.actions.gestureGuide=()=>A.overlay(`${A.overlayTitle('操作ガイド')}<div class="gesture-guide">${[['grid','ホームを左へスワイプ','全アプリを表示'],['search','ホームを下へスワイプ','アプリ・記録を検索'],['edit','アイコンを長押し','新規作成 / 配置の入替'],['signal','画面右上をタップ・下へスワイプ','明るさ・集中モード'],['messages','画面左上の時刻をタップ','通知・未読・再通知'],['arrow','下端のホームバー','タップ：ホーム / 上：切替']].map(([icon,title,body])=>`<article>${A.icon(icon)}<div><strong>${title}</strong><p>${body}</p></div></article>`).join('')}</div><p class="control-footer">PC：Escで閉じる / Hでホーム / Alt+Tabでアプリ切替</p>`,'guide-overlay');
-  A.actions.chooseWallpaper=el=>{A.settings.wallpaper=el.dataset.value;A.applySettings();A.actions.personalize();};
-  A.actions.chooseIconStyle=el=>{A.settings.iconStyle=el.dataset.value;A.applySettings();A.actions.personalize();};
+  A.actions.chooseWallpaper=el=>{if(!wallpapers.some(([id])=>id===el.dataset.value))return;A.settings.wallpaper=el.dataset.value;A.applySettings();A.actions.personalize();};
+  A.actions.chooseIconStyle=el=>{if(!['standard','glass','tinted'].includes(el.dataset.value))return;A.settings.iconStyle=el.dataset.value;A.applySettings();A.actions.personalize();};
   A.actions.resetLayout=()=>A.confirm('ホームの配置をリセット','配置のみ初期化。データは保持',()=>{homeOrder=[...defaultOrder];A.save('homeOrder',homeOrder);A.actions.finishEditing();A.toast('配置をリセット');});
   const baseApply=A.applySettings;
   A.applySettings=()=>{
