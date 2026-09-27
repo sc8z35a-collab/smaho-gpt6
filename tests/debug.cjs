@@ -141,7 +141,9 @@ test('B28 profile save retains enhanced settings controls',async p=>{
 
 // Sketch Studio: real pointer, pixel, import/export and recovery contracts.
 const skDoc=async p=>(await load(p,'sketches'))[0];
-const skNew=async p=>{await open(p,'sketch');await act(p,'evSketchNew');};
+// Wait for the app-open scale animation: drawing mid-animation maps pointer coordinates to a shrunken canvas.
+const settle=p=>p.evaluate(()=>Promise.all(document.getAnimations().map(a=>a.finished.catch(()=>{}))));
+const skNew=async p=>{await open(p,'sketch');await act(p,'evSketchNew');await settle(p);};
 const skTool=(p,id)=>act(p,'evSketchTool',id);
 const skRange=(p,id,value)=>p.locator(id).evaluate((el,value)=>{el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));},String(value));
 const skOption=(p,id,value)=>p.locator(id).evaluate((el,value)=>{el.checked=value;el.dispatchEvent(new Event('change',{bubbles:true}));},value);
