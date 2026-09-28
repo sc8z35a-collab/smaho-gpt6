@@ -28,7 +28,7 @@
   // 01–06: contact groups, favorites filter, sorting, duplicate hints,
   // copying one card, and exporting only the visible selection.
   let contactGroup='*',contactFilter='all',contactSort='favorite',contactQuery='';
-  const phoneKey = value => normalize(value).replace(/[\s()\-]/g,'');
+  const phoneKey = value => normalize(value).replace(/[\s().\-‐‑‒–—―−ー]/g,'');
   function duplicateIds() {
     const keys=new Map(), duplicates=new Set();
     for(const contact of rows('contacts')) {
@@ -43,7 +43,7 @@
     const duplicates=duplicateIds();
     return rows('contacts').filter(x=>(contactGroup==='*'||(x.group||'')===contactGroup)
       && (contactFilter==='all'||(contactFilter==='favorites'?x.favorite:duplicates.has(x.id)))
-      && (normalize([x.name,x.phone,x.email,x.note,x.group].join(' ')).includes(normalize(contactQuery))||(/\d/.test(contactQuery)&&/^[+\d\s()\-]+$/.test(normalize(contactQuery))&&phoneKey(x.phone).includes(phoneKey(contactQuery)))))
+      && (normalize([x.name,x.phone,x.email,x.note,x.group].join(' ')).includes(normalize(contactQuery))||(/\d/.test(contactQuery)&&/^[+\d\s().\-‐‑‒–—―−ー]+$/.test(normalize(contactQuery))&&phoneKey(x.phone).includes(phoneKey(contactQuery)))))
       .sort((a,b)=>(contactSort==='favorite'?Number(!!b.favorite)-Number(!!a.favorite):0)||a.name.localeCompare(b.name,'ja'));
   }
   function renderContacts() {
