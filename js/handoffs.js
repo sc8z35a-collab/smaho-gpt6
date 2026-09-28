@@ -11,7 +11,7 @@
     if ($('#share-ready')) $('#share-ready').onclick = async () => { try { await navigator.share({files: [file], title: name}); } catch (error) { if (error.name !== 'AbortError' && $('#file-share-status')) $('#file-share-status').textContent = '共有失敗。端末に保存'; } };
     $('#save-ready').onclick = () => A.download(blob, name);
   };
-  const phoneNumber = raw => String(raw).replace(/[\s()-]/g, '');
+  const phoneNumber = raw => String(raw).normalize('NFKC').replace(/[\s().\-‐‑‒–—―−ー]/g, '');
   const validPhone = value => /^\+?[0-9]{3,15}$/.test(value);
   const handoffNote = '<details class="ui-help"><summary>連携の詳細</summary><p class="connected-caption">対応アプリが必要。発信・送信は移動先で確認。送受信・通話状況は取得しません。</p></details>';
   const originals = Object.fromEntries(['phone','messages','mail','music'].map(id => [id, A.apps[id].render]));
